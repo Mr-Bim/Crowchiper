@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Setup Encryption - Crowchiper</title>
+        <link rel="stylesheet" href="./setup-encryption.css" />
+    </head>
+    <body>
+        <div class="onboarding-container">
+            <!-- Step 1: Test PRF support with passkey -->
+            <div id="step-prf-test">
+                <div class="onboarding-header">
+                    <h1>Enable Encryption</h1>
+                    <p>Test your passkey to enable end-to-end encryption</p>
+                </div>
+
+                <div class="prf-test-section">
+                    <p>
+                        We need to authenticate with your passkey to check if it
+                        supports the PRF extension for encryption.
+                    </p>
+
+                    <!-- Hidden username field for testing (virtual authenticators don't support conditional UI) -->
+                    <input id="test-username" type="hidden" value="" />
+
+                    <div class="actions">
+                        <button id="test-prf-btn" class="btn btn-primary">
+                            Test Passkey
+                        </button>
+                    </div>
+
+                    <div id="prf-error" class="error-message" hidden></div>
+                </div>
+
+                <button id="skip-btn" class="skip-link">Skip for now</button>
+            </div>
+
+            <!-- Step 2: PRF supported - confirm encryption -->
+            <div id="step-prf-supported" hidden>
+                <div class="onboarding-header">
+                    <h1>Encryption Available</h1>
+                </div>
+
+                <div class="prf-result success">
+                    <h3>PRF Supported</h3>
+                    <p>
+                        Your passkey supports the PRF extension. You can enable
+                        end-to-end encryption for your posts.
+                    </p>
+                </div>
+
+                <p class="info-text">
+                    With encryption enabled, your posts will be encrypted before
+                    being sent to the server. Only you can read them.
+                </p>
+
+                <div class="actions">
+                    <button id="enable-encryption-btn" class="btn btn-primary">
+                        Enable Encryption
+                    </button>
+                </div>
+
+                <button id="skip-encryption-btn" class="skip-link">
+                    Continue without encryption
+                </button>
+
+                <div id="enable-error" class="error-message" hidden></div>
+            </div>
+
+            <!-- Step 3: PRF not supported -->
+            <div id="step-no-prf" hidden>
+                <div class="onboarding-header">
+                    <h1>Encryption Not Available</h1>
+                </div>
+
+                <div class="prf-result failure">
+                    <h3>PRF Not Supported</h3>
+                    <p>
+                        Your passkey doesn't support the PRF extension required
+                        for encryption. Your posts entries will be stored
+                        without encryption.
+                    </p>
+                </div>
+
+                <p class="info-text">
+                    To enable encryption, use a passkey that supports PRF (most
+                    modern security keys and platform authenticators).
+                </p>
+
+                <div class="actions">
+                    <a href="./" id="continue-link" class="btn btn-primary"
+                        >Continue to App</a
+                    >
+                </div>
+            </div>
+        </div>
+
+        <div id="theme-toggle"></div>
+        <script type="module" src="./src/setup-encryption.ts"></script>
+    </body>
+</html>

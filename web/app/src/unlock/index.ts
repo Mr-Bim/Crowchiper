@@ -1,0 +1,166 @@
+/**
+ * Unlock flow for encrypted posts.
+ *
+ * Handles the passkey authentication to derive the encryption key.
+ */
+
+import {
+	type AuthenticationResponseJSON,
+	startAuthentication,
+} from "@simplewebauthn/browser";
+import { getErrorMessage } from "../api/utils.ts";
+import {
+	base64UrlToUint8Array,
+	deriveEncryptionKeyFromPrf,
+	extractPrfOutput,
+} from "../crypto/operations.ts";
+import { getPrfSalt, setSessionEncryptionKey } from "../crypto/keystore.ts";
+
+declare const API_PATH: string;
+
+// --- UI Helpers ---
+
+export function showUnlockOverlay(): void {
+	const overlay = document.getElementById("unlock-overlay");
+	if (overlay) {
+		overlay.hidden = false;
+	}
+}
+
+export function hideUnlockOverlay(): void {
+	const overlay = document.getElementById("unlock-overlay");
+	if (overlay) {
+		overlay.hidden = true;
+	}
+}
+
+function showUnlockError(message: string): void {
+	const errorEl = document.getElementById("unlock-error");
+	if (errorEl) {
+		errorEl.textContent = message;
+		errorEl.hidden = false;
+	}
+}
+
+function hideUnlockError(): void {
+	const errorEl = document.getElementById("unlock-error");
+	if (errorEl) {
+		errorEl.hidden = true;
+	}
+}
+
+function setUnlockLoading(loading: boolean): void {
+	const btn = document.getElementById("unlock-btn") as HTMLButtonElement | null;
+	if (btn) {
+		btn.disabled = loading;
+		btn.textContent = loading ? "Unlocking..." : "Unlock with Passkey";
+	}
+}
+
+// --- Unlock Handler ---
+
+export type OnUnlockSuccess = () => Promise<void>;
+
+/**
+ * Create the unlock button click handler.
+ * @param onSuccess - Callback to run after successful unlock
+ */
+export function createUnlockHandler(
+	onSuccess: OnUnlockSuccess,
+): () => Promise<void> {
+	return async () => {
+		hideUnlockError();
+		setUnlockLoading(true);
+
+		try {
+			const prfSalt = getPrfSalt();
+			if (!prfSalt) {
+				throw new Error("No PRF salt found");
+			}
+
+			// Get authentication options from server
+			const optionsResponse = await fetch(`${API_PATH}/passkeys/login/start`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username: null }),
+			});
+
+			if (!optionsResponse.ok) {
+				const errorMsg = await getErrorMessage(
+					optionsResponse,
+					"Failed to start authentication",
+				);
+				throw new Error(errorMsg);
+			}
+
+			const response = await optionsResponse.json();
+			const { session_id } = response;
+
+			// Add PRF extension with the stored salt
+			const saltBytes = base64UrlToUint8Array(prfSalt);
+			const optionsWithPrf = {
+				...response.publicKey,
+				extensions: {
+					...response.publicKey.extensions,
+					prf: {
+						eval: {
+							first: saltBytes,
+						},
+					},
+				},
+			};
+
+			let credential: AuthenticationResponseJSON | null = null;
+			try {
+				credential = await startAuthentication({
+					optionsJSON: optionsWithPrf,
+				});
+			} catch (error) {
+				// Clean up the challenge on error
+				await fetch(`${API_PATH}/passkeys/login/challenge/${session_id}`, {
+					method: "DELETE",
+				}).catch(() => {});
+				throw error;
+			}
+
+			// Complete authentication
+			const finishResponse = await fetch(`${API_PATH}/passkeys/login/finish`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ session_id, credential }),
+			});
+
+			if (!finishResponse.ok) {
+				const errorMsg = await getErrorMessage(
+					finishResponse,
+					"Failed to complete authentication",
+				);
+				throw new Error(errorMsg);
+			}
+
+			// Extract PRF output and derive key
+			const prfOutput = extractPrfOutput(credential);
+			if (!prfOutput) {
+				throw new Error("PRF not supported by this passkey");
+			}
+
+			const key = await deriveEncryptionKeyFromPrf(prfOutput);
+			setSessionEncryptionKey(key);
+
+			// Hide overlay and run success callback
+			hideUnlockOverlay();
+			await onSuccess();
+		} catch (error) {
+			console.error("Unlock failed:", error);
+			if (error instanceof Error && error.name === "NotAllowedError") {
+				// User cancelled
+				setUnlockLoading(false);
+				return;
+			}
+			showUnlockError(
+				error instanceof Error ? error.message : "Failed to unlock",
+			);
+			setUnlockLoading(false);
+		}
+	};
+}

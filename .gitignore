@@ -1,0 +1,10 @@
+/target
+
+run
+dist/
+iife/
+node_modules/
+crowchiper.db
+sync
+
+.cargo-container

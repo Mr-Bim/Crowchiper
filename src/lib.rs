@@ -1,0 +1,148 @@
+pub mod api;
+pub mod assets;
+pub mod auth;
+pub mod cli;
+pub mod db;
+pub mod jwt;
+pub mod names;
+
+use api::create_api_router;
+use assets::{
+    AssetsState, app_handler, app_handler_direct, login_handler, login_handler_direct,
+    login_index_handler, process_app_html_files, process_login_html_files,
+};
+use axum::{Router, response::Redirect, routing::get};
+use db::Database;
+use jwt::JwtConfig;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use url::Url;
+use webauthn_rs::prelude::*;
+
+use std::net::SocketAddr;
+
+pub struct ServerConfig {
+    /// Base path for the application (e.g., "/app" or "/crow-base")
+    pub base: Option<String>,
+    /// Database connection (cloneable, uses connection pool internally)
+    pub db: Database,
+    /// WebAuthn relying party ID (domain name)
+    pub rp_id: String,
+    /// WebAuthn relying party origin (full URL)
+    pub rp_origin: Url,
+    /// JWT secret for signing tokens
+    pub jwt_secret: Vec<u8>,
+    /// Whether to set Secure flag on cookies (should be true in production with HTTPS)
+    pub secure_cookies: bool,
+    /// Whether new user signups are disabled
+    pub no_signup: bool,
+}
+
+/// Leak a String to get a &'static str. Used for paths that live for the program lifetime.
+fn leak_string(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
+/// Create the application router with the given configuration.
+pub fn create_app(config: &ServerConfig) -> Router {
+    let base_path: &'static str = leak_string(config.base.clone().unwrap_or_default());
+    let api_path: &'static str = leak_string(AssetsState::make_api_path(base_path));
+    let login_path: &'static str = leak_string(AssetsState::make_login_path(base_path));
+    let app_path: &'static str = leak_string(AssetsState::make_app_path(base_path));
+
+    // Process HTML files for path rewriting when base is set
+    let (login_assets_html, app_assets_html, login_assets_handler, app_assets_handler) =
+        if base_path.is_empty() {
+            (
+                HashMap::default(),
+                HashMap::default(),
+                get(login_handler_direct),
+                get(app_handler_direct),
+            )
+        } else {
+            (
+                process_login_html_files(login_path),
+                process_app_html_files(app_path),
+                get(login_handler),
+                get(app_handler),
+            )
+        };
+
+    // Create WebAuthn instance
+    let webauthn = Arc::new(
+        WebauthnBuilder::new(&config.rp_id, &config.rp_origin)
+            .expect("Failed to create WebAuthn builder")
+            .rp_name("Crowchiper")
+            .build()
+            .expect("Failed to build WebAuthn"),
+    );
+
+    // Create JWT config
+    let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));
+
+    let state = Arc::new(
+        AssetsState::new(
+            api_path,
+            login_path,
+            app_path,
+            login_assets_html,
+            app_assets_html,
+            jwt.clone(),
+        )
+        .expect("Failed to initialize assets"),
+    );
+
+    let api_router = create_api_router(
+        config.db.clone(),
+        webauthn,
+        jwt,
+        config.secure_cookies,
+        config.no_signup,
+    );
+
+    // Login assets (public, no auth)
+    // Index routes redirect authenticated users to the app
+    let login_routes = Router::new()
+        .route(login_path, get(login_index_handler))
+        .route(&format!("{}/", login_path), get(login_index_handler))
+        .route(
+            &format!("{}/index.html", login_path),
+            get(login_index_handler),
+        )
+        .route(&format!("{}/{{*path}}", login_path), login_assets_handler)
+        .with_state(state.clone());
+
+    // App assets (protected, JWT required)
+    let app_routes = Router::new()
+        .route(app_path, app_assets_handler.clone())
+        .route(&format!("{}/", app_path), app_assets_handler.clone())
+        .route(&format!("{}/{{*path}}", app_path), app_assets_handler)
+        .with_state(state);
+
+    let redirect_path: &'static str = if base_path.is_empty() { "/" } else { base_path };
+
+    Router::new()
+        .route(redirect_path, get(Redirect::temporary(login_path)))
+        .nest(api_path, api_router)
+        .merge(login_routes)
+        .merge(app_routes)
+}
+
+/// Start the server on the given port. Use port 0 to let the OS choose a random port.
+/// Returns the actual address the server is listening on.
+pub async fn start_server(
+    config: ServerConfig,
+    port: u16,
+) -> (tokio::task::JoinHandle<()>, SocketAddr) {
+    let app = create_app(&config);
+    let addr = format!("127.0.0.1:{}", port);
+    let listener = TcpListener::bind(&addr).await.expect("Failed to bind");
+    let local_addr = listener.local_addr().expect("Failed to get local address");
+
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.ok();
+    });
+
+    (handle, local_addr)
+}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Crowchiper</title>
+        <link rel="stylesheet" href="./app.css" />
+        <link rel="stylesheet" href="./unlock.css" />
+        <link rel="stylesheet" href="./slash-commands.css" />
+    </head>
+    <body>
+        <div class="app-container">
+            <aside id="sidebar" class="sidebar">
+                <div class="sidebar-header">
+                    <h1>Crowchiper</h1>
+                    <button id="new-post-btn" class="info" title="New post">
+                        +
+                    </button>
+                </div>
+                <div class="post-list" id="post-list"></div>
+                <div class="sidebar-footer">
+                    <div id="theme-toggle"></div>
+                </div>
+            </aside>
+            <button
+                id="sidebar-toggle"
+                class="ghost"
+                type="button"
+                aria-expanded="true"
+                aria-controls="sidebar"
+                aria-label="Toggle sidebar"
+            >
+                <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <main class="main-content">
+                <header class="app-header">
+                    <div class="header-actions">
+                        <button
+                            id="delete-btn"
+                            class="warning delete-btn"
+                            disabled
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </header>
+                <div class="editor-wrapper">
+                    <div id="editor"></div>
+                </div>
+            </main>
+        </div>
+        <!-- Unlock overlay for encrypted content -->
+        <div id="unlock-overlay" class="unlock-overlay" hidden>
+            <div class="unlock-modal">
+                <div class="unlock-icon">
+                    <svg
+                        width="48"
+                        height="48"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <rect
+                            x="3"
+                            y="11"
+                            width="18"
+                            height="11"
+                            rx="2"
+                            ry="2"
+                        ></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+                <h2>Unlock your posts</h2>
+                <p>
+                    Your posts are encrypted. Authenticate with your passkey to
+                    decrypt them.
+                </p>
+                <button id="unlock-btn" class="btn-primary">
+                    Unlock with Passkey
+                </button>
+                <div id="unlock-error" class="unlock-error" hidden></div>
+            </div>
+        </div>
+
+        <script type="module" src="./src/main.ts"></script>
+    </body>
+</html>

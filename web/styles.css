@@ -1,0 +1,231 @@
+:root {
+    /* Orange accent */
+    --accent: oklch(0.67 0.16 55);
+    --accent-hover: oklch(0.56 0.17 45);
+
+    /* Warm neutral theme */
+    --bg: oklch(0.98 0.01 80);
+    --surface: oklch(1 0 0);
+    --text: oklch(0.25 0.03 75);
+    --text-muted: oklch(0.5 0.03 60);
+    --border: oklch(0.9 0.02 80);
+
+    /* Error colors */
+    --error-bg: oklch(0.97 0.02 25);
+    --error-text: oklch(0.55 0.2 25);
+    --error-border: oklch(0.85 0.08 25);
+
+    /* Success colors */
+    --success-bg: oklch(0.72 0.17 142 / 0.1);
+    --success-border: oklch(0.72 0.17 142 / 0.3);
+
+    /* Failure colors */
+    --failure-bg: oklch(0.63 0.21 25 / 0.1);
+    --failure-border: oklch(0.63 0.21 25 / 0.3);
+
+    /* Warning colors */
+    --warning: oklch(0.75 0.15 85);
+    --warning-hover: oklch(0.65 0.16 80);
+    --warning-text: oklch(0.3 0.05 85);
+
+    /* Info colors */
+    --info: oklch(0.65 0.12 240);
+    --info-hover: oklch(0.55 0.14 240);
+
+    /* Ok/Success button colors */
+    --ok: oklch(0.65 0.17 142);
+    --ok-hover: oklch(0.55 0.18 142);
+}
+
+/* Warm Neutral - Light */
+[data-theme="warm-light"] {
+    --accent: oklch(0.67 0.16 55);
+    --accent-hover: oklch(0.56 0.17 45);
+    --bg: oklch(0.98 0.01 80);
+    --surface: oklch(1 0 0);
+    --text: oklch(0.25 0.03 75);
+    --text-muted: oklch(0.5 0.03 60);
+    --border: oklch(0.9 0.02 80);
+}
+
+/* Scandinavian - Dark */
+[data-theme="scandi-dark"] {
+    --accent: oklch(0.72 0.17 55);
+    --accent-hover: oklch(0.78 0.14 60);
+    --bg: oklch(0.15 0 0);
+    --surface: oklch(0.2 0 0);
+    --text: oklch(0.96 0 0);
+    --text-muted: oklch(0.75 0 0);
+    --border: oklch(0.3 0 0);
+    --error-bg: oklch(0.28 0.08 25);
+    --error-text: oklch(0.8 0.1 25);
+    --error-border: oklch(0.4 0.12 25);
+    --success-bg: oklch(0.72 0.17 142 / 0.15);
+    --success-border: oklch(0.72 0.17 142 / 0.4);
+    --failure-bg: oklch(0.63 0.21 25 / 0.15);
+    --failure-border: oklch(0.63 0.21 25 / 0.4);
+    --warning: oklch(0.78 0.14 85);
+    --warning-hover: oklch(0.85 0.12 85);
+    --warning-text: oklch(0.25 0.05 85);
+    --info: oklch(0.7 0.12 240);
+    --info-hover: oklch(0.78 0.1 240);
+    --ok: oklch(0.7 0.17 142);
+    --ok-hover: oklch(0.78 0.15 142);
+}
+
+/* Paper/Stationery - Light */
+[data-theme="paper-light"] {
+    --accent: oklch(0.67 0.16 55);
+    --accent-hover: oklch(0.56 0.17 45);
+    --bg: oklch(0.99 0.008 90);
+    --surface: oklch(0.995 0.01 95);
+    --text: oklch(0.25 0.02 70);
+    --text-muted: oklch(0.52 0.02 65);
+    --border: oklch(0.85 0.025 80);
+}
+
+/* Paper/Stationery - Dark */
+[data-theme="paper-dark"] {
+    --accent: oklch(0.72 0.15 55);
+    --accent-hover: oklch(0.78 0.12 60);
+    --bg: oklch(0.22 0.008 60);
+    --surface: oklch(0.28 0.01 55);
+    --text: oklch(0.92 0.005 70);
+    --text-muted: oklch(0.68 0.01 60);
+    --border: oklch(0.38 0.01 55);
+    --error-bg: oklch(0.28 0.08 25);
+    --error-text: oklch(0.8 0.1 25);
+    --error-border: oklch(0.4 0.12 25);
+    --success-bg: oklch(0.72 0.17 142 / 0.15);
+    --success-border: oklch(0.72 0.17 142 / 0.4);
+    --failure-bg: oklch(0.63 0.21 25 / 0.15);
+    --failure-border: oklch(0.63 0.21 25 / 0.4);
+    --warning: oklch(0.78 0.14 85);
+    --warning-hover: oklch(0.85 0.12 85);
+    --warning-text: oklch(0.25 0.05 85);
+    --info: oklch(0.7 0.12 240);
+    --info-hover: oklch(0.78 0.1 240);
+    --ok: oklch(0.7 0.17 142);
+    --ok-hover: oklch(0.78 0.15 142);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--accent-hover);
+}
+
+button,
+input,
+textarea {
+    font-family: inherit;
+    color: var(--text);
+}
+
+::placeholder {
+    color: var(--text-muted);
+}
+
+/* Buttons */
+button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.4;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition:
+        background-color 0.15s ease,
+        transform 0.1s ease;
+    background: var(--accent);
+    color: white;
+}
+
+button:hover {
+    background: var(--accent-hover);
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+button.ok {
+    background: var(--ok);
+}
+
+button.ok:hover {
+    background: var(--ok-hover);
+}
+
+button.warning {
+    background: var(--warning);
+    color: var(--warning-text);
+}
+
+button.warning:hover {
+    background: var(--warning-hover);
+}
+
+button.info {
+    background: var(--info);
+    color: white;
+}
+
+button.info:hover {
+    background: var(--info-hover);
+}
+
+button.secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+button.secondary:hover {
+    background: var(--bg);
+}
+
+button.ghost {
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0.5rem 0.75rem;
+    font-weight: 400;
+}
+
+button.ghost:hover {
+    background: var(--bg);
+    color: var(--text);
+}
+
+button.ghost.active {
+    color: var(--text);
+    font-weight: 500;
+}

@@ -1,0 +1,24 @@
+{
+  "scripts": {
+    "build-iife": "IIFE=1 vite build",
+    "build-login": "BUILD=login vite build",
+    "build-app": "BUILD=app vite build",
+    "build-all": "npm run build-iife && npm run build-login && npm run build-app",
+    "check": "tsc --noEmit"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.7.7",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/state": "^6.5.3",
+    "@codemirror/view": "^6.39.9",
+    "@simplewebauthn/browser": "^13.2.2",
+    "codemirror": "^6.0.2",
+    "lightningcss": "^1.30.2",
+    "typescript": "^5.9.3",
+    "vite": "8.0.0-beta.5"
+  }
+}

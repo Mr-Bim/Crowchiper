@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Register - Crowchiper</title>
+        <link rel="stylesheet" href="css/login.css" />
+        <script type="module" src="js/register.ts"></script>
+    </head>
+    <body>
+        <div class="auth-container">
+            <div class="auth-form">
+                <h1 class="auth-title">Register</h1>
+                <input
+                    type="text"
+                    id="username"
+                    placeholder="Username"
+                    class="input-field"
+                />
+                <fieldset
+                    id="auth-type-fieldset"
+                    class="auth-type-fieldset"
+                    hidden
+                >
+                    <legend>Authenticator type</legend>
+                    <label class="auth-type-option">
+                        <input
+                            type="radio"
+                            name="auth-type"
+                            value="passkey"
+                            checked
+                        />
+                        <span>Passkey</span>
+                        <small>Google Password Manager</small>
+                    </label>
+                    <label class="auth-type-option">
+                        <input
+                            type="radio"
+                            name="auth-type"
+                            value="security_key"
+                        />
+                        <span>Security Key</span>
+                        <small>YubiKey, hardware token, or device unlock</small>
+                    </label>
+                </fieldset>
+                <button id="register-button" class="btn-primary" disabled>
+                    Register
+                </button>
+                <div id="error-message" class="error-message" hidden></div>
+                <a id="login-link" href="index.html" class="auth-link"
+                    >Back to login</a
+                >
+                <div id="theme-toggle"></div>
+            </div>
+        </div>
+    </body>
+</html>

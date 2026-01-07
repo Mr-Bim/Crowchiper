@@ -1,0 +1,146 @@
+.onboarding-container {
+    max-width: 500px;
+    margin: 60px auto;
+    padding: 32px;
+}
+
+.onboarding-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.onboarding-header h1 {
+    font-size: 1.75rem;
+    margin-bottom: 8px;
+}
+
+.onboarding-header p {
+    color: var(--text-muted);
+}
+
+/* PRF Test Section */
+.prf-test-section {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.prf-test-section p {
+    color: var(--text-muted);
+    margin-bottom: 24px;
+}
+
+.prf-result {
+    margin: 24px 0;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+}
+
+.prf-result.success {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+}
+
+.prf-result.failure {
+    background: var(--failure-bg);
+    border-color: var(--failure-border);
+}
+
+.prf-result h3 {
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+.prf-result p {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+/* Buttons */
+.actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.btn {
+    flex: 1;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.error-message {
+    color: var(--error, #ef4444);
+    font-size: 0.875rem;
+    margin-top: 8px;
+}
+
+.skip-link {
+    display: block;
+    text-align: center;
+    margin-top: 24px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+}
+
+.skip-link:hover:not(:disabled) {
+    color: var(--text);
+}
+
+.skip-link:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#loading {
+    text-align: center;
+    padding: 40px;
+}
+
+.spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Theme toggle centering */
+#theme-toggle {
+    display: flex;
+    justify-content: center;
+    margin-top: 24px;
+}
