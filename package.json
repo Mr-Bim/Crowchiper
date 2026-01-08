@@ -4,7 +4,8 @@
     "build-login": "BUILD=login vite build",
     "build-app": "BUILD=app vite build",
     "build-all": "npm run build-iife && npm run build-login && npm run build-app",
-    "check": "tsc --noEmit"
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
   },
   "type": "module",
   "devDependencies": {
@@ -18,7 +19,11 @@
     "@simplewebauthn/browser": "^13.2.2",
     "codemirror": "^6.0.2",
     "lightningcss": "^1.30.2",
+    "oxlint": "^1.38.0",
     "typescript": "^5.9.3",
     "vite": "8.0.0-beta.5"
+  },
+  "dependencies": {
+    "heic-to": "^1.3.0"
   }
 }

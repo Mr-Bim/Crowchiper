@@ -1,0 +1,358 @@
+/* CodeMirror editor theme styling */
+
+.gl-minify-disable-editor {
+    --marker: 1;
+}
+
+.cm-editor {
+    height: 100%;
+    font-size: 16px;
+}
+
+.cm-scroller {
+    overflow: auto;
+    font-family: inherit;
+}
+
+.cm-content {
+    padding: 16px;
+    caret-color: var(--accent);
+}
+
+.cm-line {
+    padding: 0;
+}
+
+.cm-focused .cm-cursor {
+    border-left-color: var(--accent);
+}
+
+.cm-focused .cm-selectionBackground,
+::selection {
+    background-color: oklch(0.67 0.16 55 / 0.2);
+}
+
+.cm-activeLine {
+    background-color: transparent;
+}
+
+/* Checkbox widget */
+.cm-checkbox-widget {
+    width: 1em;
+    height: 1em;
+    margin-right: 0.5em;
+    vertical-align: middle;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+/* Attachment widgets */
+.cm-attachment-widget {
+    display: block;
+    margin: 8px 0;
+}
+
+.cm-attachment-thumbnail-wrapper {
+    display: inline-block;
+}
+
+.cm-attachment-thumbnail {
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    display: block;
+}
+
+.cm-attachment-thumbnail:hover {
+    opacity: 0.85;
+}
+
+.cm-attachment-loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    min-height: 80px;
+    padding: 16px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.cm-attachment-error {
+    padding: 16px;
+    color: var(--error, #dc3545);
+}
+
+.cm-attachment-uploading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 80px;
+    min-height: 80px;
+    padding: 16px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    background: var(--surface);
+    border-radius: 4px;
+}
+
+.cm-attachment-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: var(--accent);
+    border-right-color: var(--accent);
+    border-radius: 50%;
+    animation: cm-spin 0.6s ease-in-out infinite;
+}
+
+@keyframes cm-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Gallery styles */
+.cm-gallery-start,
+.cm-gallery-end {
+    display: none;
+}
+
+.cm-gallery-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.cm-gallery-images {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.cm-gallery-image {
+    display: inline-block;
+    position: relative;
+    vertical-align: bottom;
+}
+
+.cm-gallery-image .cm-attachment-thumbnail-wrapper {
+    display: inline-block;
+}
+
+.cm-gallery-image .cm-attachment-thumbnail {
+    max-height: 200px;
+    width: auto;
+}
+
+.cm-gallery-delete-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.cm-gallery-image:hover .cm-gallery-delete-btn,
+.cm-gallery-delete-btn:focus {
+    opacity: 1;
+}
+
+.cm-gallery-delete-btn:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.cm-gallery-delete-btn:hover {
+    background: rgba(220, 53, 69, 0.9);
+}
+
+.cm-gallery-delete-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Gallery options panel */
+.cm-gallery-options {
+    display: flex;
+    gap: 4px;
+    align-self: flex-end;
+}
+
+.cm-gallery-option-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        color 0.15s,
+        background 0.15s;
+}
+
+.cm-gallery-option-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.cm-gallery-option-btn:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.cm-gallery-option-btn-danger:hover {
+    color: #dc3545;
+}
+
+.cm-gallery-option-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Upload dialog */
+.cm-upload-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.cm-upload-dialog {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.cm-upload-dialog-title {
+    margin: 0 0 12px;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.cm-upload-dialog-message {
+    margin: 0 0 20px;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.cm-upload-dialog-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.cm-upload-dialog-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition:
+        background-color 0.15s,
+        color 0.15s;
+}
+
+.cm-upload-dialog-btn:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.cm-upload-dialog-btn-secondary {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.cm-upload-dialog-btn-secondary:hover {
+    background: var(--border);
+}
+
+.cm-upload-dialog-btn-primary {
+    background: var(--accent);
+    color: white;
+}
+
+.cm-upload-dialog-btn-primary:hover {
+    filter: brightness(1.1);
+}
+
+/* Processing overlay */
+.cm-processing-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.cm-processing-dialog {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 32px 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.cm-processing-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid transparent;
+    border-top-color: var(--accent);
+    border-right-color: var(--accent);
+    border-radius: 50%;
+    animation: cm-spin 0.6s ease-in-out infinite;
+}
+
+.cm-processing-stage {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.gl-minify-enable-editor {
+    --marker: 1;
+}

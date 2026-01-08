@@ -236,7 +236,8 @@
 
 .cm-attachment-overlay-loading {
     color: white;
-    font-size: 1rem;
+    font-size: 0.875rem;
+    font-weight: 400;
 }
 
 .cm-attachment-full-image {
