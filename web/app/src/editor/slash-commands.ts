@@ -12,11 +12,14 @@ import {
 	type CompletionResult,
 	snippetCompletion,
 } from "@codemirror/autocomplete";
+import type { EditorView } from "@codemirror/view";
+import { triggerImageUpload } from "./attachment-widget.ts";
 
 interface SlashCommand {
 	label: string;
 	description: string;
-	snippet: string;
+	snippet?: string;
+	apply?: (view: EditorView, completion: Completion, from: number, to: number) => void;
 }
 
 const commands: SlashCommand[] = [
@@ -43,7 +46,12 @@ const commands: SlashCommand[] = [
 	{
 		label: "Image",
 		description: "Upload image attachment",
-		snippet: "![${alt text}](attachment:pending)",
+		apply: (view, _completion, from, to) => {
+			// Remove the /Image text first
+			view.dispatch({ changes: { from, to, insert: "" } });
+			// Then trigger file picker
+			triggerImageUpload(view);
+		},
 	},
 ];
 
@@ -58,14 +66,23 @@ function slashCommandSource(
 	const slashPos = match.text.lastIndexOf("/");
 	const from = match.from + slashPos;
 
-	// Build completions using snippetCompletion for proper cursor placement
-	const options: Completion[] = commands.map((cmd) =>
-		snippetCompletion(cmd.snippet, {
+	// Build completions
+	const options: Completion[] = commands.map((cmd) => {
+		if (cmd.snippet) {
+			return snippetCompletion(cmd.snippet, {
+				label: "/" + cmd.label,
+				detail: cmd.description,
+				type: "keyword",
+			});
+		}
+		// Custom apply function for commands like Image
+		return {
 			label: "/" + cmd.label,
 			detail: cmd.description,
 			type: "keyword",
-		}),
-	);
+			apply: cmd.apply,
+		};
+	});
 
 	return {
 		from,

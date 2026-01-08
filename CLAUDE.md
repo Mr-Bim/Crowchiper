@@ -534,14 +534,29 @@ User selects image → Generate thumbnail (canvas, 200px max)
 
 ### Markdown Format
 
-Images use a special `attachment:` URL scheme:
+Images use the gallery syntax with a special `attachment:` URL scheme:
 
 ```markdown
-![alt text](attachment:pending)    <!-- File picker shown -->
-![alt text](attachment:<uuid>)     <!-- Decrypted image displayed -->
+::gallery{}![alt text](attachment:<uuid>)::     <!-- Decrypted image displayed -->
+::gallery{}![alt1](attachment:uuid1)![alt2](attachment:uuid2)::  <!-- Multiple images -->
 ```
 
-The `/Image` slash command inserts `![alt text](attachment:pending)`, which the widget renders as a file picker button.
+The `/Image` slash command opens a file picker immediately, uploads the image, and inserts a gallery.
+
+**Gallery behavior:**
+- Images are displayed inline in a row
+- Each image has a delete button (visible on hover, keyboard accessible)
+- Cursor can be positioned between images
+- Backspace deletes the image before the cursor
+- When the last image is deleted, the entire gallery is removed
+- The `{}` is reserved for future styling options (currently empty)
+
+**Implementation:**
+- `::gallery{}` prefix is hidden
+- `::` suffix is hidden
+- Each image inside is a separate atomic widget with its own delete button
+- The gallery prefix, each image, and the suffix are all atomic ranges
+- Custom backspace keymap handles deletion logic
 
 ### Reference Counting
 

@@ -48,25 +48,7 @@ const editorTheme = EditorView.theme({
 		display: "block",
 		margin: "8px 0",
 	},
-	".cm-attachment-picker": {
-		display: "inline-block",
-	},
-	".cm-attachment-picker-btn": {
-		padding: "8px 16px",
-		background: "var(--accent)",
-		color: "white",
-		border: "none",
-		borderRadius: "4px",
-		cursor: "pointer",
-		fontSize: "14px",
-	},
-	".cm-attachment-picker-btn:hover": {
-		opacity: "0.9",
-	},
-	".cm-attachment-picker-btn:disabled": {
-		opacity: "0.6",
-		cursor: "wait",
-	},
+
 	".cm-attachment-thumbnail-wrapper": {
 		display: "inline-block",
 	},
@@ -91,6 +73,56 @@ const editorTheme = EditorView.theme({
 		padding: "16px",
 		color: "var(--error, #dc3545)",
 	},
+	// Gallery styles
+	".cm-gallery-start, .cm-gallery-end": {
+		display: "none",
+	},
+	".cm-gallery-image": {
+		display: "inline-block",
+		position: "relative",
+		margin: "4px",
+		verticalAlign: "top",
+	},
+	".cm-gallery-image .cm-attachment-thumbnail-wrapper": {
+		display: "inline-block",
+	},
+	".cm-gallery-image .cm-attachment-thumbnail": {
+		maxHeight: "200px",
+		width: "auto",
+	},
+	".cm-gallery-delete-btn": {
+		position: "absolute",
+		top: "4px",
+		right: "4px",
+		width: "24px",
+		height: "24px",
+		padding: "0",
+		border: "none",
+		borderRadius: "50%",
+		background: "rgba(0, 0, 0, 0.6)",
+		color: "white",
+		cursor: "pointer",
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		opacity: "0",
+		transition: "opacity 0.15s",
+	},
+	".cm-gallery-image:hover .cm-gallery-delete-btn, .cm-gallery-delete-btn:focus": {
+		opacity: "1",
+	},
+	".cm-gallery-delete-btn:focus": {
+		outline: "2px solid var(--accent)",
+		outlineOffset: "2px",
+	},
+	".cm-gallery-delete-btn:hover": {
+		background: "rgba(220, 53, 69, 0.9)",
+	},
+	".cm-gallery-delete-btn svg": {
+		width: "14px",
+		height: "14px",
+	},
+
 });
 
 export function createEditor(
@@ -105,12 +137,12 @@ export function createEditor(
 			drawSelection(),
 			syntaxHighlighting(defaultHighlightStyle),
 			markdown(),
+			attachmentPlugin, // Must come before default keymap to intercept Backspace/Delete
 			keymap.of([...completionKeymap, ...defaultKeymap, ...historyKeymap]),
 			EditorView.lineWrapping,
 			editorTheme,
 			slashCommands,
 			checkboxPlugin,
-			attachmentPlugin,
 			EditorView.updateListener.of((update) => {
 				if (update.docChanged) {
 					onDocChange();
