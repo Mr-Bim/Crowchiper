@@ -3,11 +3,38 @@
  *
  * Stores the Master Encryption Key (MEK) in memory only.
  * Key is cleared on logout or tab close.
+ *
+ * Encryption state:
+ * - encryptionEnabled: User has set up encryption (PRF salt exists)
+ * - sessionEncryptionKey: Derived key for this session (set after unlock)
+ * - prfSalt: Salt used for PRF during passkey auth
  */
 
 let sessionEncryptionKey: CryptoKey | null = null;
 let prfSalt: string | null = null;
-let encryptionEnabled = false;
+let encryptionEnabled = true;
+
+// --- Initialization ---
+
+/**
+ * Initialize encryption with the PRF salt.
+ * Call this when encryption settings indicate encryption is enabled.
+ */
+export function initEncryption(salt: string): void {
+	prfSalt = salt;
+	encryptionEnabled = true;
+}
+
+/**
+ * Mark encryption as disabled.
+ * Call this when encryption settings indicate encryption is not enabled.
+ */
+export function disableEncryption(): void {
+	encryptionEnabled = false;
+	prfSalt = null;
+}
+
+// --- Session Key ---
 
 /**
  * Store the derived encryption key for this session.
@@ -31,13 +58,7 @@ export function clearSessionEncryptionKey(): void {
 	sessionEncryptionKey = null;
 }
 
-/**
- * Store the PRF salt from encryption settings.
- */
-export function setPrfSalt(salt: string): void {
-	prfSalt = salt;
-	encryptionEnabled = true;
-}
+// --- PRF Salt ---
 
 /**
  * Get the stored PRF salt.
@@ -46,18 +67,13 @@ export function getPrfSalt(): string | null {
 	return prfSalt;
 }
 
+// --- State Queries ---
+
 /**
  * Check if encryption is enabled for this user.
  */
 export function isEncryptionEnabled(): boolean {
 	return encryptionEnabled;
-}
-
-/**
- * Set encryption enabled state (for users without PRF).
- */
-export function setEncryptionEnabled(enabled: boolean): void {
-	encryptionEnabled = enabled;
 }
 
 /**
@@ -74,10 +90,13 @@ export function isUnlocked(): boolean {
 	return sessionEncryptionKey !== null;
 }
 
+// --- Cleanup ---
+
 /**
  * Clear all session state.
  */
 export function clearAll(): void {
 	sessionEncryptionKey = null;
 	prfSalt = null;
+	encryptionEnabled = false;
 }

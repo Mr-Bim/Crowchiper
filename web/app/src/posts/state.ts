@@ -9,8 +9,8 @@ import type { EditorView } from "../editor/setup.ts";
 
 let editor: EditorView | null = null;
 let posts: PostSummary[] = [];
-let currentPost: Post | null = null;
-let currentDecryptedContent: string | null = null;
+let loadedPost: Post | null = null;
+let loadedDecryptedContent: string | null = null;
 let currentDecryptedTitle: string | null = null;
 let decryptedTitles: Map<string, string> = new Map();
 let saveTimeout: number | null = null;
@@ -91,22 +91,22 @@ export function getPostUuids(): string[] {
 	return posts.map((p) => p.uuid);
 }
 
-// --- Current Post ---
+// --- Loaded Post ---
 
-export function getCurrentPost(): Post | null {
-	return currentPost;
+export function getLoadedPost(): Post | null {
+	return loadedPost;
 }
 
-export function setCurrentPost(post: Post | null): void {
-	currentPost = post;
+export function setLoadedPost(post: Post | null): void {
+	loadedPost = post;
 }
 
-export function getCurrentDecryptedContent(): string | null {
-	return currentDecryptedContent;
+export function getLoadedDecryptedContent(): string | null {
+	return loadedDecryptedContent;
 }
 
-export function setCurrentDecryptedContent(content: string | null): void {
-	currentDecryptedContent = content;
+export function setLoadedDecryptedContent(content: string | null): void {
+	loadedDecryptedContent = content;
 }
 
 // --- Current Decrypted Title ---

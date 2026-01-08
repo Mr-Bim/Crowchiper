@@ -333,7 +333,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 	);
 }
 
-export const attachmentPlugin = ViewPlugin.fromClass(
+const attachmentViewPlugin = ViewPlugin.fromClass(
 	class {
 		decorations: DecorationSet;
 
@@ -351,6 +351,62 @@ export const attachmentPlugin = ViewPlugin.fromClass(
 		decorations: (v) => v.decorations,
 	},
 );
+
+/**
+ * Build atomic ranges for attachments so they delete as a unit.
+ * When the user deletes any character within the attachment markdown,
+ * the entire syntax is deleted.
+ */
+function buildAtomicRanges(view: EditorView): DecorationSet {
+	const ranges: Array<{ from: number; to: number }> = [];
+	const doc = view.state.doc;
+
+	for (let i = 1; i <= doc.lines; i++) {
+		const line = doc.line(i);
+		let match: RegExpExecArray | null;
+		ATTACHMENT_PATTERN.lastIndex = 0;
+
+		while ((match = ATTACHMENT_PATTERN.exec(line.text)) !== null) {
+			const from = line.from + match.index;
+			const to = from + match[0].length;
+			ranges.push({ from, to });
+		}
+	}
+
+	return Decoration.set(
+		ranges.map((r) => Decoration.mark({ atomic: true }).range(r.from, r.to)),
+	);
+}
+
+const atomicRangesPlugin = ViewPlugin.fromClass(
+	class {
+		decorations: DecorationSet;
+
+		constructor(view: EditorView) {
+			this.decorations = buildAtomicRanges(view);
+		}
+
+		update(update: ViewUpdate) {
+			if (update.docChanged || update.viewportChanged) {
+				this.decorations = buildAtomicRanges(update.view);
+			}
+		}
+	},
+	{
+		decorations: (v) => v.decorations,
+		provide: (plugin) =>
+			EditorView.atomicRanges.of((view) => {
+				const value = view.plugin(plugin);
+				return value?.decorations ?? Decoration.none;
+			}),
+	},
+);
+
+/**
+ * Combined attachment plugin that provides both the widget decorations
+ * and atomic range behavior.
+ */
+export const attachmentPlugin = [attachmentViewPlugin, atomicRangesPlugin];
 
 /**
  * Parse attachment UUIDs from content.

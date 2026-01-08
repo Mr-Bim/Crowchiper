@@ -6,7 +6,7 @@
  */
 
 import { getEncryptionSettings } from "./api/encryption-settings.ts";
-import { needsUnlock, setEncryptionEnabled, setPrfSalt } from "./crypto/keystore.ts";
+import { disableEncryption, initEncryption, needsUnlock } from "./crypto/keystore.ts";
 import {
 	handleDeletePost,
 	handleNewPost,
@@ -66,9 +66,9 @@ async function init(): Promise<void> {
 			if (!settings.prf_salt) {
 				throw new Error("Encryption enabled but PRF salt is missing");
 			}
-			setPrfSalt(settings.prf_salt);
+			initEncryption(settings.prf_salt);
 		} else {
-			setEncryptionEnabled(false);
+			disableEncryption();
 		}
 
 		// Wire up event handlers

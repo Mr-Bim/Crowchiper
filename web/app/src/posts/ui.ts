@@ -30,8 +30,8 @@ import {
 	addPost,
 	clearSaveTimeout,
 	clearServerSaveInterval,
-	getCurrentDecryptedContent,
-	getCurrentPost,
+	getLoadedDecryptedContent,
+	getLoadedPost,
 	getDecryptedTitles,
 	getEditor,
 	getIsDirty,
@@ -41,9 +41,9 @@ import {
 	getServerSaveInterval,
 	movePost,
 	removePost,
-	setCurrentDecryptedContent,
+	setLoadedDecryptedContent,
 	setCurrentDecryptedTitle,
-	setCurrentPost,
+	setLoadedPost,
 	setDecryptedTitle,
 	setDecryptedTitles,
 	setEditor,
@@ -54,7 +54,6 @@ import {
 	setSaveTimeout,
 	setServerSaveInterval,
 	sortPostsByPosition,
-	updatePostInList,
 } from "./state.ts";
 
 // Preload editor chunk - browser starts downloading immediately
@@ -90,10 +89,10 @@ function scheduleEncrypt(): void {
  * Does NOT save to server.
  */
 async function encryptCurrentPost(): Promise<void> {
-	const currentPost = getCurrentPost();
+	const loadedPost = getLoadedPost();
 	const editor = getEditor();
 
-	if (!currentPost || !editor) return;
+	if (!loadedPost || !editor) return;
 
 	const content = editor.state.doc.toString();
 	const title = extractTitle(content);
@@ -112,30 +111,12 @@ async function encryptCurrentPost(): Promise<void> {
 			encryptionVersion: encrypted.encryptionVersion ?? null,
 		});
 
-		// Update decrypted values for display (kept separate from currentPost)
+		// Update decrypted title for display
 		setCurrentDecryptedTitle(title);
-		setCurrentDecryptedContent(content);
-
-		// Update currentPost with ENCRYPTED values (for server communication)
-		currentPost.title = encrypted.title;
-		currentPost.title_encrypted = encrypted.titleEncrypted;
-		currentPost.title_iv = encrypted.titleIv ?? null;
-		currentPost.content = encrypted.content;
-		currentPost.content_encrypted = encrypted.contentEncrypted;
-		currentPost.iv = encrypted.contentIv ?? null;
-		currentPost.encryption_version = encrypted.encryptionVersion ?? null;
+		setDecryptedTitle(loadedPost.uuid, title);
 
 		// Mark as dirty (needs server save)
 		setIsDirty(true);
-
-		// Update post list UI with decrypted title for display
-		updatePostInList(currentPost.uuid, {
-			title,
-			title_encrypted: encrypted.titleEncrypted,
-			title_iv: encrypted.titleIv ?? null,
-			content_encrypted: encrypted.contentEncrypted,
-			encryption_version: encrypted.encryptionVersion ?? null,
-		});
 
 		renderPostList();
 
@@ -170,13 +151,13 @@ function stopServerSaveInterval(): void {
  * Save the pending encrypted data to the server.
  */
 async function saveToServer(): Promise<void> {
-	const currentPost = getCurrentPost();
+	const loadedPost = getLoadedPost();
 	const pendingData = getPendingEncryptedData();
 
-	if (!currentPost || !pendingData || !getIsDirty()) return;
+	if (!loadedPost || !pendingData || !getIsDirty()) return;
 
 	try {
-		await updatePost(currentPost.uuid, {
+		await updatePost(loadedPost.uuid, {
 			title: pendingData.title,
 			title_encrypted: pendingData.titleEncrypted,
 			title_iv: pendingData.titleIv ?? undefined,
@@ -184,16 +165,6 @@ async function saveToServer(): Promise<void> {
 			content_encrypted: pendingData.contentEncrypted,
 			iv: pendingData.contentIv ?? undefined,
 			encryption_version: pendingData.encryptionVersion ?? undefined,
-		});
-
-		// Update the current post with encrypted values for beacon use
-		currentPost.title_iv = pendingData.titleIv;
-		currentPost.iv = pendingData.contentIv;
-		currentPost.encryption_version = pendingData.encryptionVersion;
-		currentPost.updated_at = new Date().toISOString();
-
-		updatePostInList(currentPost.uuid, {
-			updated_at: currentPost.updated_at,
 		});
 
 		setIsDirty(false);
@@ -207,13 +178,13 @@ async function saveToServer(): Promise<void> {
  * Only saves if content has changed.
  */
 async function saveToServerNow(): Promise<void> {
-	const currentPost = getCurrentPost();
+	const loadedPost = getLoadedPost();
 	const editor = getEditor();
 
-	if (!currentPost || !editor) return;
+	if (!loadedPost || !editor) return;
 
 	const currentContent = editor.state.doc.toString();
-	const originalContent = getCurrentDecryptedContent();
+	const originalContent = getLoadedDecryptedContent();
 
 	// Only save if content has actually changed
 	if (currentContent === originalContent) {
@@ -229,7 +200,7 @@ async function saveToServerNow(): Promise<void> {
 	const attachmentUuids = parseAttachmentUuids(currentContent);
 
 	try {
-		await updatePost(currentPost.uuid, {
+		await updatePost(loadedPost.uuid, {
 			title: pendingData.title,
 			title_encrypted: pendingData.titleEncrypted,
 			title_iv: pendingData.titleIv ?? undefined,
@@ -238,15 +209,6 @@ async function saveToServerNow(): Promise<void> {
 			iv: pendingData.contentIv ?? undefined,
 			encryption_version: pendingData.encryptionVersion ?? undefined,
 			attachment_uuids: attachmentUuids,
-		});
-
-		currentPost.title_iv = pendingData.titleIv;
-		currentPost.iv = pendingData.contentIv;
-		currentPost.encryption_version = pendingData.encryptionVersion;
-		currentPost.updated_at = new Date().toISOString();
-
-		updatePostInList(currentPost.uuid, {
-			updated_at: currentPost.updated_at,
 		});
 
 		setIsDirty(false);
@@ -261,45 +223,30 @@ async function saveToServerNow(): Promise<void> {
 
 /**
  * Save post and attachment refs via beacon when page is unloading.
- * Uses pending encrypted data if available, otherwise falls back to last saved state.
+ * Only saves if there's pending encrypted data (content changed since load).
  * Called from pagehide handler.
  */
 export function saveBeacon(): void {
-	const currentPost = getCurrentPost();
+	const loadedPost = getLoadedPost();
 	const editor = getEditor();
+	const pendingData = getPendingEncryptedData();
 
-	if (!currentPost || !editor) return;
+	// Only send beacon if we have pending changes
+	if (!loadedPost || !editor || !pendingData) return;
 
 	const content = editor.state.doc.toString();
 	const attachmentUuids = parseAttachmentUuids(content);
 
-	// Use pending encrypted data if available (most recent), otherwise use last saved state
-	const pendingData = getPendingEncryptedData();
-
-	if (pendingData) {
-		updatePostBeacon(currentPost.uuid, {
-			title: pendingData.title,
-			title_encrypted: pendingData.titleEncrypted,
-			title_iv: pendingData.titleIv ?? undefined,
-			content: pendingData.content,
-			content_encrypted: pendingData.contentEncrypted,
-			iv: pendingData.contentIv ?? undefined,
-			encryption_version: pendingData.encryptionVersion ?? undefined,
-			attachment_uuids: attachmentUuids,
-		});
-	} else {
-		// Fall back to last saved state
-		updatePostBeacon(currentPost.uuid, {
-			title: currentPost.title ?? undefined,
-			title_encrypted: currentPost.title_encrypted,
-			title_iv: currentPost.title_iv ?? undefined,
-			content: currentPost.content,
-			content_encrypted: currentPost.content_encrypted,
-			iv: currentPost.iv ?? undefined,
-			encryption_version: currentPost.encryption_version ?? undefined,
-			attachment_uuids: attachmentUuids,
-		});
-	}
+	updatePostBeacon(loadedPost.uuid, {
+		title: pendingData.title,
+		title_encrypted: pendingData.titleEncrypted,
+		title_iv: pendingData.titleIv ?? undefined,
+		content: pendingData.content,
+		content_encrypted: pendingData.contentEncrypted,
+		iv: pendingData.contentIv ?? undefined,
+		encryption_version: pendingData.encryptionVersion ?? undefined,
+		attachment_uuids: attachmentUuids,
+	});
 }
 
 // --- Rendering ---
@@ -309,7 +256,8 @@ export function renderPostList(): void {
 	if (!list) return;
 
 	const posts = getPosts();
-	const currentPost = getCurrentPost();
+	const loadedPost = getLoadedPost();
+	const decryptedTitles = getDecryptedTitles();
 
 	list.innerHTML = "";
 
@@ -325,10 +273,11 @@ export function renderPostList(): void {
 		// Button for selection
 		const item = document.createElement("button");
 		item.className = "ghost post-item";
-		if (currentPost?.uuid === post.uuid) {
+		if (loadedPost?.uuid === post.uuid) {
 			item.classList.add("active");
 		}
-		const title = post.title ?? "Untitled";
+		// Use decrypted title from map, fallback to post.title, then "Untitled"
+		const title = decryptedTitles.get(post.uuid) ?? post.title ?? "Untitled";
 		item.textContent = title;
 		item.title = title; // Show full title on hover
 		item.addEventListener("click", () => selectPost(post));
@@ -371,11 +320,11 @@ export async function selectPost(postSummary: PostSummary): Promise<void> {
 
 	// Fetch full post data
 	const post = await getPost(postSummary.uuid);
-	setCurrentPost(post);
+	setLoadedPost(post);
 
 	// Decrypt content
 	const displayContent = await decryptPostContent(post);
-	setCurrentDecryptedContent(displayContent);
+	setLoadedDecryptedContent(displayContent);
 
 	// Track initial attachment UUIDs for this post
 	setPreviousAttachmentUuids(parseAttachmentUuids(displayContent));
@@ -396,7 +345,7 @@ export async function selectPost(postSummary: PostSummary): Promise<void> {
 	// Create new editor
 	const { createEditor } = await editorPromise;
 	const newEditor = createEditor(container, displayContent, () => {
-		if (getCurrentPost()) {
+		if (getLoadedPost()) {
 			scheduleEncrypt();
 		}
 	});
@@ -451,12 +400,12 @@ export async function handleNewPost(): Promise<void> {
 		};
 		addPost(summary);
 
-		setCurrentPost({
+		setLoadedPost({
 			...post,
 			title: displayTitle,
 			content: displayContent,
 		});
-		setCurrentDecryptedContent(displayContent);
+		setLoadedDecryptedContent(displayContent);
 
 		renderPostList();
 
@@ -472,7 +421,7 @@ export async function handleNewPost(): Promise<void> {
 		// Create new editor
 		const { createEditor } = await editorPromise;
 		const newEditor = createEditor(container, displayContent, () => {
-			if (getCurrentPost()) {
+			if (getLoadedPost()) {
 				scheduleEncrypt();
 			}
 		});
@@ -490,8 +439,8 @@ export async function handleNewPost(): Promise<void> {
 }
 
 export async function handleDeletePost(): Promise<void> {
-	const currentPost = getCurrentPost();
-	if (!currentPost) return;
+	const loadedPost = getLoadedPost();
+	if (!loadedPost) return;
 
 	if (!confirm("Delete this post?")) return;
 
@@ -502,11 +451,11 @@ export async function handleDeletePost(): Promise<void> {
 	setIsDirty(false);
 
 	try {
-		await deletePost(currentPost.uuid);
+		await deletePost(loadedPost.uuid);
 
-		removePost(currentPost.uuid);
-		setCurrentPost(null);
-		setCurrentDecryptedContent(null);
+		removePost(loadedPost.uuid);
+		setLoadedPost(null);
+		setLoadedDecryptedContent(null);
 
 		const editor = getEditor();
 		if (editor) {
@@ -539,8 +488,9 @@ export async function loadPosts(): Promise<void> {
 		const posts = await listPosts();
 		setPosts(posts);
 
-		// Decrypt titles
-		await decryptPostTitles(posts);
+		// Decrypt titles and store them
+		const titles = await decryptPostTitles(posts);
+		setDecryptedTitles(titles);
 
 		sortPostsByPosition();
 		renderPostList();
