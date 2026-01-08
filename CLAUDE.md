@@ -578,7 +578,30 @@ This allows the same image to be used in multiple posts.
 
 - **Image**: 10MB max (encrypted)
 - **Thumbnail**: 100KB max (encrypted)
-- **Thumbnail dimensions**: 200px max width/height
+- **Thumbnail dimensions**: 400px max width/height
+
+### Binary Streaming
+
+Attachments use binary streaming instead of base64 for efficiency:
+
+**Upload** (multipart form data):
+- `image`: Binary encrypted image data
+- `image_iv`: IV string
+- `thumbnail`: Binary encrypted thumbnail data  
+- `thumbnail_iv`: IV string
+- `encryption_version`: Version number
+
+**Download** (binary response):
+- Body: Raw encrypted binary data
+- `X-Encryption-IV` header: IV for decryption
+
+### Thumbnail-First Display
+
+The editor shows thumbnails by default for faster loading:
+1. Initial load fetches only the thumbnail (smaller, faster)
+2. Clicking the thumbnail opens a full-screen overlay
+3. Full image is fetched and decrypted on demand
+4. Both thumbnails and full images are cached separately
 
 ### Encryption
 
@@ -588,17 +611,21 @@ Images use the same session encryption key as posts:
 // Encrypt image
 const encrypted = await encryptBinary(imageArrayBuffer, sessionKey);
 
-// Upload
+// Upload using multipart form data
 await uploadAttachment({
-    encrypted_image: toBase64Url(encrypted.ciphertext),
-    encrypted_image_iv: encrypted.iv,
-    encrypted_thumbnail: toBase64Url(thumbEncrypted.ciphertext),
-    encrypted_thumbnail_iv: thumbEncrypted.iv,
+    image: encrypted.ciphertext,        // ArrayBuffer
+    image_iv: encrypted.iv,             // string
+    thumbnail: thumbEncrypted.ciphertext,
+    thumbnail_iv: thumbEncrypted.iv,
     encryption_version: 1,
 });
+
+// Download returns binary + IV header
+const response = await getAttachmentThumbnail(uuid);
+const decrypted = await decryptBinary(response.data, response.iv, key);
 ```
 
-The widget caches decrypted images in memory to avoid repeated fetch/decrypt cycles.
+The widget maintains separate caches for thumbnails and full images.
 
 ## Posts Behavior
 

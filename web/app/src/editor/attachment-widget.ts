@@ -3,7 +3,8 @@
  *
  * Handles inline image attachments with the format ![alt](attachment:uuid).
  * - "attachment:pending" shows a file picker button
- * - "attachment:<uuid>" fetches and displays the decrypted image
+ * - "attachment:<uuid>" fetches and displays the decrypted thumbnail with srcset
+ * - Clicking the thumbnail loads and displays the full image
  */
 
 import {
@@ -15,22 +16,44 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 
-import { getAttachment, uploadAttachment } from "../api/attachments.ts";
+import { getAttachment, getAttachmentThumbnail, uploadAttachment, type ThumbnailSize } from "../api/attachments.ts";
 import {
 	ENCRYPTED_FORMAT_VERSION,
 	decryptBinary,
 	encryptBinary,
-	fromBase64Url,
-	toBase64Url,
 } from "../crypto/operations.ts";
 import { getSessionEncryptionKey } from "../crypto/keystore.ts";
-import { generateThumbnail } from "./thumbnail.ts";
+import { generateThumbnails } from "./thumbnail.ts";
 
-// Cache for decrypted images to avoid repeated fetching/decryption
-const imageCache = new Map<string, string>();
+// Cache for decrypted thumbnails (uuid -> blob URL)
+const thumbnailCache = new Map<string, string>();
+
+/**
+ * Determine optimal thumbnail size based on window width and device pixel ratio.
+ * - sm (200px): mobile devices or small windows
+ * - md (400px): regular laptops and tablets
+ * - lg (800px): large screens / high DPI displays
+ */
+function getOptimalThumbnailSize(): ThumbnailSize {
+	const width = window.innerWidth;
+  const height = window.innerHeight;
+
+	// Effective pixel width accounting for DPR
+
+	// Mobile or small window: use small thumbnail
+	if (width <= 600) return "sm";
+
+	// Large screen or high DPI: use large thumbnail
+	if (width > 1600 && height > 1600) return "lg";
+
+	// Default: medium thumbnail for regular laptops
+	return "md";
+}
+
+// Cache for decrypted full images (uuid -> blob URL)
+const fullImageCache = new Map<string, string>();
 
 class AttachmentWidget extends WidgetType {
-	private container: HTMLElement | null = null;
 
 	constructor(
 		private uuid: string,
@@ -48,12 +71,11 @@ class AttachmentWidget extends WidgetType {
 	toDOM(view: EditorView): HTMLElement {
 		const container = document.createElement("div");
 		container.className = "cm-attachment-widget";
-		this.container = container;
 
 		if (this.uuid === "pending") {
 			this.renderFilePicker(container, view);
 		} else {
-			this.renderImage(container);
+			this.renderThumbnail(container);
 		}
 
 		return container;
@@ -112,39 +134,45 @@ class AttachmentWidget extends WidgetType {
 		// Read file as ArrayBuffer
 		const imageData = await file.arrayBuffer();
 
-		// Generate thumbnail
-		const thumbnailData = await generateThumbnail(file);
+		// Generate thumbnails at all sizes
+		const thumbnails = await generateThumbnails(file);
 
-		// Encrypt both image and thumbnail
-		const [encryptedImage, encryptedThumbnail] = await Promise.all([
+		// Encrypt image and all thumbnails
+		const [encryptedImage, encThumbSm, encThumbMd, encThumbLg] = await Promise.all([
 			encryptBinary(imageData, mek),
-			encryptBinary(thumbnailData, mek),
+			encryptBinary(thumbnails.sm, mek),
+			encryptBinary(thumbnails.md, mek),
+			encryptBinary(thumbnails.lg, mek),
 		]);
 
-		// Upload to server
+		// Upload to server using binary streaming
 		const response = await uploadAttachment({
-			encrypted_image: toBase64Url(encryptedImage.ciphertext),
-			encrypted_image_iv: encryptedImage.iv,
-			encrypted_thumbnail: toBase64Url(encryptedThumbnail.ciphertext),
-			encrypted_thumbnail_iv: encryptedThumbnail.iv,
+			image: encryptedImage.ciphertext,
+			image_iv: encryptedImage.iv,
+			thumb_sm: encThumbSm.ciphertext,
+			thumb_sm_iv: encThumbSm.iv,
+			thumb_md: encThumbMd.ciphertext,
+			thumb_md_iv: encThumbMd.iv,
+			thumb_lg: encThumbLg.ciphertext,
+			thumb_lg_iv: encThumbLg.iv,
 			encryption_version: ENCRYPTED_FORMAT_VERSION,
 		});
 
 		return response.uuid;
 	}
 
-	private async renderImage(container: HTMLElement): Promise<void> {
-		// Check cache first
-		const cached = imageCache.get(this.uuid);
+	private async renderThumbnail(container: HTMLElement): Promise<void> {
+		// Check thumbnail cache first
+		const cached = thumbnailCache.get(this.uuid);
 		if (cached) {
-			this.displayImage(container, cached);
+			this.displayThumbnail(container, cached);
 			return;
 		}
 
 		// Show loading state
 		const loading = document.createElement("div");
 		loading.className = "cm-attachment-loading";
-		loading.textContent = "Loading image...";
+		loading.textContent = "Loading...";
 		container.appendChild(loading);
 
 		try {
@@ -155,40 +183,116 @@ class AttachmentWidget extends WidgetType {
 				return;
 			}
 
-			// Fetch encrypted image
-			const response = await getAttachment(this.uuid);
+			// Fetch only the optimal size for editor display
+			const response = await getAttachmentThumbnail(this.uuid, getOptimalThumbnailSize());
 
-			// Decrypt
-			const ciphertext = fromBase64Url(response.encrypted_image);
-			const decrypted = await decryptBinary(ciphertext, response.iv, mek);
-
-			// Create blob URL
+			// Decrypt the thumbnail
+			const decrypted = await decryptBinary(response.data, response.iv, mek);
 			const blob = new Blob([decrypted], { type: "image/jpeg" });
 			const blobUrl = URL.createObjectURL(blob);
 
 			// Cache the blob URL
-			imageCache.set(this.uuid, blobUrl);
+			thumbnailCache.set(this.uuid, blobUrl);
 
-			// Display image
+			// Display thumbnail
 			container.removeChild(loading);
-			this.displayImage(container, blobUrl);
+			this.displayThumbnail(container, blobUrl);
 		} catch (err) {
-			console.error("Failed to load image:", err);
+			console.error("Failed to load thumbnail:", err);
 			loading.textContent = "Failed to load image";
 			loading.className = "cm-attachment-error";
 		}
 	}
 
-	private displayImage(container: HTMLElement, src: string): void {
+	private displayThumbnail(container: HTMLElement, src: string): void {
+		const wrapper = document.createElement("div");
+		wrapper.className = "cm-attachment-thumbnail-wrapper";
+
+		const img = document.createElement("img");
+		img.src = src;
+		img.alt = this.alt || "Attached image (click to enlarge)";
+		img.className = "cm-attachment-thumbnail";
+		img.title = "Click to view full size";
+
+		img.addEventListener("click", () => {
+			this.showFullImage();
+		});
+
+		wrapper.appendChild(img);
+		container.appendChild(wrapper);
+	}
+
+	private async showFullImage(): Promise<void> {
+		// Create overlay
+		const overlay = document.createElement("div");
+		overlay.className = "cm-attachment-overlay";
+
+		// Close on click outside or escape
+		const closeHandler = (e: MouseEvent | KeyboardEvent) => {
+			if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+			if (e instanceof MouseEvent && e.target !== overlay) return;
+			overlay.remove();
+			document.removeEventListener("keydown", closeHandler);
+		};
+		overlay.addEventListener("click", closeHandler);
+		document.addEventListener("keydown", closeHandler);
+
+		// Check full image cache first
+		const cachedFull = fullImageCache.get(this.uuid);
+		if (cachedFull) {
+			this.displayFullImage(overlay, cachedFull);
+			document.body.appendChild(overlay);
+			return;
+		}
+
+		// Show loading state in overlay
+		const loading = document.createElement("div");
+		loading.className = "cm-attachment-overlay-loading";
+		loading.textContent = "Loading full image...";
+		overlay.appendChild(loading);
+		document.body.appendChild(overlay);
+
+		try {
+			const mek = getSessionEncryptionKey();
+			if (!mek) {
+				loading.textContent = "Unlock required to view image";
+				return;
+			}
+
+			// Fetch full encrypted image
+			const response = await getAttachment(this.uuid);
+
+			// Decrypt
+			const decrypted = await decryptBinary(response.data, response.iv, mek);
+
+			// Create blob URL
+			const blob = new Blob([decrypted], { type: "image/jpeg" });
+			const blobUrl = URL.createObjectURL(blob);
+
+			// Cache the full image blob URL
+			fullImageCache.set(this.uuid, blobUrl);
+
+			// Display full image
+			overlay.removeChild(loading);
+			this.displayFullImage(overlay, blobUrl);
+		} catch (err) {
+			console.error("Failed to load full image:", err);
+			loading.textContent = "Failed to load image";
+		}
+	}
+
+	private displayFullImage(overlay: HTMLElement, src: string): void {
 		const img = document.createElement("img");
 		img.src = src;
 		img.alt = this.alt || "Attached image";
-		img.className = "cm-attachment-image";
-		container.appendChild(img);
-	}
+		img.className = "cm-attachment-full-image";
 
-	destroy(): void {
-		this.container = null;
+		// Clicking the image itself shouldn't close the overlay
+		img.addEventListener("click", (e) => {
+			e.stopPropagation();
+		});
+
+		overlay.appendChild(img);
 	}
 
 	ignoreEvent(): boolean {
@@ -269,15 +373,20 @@ export function parseAttachmentUuids(content: string): string[] {
 }
 
 /**
- * Clear the image cache.
+ * Clear all image caches.
  * Call when logging out or when encryption key changes.
  */
 export function clearImageCache(): void {
 	// Revoke all blob URLs to free memory
-	for (const url of imageCache.values()) {
+	for (const url of thumbnailCache.values()) {
 		URL.revokeObjectURL(url);
 	}
-	imageCache.clear();
+	thumbnailCache.clear();
+
+	for (const url of fullImageCache.values()) {
+		URL.revokeObjectURL(url);
+	}
+	fullImageCache.clear();
 }
 
 /**
@@ -286,10 +395,18 @@ export function clearImageCache(): void {
  */
 export function clearImageCacheExcept(keepUuids: string[]): void {
 	const keepSet = new Set(keepUuids);
-	for (const [uuid, url] of imageCache.entries()) {
+
+	for (const [uuid, url] of thumbnailCache.entries()) {
 		if (!keepSet.has(uuid)) {
 			URL.revokeObjectURL(url);
-			imageCache.delete(uuid);
+			thumbnailCache.delete(uuid);
+		}
+	}
+
+	for (const [uuid, url] of fullImageCache.entries()) {
+		if (!keepSet.has(uuid)) {
+			URL.revokeObjectURL(url);
+			fullImageCache.delete(uuid);
 		}
 	}
 }

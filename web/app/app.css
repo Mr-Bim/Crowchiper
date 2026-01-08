@@ -215,6 +215,41 @@
 }
 
 /* Responsive */
+/* Image attachment overlay (appended to body, outside CodeMirror) */
+.gl-minify-disable-attachment-overlay {
+    --marker: 1;
+}
+
+.cm-attachment-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    cursor: pointer;
+}
+
+.cm-attachment-overlay-loading {
+    color: white;
+    font-size: 1rem;
+}
+
+.cm-attachment-full-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    cursor: default;
+}
+
+.gl-minify-enable-attachment-overlay {
+    --marker: 1;
+}
+
 @media (max-width: 48rem) {
     #sidebar-toggle {
         display: flex;

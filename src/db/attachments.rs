@@ -7,6 +7,21 @@ pub struct AttachmentStore {
     pool: SqlitePool,
 }
 
+/// Thumbnail data for a single size.
+#[derive(Debug, Clone)]
+pub struct ThumbnailData {
+    pub data: Vec<u8>,
+    pub iv: String,
+}
+
+/// All thumbnail sizes for an attachment.
+#[derive(Debug, Clone)]
+pub struct Thumbnails {
+    pub sm: ThumbnailData,         // 200px
+    pub md: Option<ThumbnailData>, // 400px (optional for legacy)
+    pub lg: Option<ThumbnailData>, // 800px (optional for legacy)
+}
+
 /// A full attachment with all data.
 #[derive(Debug, Clone)]
 pub struct Attachment {
@@ -15,8 +30,7 @@ pub struct Attachment {
     pub user_id: i64,
     pub encrypted_image: Vec<u8>,
     pub encrypted_image_iv: String,
-    pub encrypted_thumbnail: Vec<u8>,
-    pub encrypted_thumbnail_iv: String,
+    pub thumbnails: Thumbnails,
     pub encryption_version: i32,
     pub reference_count: i32,
     pub created_at: String,
@@ -29,8 +43,12 @@ struct AttachmentRow {
     user_id: i64,
     encrypted_image: Vec<u8>,
     encrypted_image_iv: String,
-    encrypted_thumbnail: Vec<u8>,
-    encrypted_thumbnail_iv: String,
+    encrypted_thumb_sm: Vec<u8>,
+    encrypted_thumb_sm_iv: String,
+    encrypted_thumb_md: Option<Vec<u8>>,
+    encrypted_thumb_md_iv: Option<String>,
+    encrypted_thumb_lg: Option<Vec<u8>>,
+    encrypted_thumb_lg_iv: Option<String>,
     encryption_version: i32,
     reference_count: i32,
     created_at: String,
@@ -44,8 +62,20 @@ impl From<AttachmentRow> for Attachment {
             user_id: row.user_id,
             encrypted_image: row.encrypted_image,
             encrypted_image_iv: row.encrypted_image_iv,
-            encrypted_thumbnail: row.encrypted_thumbnail,
-            encrypted_thumbnail_iv: row.encrypted_thumbnail_iv,
+            thumbnails: Thumbnails {
+                sm: ThumbnailData {
+                    data: row.encrypted_thumb_sm,
+                    iv: row.encrypted_thumb_sm_iv,
+                },
+                md: row
+                    .encrypted_thumb_md
+                    .zip(row.encrypted_thumb_md_iv)
+                    .map(|(data, iv)| ThumbnailData { data, iv }),
+                lg: row
+                    .encrypted_thumb_lg
+                    .zip(row.encrypted_thumb_lg_iv)
+                    .map(|(data, iv)| ThumbnailData { data, iv }),
+            },
             encryption_version: row.encryption_version,
             reference_count: row.reference_count,
             created_at: row.created_at,
@@ -53,37 +83,47 @@ impl From<AttachmentRow> for Attachment {
     }
 }
 
+/// Input for creating an attachment with multiple thumbnail sizes.
+pub struct CreateAttachmentInput<'a> {
+    pub user_id: i64,
+    pub encrypted_image: &'a [u8],
+    pub encrypted_image_iv: &'a str,
+    pub thumb_sm: &'a [u8],
+    pub thumb_sm_iv: &'a str,
+    pub thumb_md: Option<(&'a [u8], &'a str)>,
+    pub thumb_lg: Option<(&'a [u8], &'a str)>,
+    pub encryption_version: i32,
+}
+
 impl AttachmentStore {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
-    /// Create a new attachment. Returns the attachment UUID.
+    /// Create a new attachment with multiple thumbnail sizes. Returns the attachment UUID.
     /// Reference count starts at 0 (incremented when added to a post).
-    #[allow(clippy::too_many_arguments)]
-    pub async fn create(
-        &self,
-        user_id: i64,
-        encrypted_image: &[u8],
-        encrypted_image_iv: &str,
-        encrypted_thumbnail: &[u8],
-        encrypted_thumbnail_iv: &str,
-        encryption_version: i32,
-    ) -> Result<String, sqlx::Error> {
+    pub async fn create(&self, input: CreateAttachmentInput<'_>) -> Result<String, sqlx::Error> {
         let uuid = uuid::Uuid::new_v4().to_string();
 
         sqlx::query(
             "INSERT INTO attachments (uuid, user_id, encrypted_image, encrypted_image_iv,
-             encrypted_thumbnail, encrypted_thumbnail_iv, encryption_version, reference_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+             encrypted_thumb_sm, encrypted_thumb_sm_iv,
+             encrypted_thumb_md, encrypted_thumb_md_iv,
+             encrypted_thumb_lg, encrypted_thumb_lg_iv,
+             encryption_version, reference_count)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
         )
         .bind(&uuid)
-        .bind(user_id)
-        .bind(encrypted_image)
-        .bind(encrypted_image_iv)
-        .bind(encrypted_thumbnail)
-        .bind(encrypted_thumbnail_iv)
-        .bind(encryption_version)
+        .bind(input.user_id)
+        .bind(input.encrypted_image)
+        .bind(input.encrypted_image_iv)
+        .bind(input.thumb_sm)
+        .bind(input.thumb_sm_iv)
+        .bind(input.thumb_md.map(|(d, _)| d))
+        .bind(input.thumb_md.map(|(_, iv)| iv))
+        .bind(input.thumb_lg.map(|(d, _)| d))
+        .bind(input.thumb_lg.map(|(_, iv)| iv))
+        .bind(input.encryption_version)
         .execute(&self.pool)
         .await?;
 
@@ -98,8 +138,10 @@ impl AttachmentStore {
     ) -> Result<Option<Attachment>, sqlx::Error> {
         let row: Option<AttachmentRow> = sqlx::query_as(
             "SELECT id, uuid, user_id, encrypted_image, encrypted_image_iv,
-             encrypted_thumbnail, encrypted_thumbnail_iv, encryption_version,
-             reference_count, created_at
+             encrypted_thumb_sm, encrypted_thumb_sm_iv,
+             encrypted_thumb_md, encrypted_thumb_md_iv,
+             encrypted_thumb_lg, encrypted_thumb_lg_iv,
+             encryption_version, reference_count, created_at
              FROM attachments WHERE uuid = ? AND user_id = ?",
         )
         .bind(uuid)
@@ -109,21 +151,95 @@ impl AttachmentStore {
         Ok(row.map(Attachment::from))
     }
 
-    /// Get just the thumbnail for an attachment.
-    pub async fn get_thumbnail(
+    /// Get all thumbnails for an attachment.
+    pub async fn get_thumbnails(
         &self,
         uuid: &str,
         user_id: i64,
-    ) -> Result<Option<(Vec<u8>, String)>, sqlx::Error> {
-        let row: Option<(Vec<u8>, String)> = sqlx::query_as(
-            "SELECT encrypted_thumbnail, encrypted_thumbnail_iv
+    ) -> Result<Option<Thumbnails>, sqlx::Error> {
+        let row: Option<(
+            Vec<u8>,
+            String,
+            Option<Vec<u8>>,
+            Option<String>,
+            Option<Vec<u8>>,
+            Option<String>,
+        )> = sqlx::query_as(
+            "SELECT encrypted_thumb_sm, encrypted_thumb_sm_iv,
+             encrypted_thumb_md, encrypted_thumb_md_iv,
+             encrypted_thumb_lg, encrypted_thumb_lg_iv
              FROM attachments WHERE uuid = ? AND user_id = ?",
         )
         .bind(uuid)
         .bind(user_id)
         .fetch_optional(&self.pool)
         .await?;
-        Ok(row)
+
+        Ok(row.map(
+            |(sm_data, sm_iv, md_data, md_iv, lg_data, lg_iv)| Thumbnails {
+                sm: ThumbnailData {
+                    data: sm_data,
+                    iv: sm_iv,
+                },
+                md: md_data
+                    .zip(md_iv)
+                    .map(|(data, iv)| ThumbnailData { data, iv }),
+                lg: lg_data
+                    .zip(lg_iv)
+                    .map(|(data, iv)| ThumbnailData { data, iv }),
+            },
+        ))
+    }
+
+    /// Get a single thumbnail by size for an attachment.
+    /// Only fetches the requested size column from the database.
+    /// Returns None if attachment doesn't exist or requested size is not available.
+    pub async fn get_thumbnail_by_size(
+        &self,
+        uuid: &str,
+        user_id: i64,
+        size: &str,
+    ) -> Result<Option<ThumbnailData>, sqlx::Error> {
+        let row: Option<(Option<Vec<u8>>, Option<String>)> = match size {
+            "sm" => {
+                sqlx::query_as(
+                    "SELECT encrypted_thumb_sm, encrypted_thumb_sm_iv
+                     FROM attachments WHERE uuid = ? AND user_id = ?",
+                )
+                .bind(uuid)
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?
+            }
+            "md" => {
+                sqlx::query_as(
+                    "SELECT encrypted_thumb_md, encrypted_thumb_md_iv
+                     FROM attachments WHERE uuid = ? AND user_id = ?",
+                )
+                .bind(uuid)
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?
+            }
+            "lg" => {
+                sqlx::query_as(
+                    "SELECT encrypted_thumb_lg, encrypted_thumb_lg_iv
+                     FROM attachments WHERE uuid = ? AND user_id = ?",
+                )
+                .bind(uuid)
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?
+            }
+            _ => return Ok(None),
+        };
+
+        let Some((data, iv)) = row else {
+            return Ok(None);
+        };
+
+        // Return thumbnail if both data and IV are present
+        Ok(data.zip(iv).map(|(data, iv)| ThumbnailData { data, iv }))
     }
 
     /// Increment reference count for an attachment.
@@ -320,25 +436,29 @@ impl AttachmentStore {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::db::Database;
+
+    fn create_test_input(user_id: i64) -> CreateAttachmentInput<'static> {
+        CreateAttachmentInput {
+            user_id,
+            encrypted_image: b"encrypted_image_data",
+            encrypted_image_iv: "image_iv_123",
+            thumb_sm: b"thumb_sm_data",
+            thumb_sm_iv: "thumb_sm_iv",
+            thumb_md: Some((b"thumb_md_data", "thumb_md_iv")),
+            thumb_lg: Some((b"thumb_lg_data", "thumb_lg_iv")),
+            encryption_version: 1,
+        }
+    }
 
     #[tokio::test]
     async fn test_create_and_get_attachment() {
         let db = Database::open(":memory:").await.unwrap();
         let user_id = db.users().create("uuid-1", "alice").await.unwrap();
 
-        let attachment_uuid = db
-            .attachments()
-            .create(
-                user_id,
-                b"encrypted_image_data",
-                "image_iv_123",
-                b"encrypted_thumb_data",
-                "thumb_iv_456",
-                1,
-            )
-            .await
-            .unwrap();
+        let input = create_test_input(user_id);
+        let attachment_uuid = db.attachments().create(input).await.unwrap();
 
         let attachment = db
             .attachments()
@@ -351,39 +471,39 @@ mod tests {
         assert_eq!(attachment.user_id, user_id);
         assert_eq!(attachment.encrypted_image, b"encrypted_image_data");
         assert_eq!(attachment.encrypted_image_iv, "image_iv_123");
-        assert_eq!(attachment.encrypted_thumbnail, b"encrypted_thumb_data");
-        assert_eq!(attachment.encrypted_thumbnail_iv, "thumb_iv_456");
+        assert_eq!(attachment.thumbnails.sm.data, b"thumb_sm_data");
+        assert_eq!(attachment.thumbnails.sm.iv, "thumb_sm_iv");
+        assert_eq!(
+            attachment.thumbnails.md.as_ref().unwrap().data,
+            b"thumb_md_data"
+        );
+        assert_eq!(
+            attachment.thumbnails.lg.as_ref().unwrap().data,
+            b"thumb_lg_data"
+        );
         assert_eq!(attachment.encryption_version, 1);
         assert_eq!(attachment.reference_count, 0);
     }
 
     #[tokio::test]
-    async fn test_get_thumbnail() {
+    async fn test_get_thumbnails() {
         let db = Database::open(":memory:").await.unwrap();
         let user_id = db.users().create("uuid-1", "alice").await.unwrap();
 
-        let attachment_uuid = db
-            .attachments()
-            .create(
-                user_id,
-                b"encrypted_image_data",
-                "image_iv_123",
-                b"encrypted_thumb_data",
-                "thumb_iv_456",
-                1,
-            )
-            .await
-            .unwrap();
+        let input = create_test_input(user_id);
+        let attachment_uuid = db.attachments().create(input).await.unwrap();
 
-        let (thumb, iv) = db
+        let thumbs = db
             .attachments()
-            .get_thumbnail(&attachment_uuid, user_id)
+            .get_thumbnails(&attachment_uuid, user_id)
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(thumb, b"encrypted_thumb_data");
-        assert_eq!(iv, "thumb_iv_456");
+        assert_eq!(thumbs.sm.data, b"thumb_sm_data");
+        assert_eq!(thumbs.sm.iv, "thumb_sm_iv");
+        assert_eq!(thumbs.md.as_ref().unwrap().data, b"thumb_md_data");
+        assert_eq!(thumbs.lg.as_ref().unwrap().data, b"thumb_lg_data");
     }
 
     #[tokio::test]
@@ -391,11 +511,17 @@ mod tests {
         let db = Database::open(":memory:").await.unwrap();
         let user_id = db.users().create("uuid-1", "alice").await.unwrap();
 
-        let uuid = db
-            .attachments()
-            .create(user_id, b"img", "iv1", b"thumb", "iv2", 1)
-            .await
-            .unwrap();
+        let input = CreateAttachmentInput {
+            user_id,
+            encrypted_image: b"img",
+            encrypted_image_iv: "iv1",
+            thumb_sm: b"thumb",
+            thumb_sm_iv: "iv2",
+            thumb_md: None,
+            thumb_lg: None,
+            encryption_version: 1,
+        };
+        let uuid = db.attachments().create(input).await.unwrap();
 
         // Increment ref count
         assert!(
@@ -459,11 +585,17 @@ mod tests {
         let alice_id = db.users().create("uuid-1", "alice").await.unwrap();
         let bob_id = db.users().create("uuid-2", "bob").await.unwrap();
 
-        let uuid = db
-            .attachments()
-            .create(alice_id, b"img", "iv1", b"thumb", "iv2", 1)
-            .await
-            .unwrap();
+        let input = CreateAttachmentInput {
+            user_id: alice_id,
+            encrypted_image: b"img",
+            encrypted_image_iv: "iv1",
+            thumb_sm: b"thumb",
+            thumb_sm_iv: "iv2",
+            thumb_md: None,
+            thumb_lg: None,
+            encryption_version: 1,
+        };
+        let uuid = db.attachments().create(input).await.unwrap();
 
         // Bob should not be able to get Alice's attachment
         let attachment = db.attachments().get_by_uuid(&uuid, bob_id).await.unwrap();
@@ -504,16 +636,28 @@ mod tests {
             .unwrap();
 
         // Create two attachments
-        let att1_uuid = db
-            .attachments()
-            .create(user_id, b"img1", "iv1", b"thumb1", "iv1t", 1)
-            .await
-            .unwrap();
-        let att2_uuid = db
-            .attachments()
-            .create(user_id, b"img2", "iv2", b"thumb2", "iv2t", 1)
-            .await
-            .unwrap();
+        let input1 = CreateAttachmentInput {
+            user_id,
+            encrypted_image: b"img1",
+            encrypted_image_iv: "iv1",
+            thumb_sm: b"thumb1",
+            thumb_sm_iv: "iv1t",
+            thumb_md: None,
+            thumb_lg: None,
+            encryption_version: 1,
+        };
+        let input2 = CreateAttachmentInput {
+            user_id,
+            encrypted_image: b"img2",
+            encrypted_image_iv: "iv2",
+            thumb_sm: b"thumb2",
+            thumb_sm_iv: "iv2t",
+            thumb_md: None,
+            thumb_lg: None,
+            encryption_version: 1,
+        };
+        let att1_uuid = db.attachments().create(input1).await.unwrap();
+        let att2_uuid = db.attachments().create(input2).await.unwrap();
 
         // Add both attachments to the post
         db.attachments()
@@ -599,11 +743,17 @@ mod tests {
             .unwrap();
 
         // Create an attachment
-        let att_uuid = db
-            .attachments()
-            .create(user_id, b"img", "iv", b"thumb", "ivt", 1)
-            .await
-            .unwrap();
+        let input = CreateAttachmentInput {
+            user_id,
+            encrypted_image: b"img",
+            encrypted_image_iv: "iv",
+            thumb_sm: b"thumb",
+            thumb_sm_iv: "ivt",
+            thumb_md: None,
+            thumb_lg: None,
+            encryption_version: 1,
+        };
+        let att_uuid = db.attachments().create(input).await.unwrap();
 
         // Add attachment to post
         db.attachments()

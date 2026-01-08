@@ -59,9 +59,6 @@ async function init(): Promise<void> {
 		// Set up sidebar toggle for mobile
 		setupSidebarToggle();
 
-		// Save post and refs via beacon when page is unloading
-		window.addEventListener("pagehide", saveBeacon);
-
 		// Check encryption settings first
 		const settings = await getEncryptionSettings();
 

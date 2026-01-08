@@ -6,7 +6,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use crowchiper::{ServerConfig, create_app, db::Database, jwt::JwtConfig};
 use tower::ServiceExt;
 use url::Url;
@@ -49,23 +48,100 @@ fn auth_cookie(token: &str) -> String {
     format!("auth_token={}", token)
 }
 
-fn create_test_attachment_body() -> String {
+/// Create a multipart form body for uploading an attachment with all thumbnail sizes.
+fn create_multipart_body() -> (String, Vec<u8>) {
+    let boundary = "----TestBoundary12345";
     let image_data = b"fake encrypted image data";
-    let thumbnail_data = b"fake encrypted thumbnail";
+    let thumb_sm_data = b"fake thumb sm";
+    let thumb_md_data = b"fake thumb md";
+    let thumb_lg_data = b"fake thumb lg";
 
-    let encoded_image = URL_SAFE_NO_PAD.encode(image_data);
-    let encoded_thumbnail = URL_SAFE_NO_PAD.encode(thumbnail_data);
+    let mut body = Vec::new();
 
-    format!(
-        r#"{{
-            "encrypted_image": "{}",
-            "encrypted_image_iv": "image_iv_123",
-            "encrypted_thumbnail": "{}",
-            "encrypted_thumbnail_iv": "thumb_iv_456",
-            "encryption_version": 1
-        }}"#,
-        encoded_image, encoded_thumbnail
-    )
+    // Image field (binary)
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"image\"; filename=\"image.bin\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    body.extend_from_slice(image_data);
+    body.extend_from_slice(b"\r\n");
+
+    // Image IV field
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"image_iv\"\r\n\r\n");
+    body.extend_from_slice(b"image_iv_123");
+    body.extend_from_slice(b"\r\n");
+
+    // Small thumbnail
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"thumb_sm\"; filename=\"thumb_sm.bin\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    body.extend_from_slice(thumb_sm_data);
+    body.extend_from_slice(b"\r\n");
+
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"thumb_sm_iv\"\r\n\r\n");
+    body.extend_from_slice(b"thumb_sm_iv");
+    body.extend_from_slice(b"\r\n");
+
+    // Medium thumbnail
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"thumb_md\"; filename=\"thumb_md.bin\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    body.extend_from_slice(thumb_md_data);
+    body.extend_from_slice(b"\r\n");
+
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"thumb_md_iv\"\r\n\r\n");
+    body.extend_from_slice(b"thumb_md_iv");
+    body.extend_from_slice(b"\r\n");
+
+    // Large thumbnail
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"thumb_lg\"; filename=\"thumb_lg.bin\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    body.extend_from_slice(thumb_lg_data);
+    body.extend_from_slice(b"\r\n");
+
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"thumb_lg_iv\"\r\n\r\n");
+    body.extend_from_slice(b"thumb_lg_iv");
+    body.extend_from_slice(b"\r\n");
+
+    // Encryption version field
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"encryption_version\"\r\n\r\n");
+    body.extend_from_slice(b"1");
+    body.extend_from_slice(b"\r\n");
+
+    // End boundary
+    body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+    (content_type, body)
+}
+
+/// Helper to create attachment input for database tests
+fn create_db_attachment_input(
+    user_id: i64,
+) -> crowchiper::db::attachments::CreateAttachmentInput<'static> {
+    crowchiper::db::attachments::CreateAttachmentInput {
+        user_id,
+        encrypted_image: b"encrypted_image_data",
+        encrypted_image_iv: "image_iv",
+        thumb_sm: b"thumb_sm_data",
+        thumb_sm_iv: "thumb_sm_iv",
+        thumb_md: Some((b"thumb_md_data".as_slice(), "thumb_md_iv")),
+        thumb_lg: Some((b"thumb_lg_data".as_slice(), "thumb_lg_iv")),
+        encryption_version: 1,
+    }
 }
 
 #[tokio::test]
@@ -73,14 +149,16 @@ async fn test_upload_attachment() {
     let (app, db, jwt) = create_test_app().await;
     let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
 
+    let (content_type, body) = create_multipart_body();
+
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/attachments")
-                .header("content-type", "application/json")
+                .header("content-type", content_type)
                 .header("cookie", auth_cookie(&token))
-                .body(Body::from(create_test_attachment_body()))
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
@@ -102,18 +180,8 @@ async fn test_get_attachment() {
     let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Create an attachment directly in the database
-    let attachment_uuid = db
-        .attachments()
-        .create(
-            user_id,
-            b"encrypted_image_data",
-            "image_iv",
-            b"encrypted_thumbnail",
-            "thumb_iv",
-            1,
-        )
-        .await
-        .unwrap();
+    let input = create_db_attachment_input(user_id);
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     let response = app
         .oneshot(
@@ -129,38 +197,34 @@ async fn test_get_attachment() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    // Check the IV is in the header
+    let iv = response.headers().get("X-Encryption-IV").unwrap();
+    assert_eq!(iv.to_str().unwrap(), "image_iv");
+
+    // Check content type is binary
+    let content_type = response.headers().get("content-type").unwrap();
+    assert_eq!(content_type.to_str().unwrap(), "application/octet-stream");
+
+    // Check the body is the raw encrypted image data
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-
-    assert!(json["encrypted_image"].as_str().is_some());
-    assert_eq!(json["iv"], "image_iv");
+    assert_eq!(&body[..], b"encrypted_image_data");
 }
 
 #[tokio::test]
-async fn test_get_thumbnail() {
+async fn test_get_thumbnails() {
     let (app, db, jwt) = create_test_app().await;
     let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
 
-    let attachment_uuid = db
-        .attachments()
-        .create(
-            user_id,
-            b"encrypted_image_data",
-            "image_iv",
-            b"encrypted_thumbnail",
-            "thumb_iv",
-            1,
-        )
-        .await
-        .unwrap();
+    let input = create_db_attachment_input(user_id);
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/attachments/{}/thumbnail", attachment_uuid))
+                .uri(format!("/api/attachments/{}/thumbnails", attachment_uuid))
                 .header("cookie", auth_cookie(&token))
                 .body(Body::empty())
                 .unwrap(),
@@ -170,13 +234,27 @@ async fn test_get_thumbnail() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    // Check content type is multipart
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(content_type.starts_with("multipart/mixed"));
+
+    // Check the body contains all thumbnail sizes
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let body_str = String::from_utf8_lossy(&body);
 
-    assert!(json["encrypted_thumbnail"].as_str().is_some());
-    assert_eq!(json["iv"], "thumb_iv");
+    assert!(body_str.contains("X-Thumbnail-Size: sm"));
+    assert!(body_str.contains("X-Thumbnail-Size: md"));
+    assert!(body_str.contains("X-Thumbnail-Size: lg"));
+    assert!(body_str.contains("thumb_sm_iv"));
+    assert!(body_str.contains("thumb_md_iv"));
+    assert!(body_str.contains("thumb_lg_iv"));
 }
 
 #[tokio::test]
@@ -206,11 +284,17 @@ async fn test_cannot_access_other_users_attachment() {
     let (_, bob_token) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Alice creates an attachment
-    let attachment_uuid = db
-        .attachments()
-        .create(alice_id, b"alice_image", "iv1", b"alice_thumb", "iv2", 1)
-        .await
-        .unwrap();
+    let input = crowchiper::db::attachments::CreateAttachmentInput {
+        user_id: alice_id,
+        encrypted_image: b"alice_image",
+        encrypted_image_iv: "iv1",
+        thumb_sm: b"alice_thumb",
+        thumb_sm_iv: "iv2",
+        thumb_md: None,
+        thumb_lg: None,
+        encryption_version: 1,
+    };
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     // Bob tries to access Alice's attachment
     let response = app
@@ -250,11 +334,17 @@ async fn test_update_refs_adds_attachment_to_post() {
         .unwrap();
 
     // Create an attachment
-    let attachment_uuid = db
-        .attachments()
-        .create(user_id, b"img", "iv1", b"thumb", "iv2", 1)
-        .await
-        .unwrap();
+    let input = crowchiper::db::attachments::CreateAttachmentInput {
+        user_id,
+        encrypted_image: b"img",
+        encrypted_image_iv: "iv1",
+        thumb_sm: b"thumb",
+        thumb_sm_iv: "iv2",
+        thumb_md: None,
+        thumb_lg: None,
+        encryption_version: 1,
+    };
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     // Update post with attachment_uuids to add attachment
     let response = app
@@ -313,11 +403,17 @@ async fn test_update_refs_removes_attachment_from_post() {
         .unwrap();
 
     // Create an attachment and add it to the post
-    let attachment_uuid = db
-        .attachments()
-        .create(user_id, b"img", "iv1", b"thumb", "iv2", 1)
-        .await
-        .unwrap();
+    let input = crowchiper::db::attachments::CreateAttachmentInput {
+        user_id,
+        encrypted_image: b"img",
+        encrypted_image_iv: "iv1",
+        thumb_sm: b"thumb",
+        thumb_sm_iv: "iv2",
+        thumb_md: None,
+        thumb_lg: None,
+        encryption_version: 1,
+    };
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     db.attachments()
         .update_post_attachments(post.id, user_id, &[attachment_uuid.clone()])
@@ -388,11 +484,17 @@ async fn test_delete_post_removes_attachment_refs() {
         .unwrap();
 
     // Create an attachment and add it to the post
-    let attachment_uuid = db
-        .attachments()
-        .create(user_id, b"img", "iv1", b"thumb", "iv2", 1)
-        .await
-        .unwrap();
+    let input = crowchiper::db::attachments::CreateAttachmentInput {
+        user_id,
+        encrypted_image: b"img",
+        encrypted_image_iv: "iv1",
+        thumb_sm: b"thumb",
+        thumb_sm_iv: "iv2",
+        thumb_md: None,
+        thumb_lg: None,
+        encryption_version: 1,
+    };
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     db.attachments()
         .update_post_attachments(post.id, user_id, &[attachment_uuid.clone()])
@@ -472,11 +574,17 @@ async fn test_attachment_shared_between_posts() {
         .unwrap();
 
     // Create an attachment
-    let attachment_uuid = db
-        .attachments()
-        .create(user_id, b"img", "iv1", b"thumb", "iv2", 1)
-        .await
-        .unwrap();
+    let input = crowchiper::db::attachments::CreateAttachmentInput {
+        user_id,
+        encrypted_image: b"img",
+        encrypted_image_iv: "iv1",
+        thumb_sm: b"thumb",
+        thumb_sm_iv: "iv2",
+        thumb_md: None,
+        thumb_lg: None,
+        encryption_version: 1,
+    };
+    let attachment_uuid = db.attachments().create(input).await.unwrap();
 
     // Add attachment to both posts
     db.attachments()
@@ -526,13 +634,15 @@ async fn test_attachment_shared_between_posts() {
 async fn test_unauthenticated_upload_denied() {
     let (app, _, _) = create_test_app().await;
 
+    let (content_type, body) = create_multipart_body();
+
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/attachments")
-                .header("content-type", "application/json")
-                .body(Body::from(create_test_attachment_body()))
+                .header("content-type", content_type)
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
@@ -560,26 +670,34 @@ async fn test_unauthenticated_get_denied() {
 }
 
 #[tokio::test]
-async fn test_upload_with_invalid_base64() {
+async fn test_upload_missing_required_fields() {
     let (app, db, jwt) = create_test_app().await;
     let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+
+    // Create a multipart body with missing fields
+    let boundary = "----TestBoundary12345";
+    let mut body = Vec::new();
+
+    // Only include image field, missing others
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"image\"; filename=\"image.bin\"\r\n",
+    );
+    body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    body.extend_from_slice(b"fake image data");
+    body.extend_from_slice(b"\r\n");
+    body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/attachments")
-                .header("content-type", "application/json")
+                .header("content-type", content_type)
                 .header("cookie", auth_cookie(&token))
-                .body(Body::from(
-                    r#"{
-                        "encrypted_image": "not-valid-base64!!!",
-                        "encrypted_image_iv": "iv1",
-                        "encrypted_thumbnail": "also-invalid",
-                        "encrypted_thumbnail_iv": "iv2",
-                        "encryption_version": 1
-                    }"#,
-                ))
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await

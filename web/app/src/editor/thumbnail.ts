@@ -1,23 +1,53 @@
 /**
  * Thumbnail generation using canvas.
- * Creates JPEG thumbnails with a maximum dimension of 200px.
+ * Creates JPEG thumbnails at multiple sizes for responsive display.
  */
 
-const MAX_THUMBNAIL_SIZE = 200;
-const THUMBNAIL_QUALITY = 0.8;
+const THUMBNAIL_SIZES = {
+	sm: 200,  // Small - mobile
+	md: 400,  // Medium - tablet
+	lg: 800,  // Large - desktop
+} as const;
+
+const THUMBNAIL_QUALITY = 0.85;
+
+export type ThumbnailSize = keyof typeof THUMBNAIL_SIZES;
+
+export interface GeneratedThumbnails {
+	sm: ArrayBuffer;
+	md: ArrayBuffer;
+	lg: ArrayBuffer;
+}
 
 /**
- * Generate a thumbnail from an image file.
- * Returns the thumbnail as a JPEG ArrayBuffer.
+ * Generate thumbnails at all sizes from an image file.
+ * Returns thumbnails as JPEG ArrayBuffers.
  */
-export async function generateThumbnail(file: File): Promise<ArrayBuffer> {
+export async function generateThumbnails(file: File): Promise<GeneratedThumbnails> {
 	// Create image element from file
 	const img = await loadImage(file);
 
+	const [sm, md, lg] = await Promise.all([
+		generateSingleThumbnail(img, THUMBNAIL_SIZES.sm),
+		generateSingleThumbnail(img, THUMBNAIL_SIZES.md),
+		generateSingleThumbnail(img, THUMBNAIL_SIZES.lg),
+	]);
+
+	return { sm, md, lg };
+}
+
+/**
+ * Generate a single thumbnail at the specified max size.
+ */
+async function generateSingleThumbnail(
+	img: HTMLImageElement,
+	maxSize: number,
+): Promise<ArrayBuffer> {
 	// Calculate scaled dimensions
 	const { width, height } = calculateThumbnailSize(
 		img.naturalWidth,
 		img.naturalHeight,
+		maxSize,
 	);
 
 	// Create canvas and draw scaled image
@@ -74,34 +104,39 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 
 /**
  * Calculate thumbnail dimensions while maintaining aspect ratio.
- * Neither dimension will exceed MAX_THUMBNAIL_SIZE.
+ * Neither dimension will exceed maxSize.
  */
 function calculateThumbnailSize(
 	originalWidth: number,
 	originalHeight: number,
+	maxSize: number,
 ): { width: number; height: number } {
 	// If image is already small enough, keep original size
-	if (
-		originalWidth <= MAX_THUMBNAIL_SIZE &&
-		originalHeight <= MAX_THUMBNAIL_SIZE
-	) {
+	if (originalWidth <= maxSize && originalHeight <= maxSize) {
 		return { width: originalWidth, height: originalHeight };
 	}
 
-	// Scale down to fit within MAX_THUMBNAIL_SIZE
+	// Scale down to fit within maxSize
 	const aspectRatio = originalWidth / originalHeight;
 
 	if (originalWidth > originalHeight) {
 		// Landscape
 		return {
-			width: MAX_THUMBNAIL_SIZE,
-			height: Math.round(MAX_THUMBNAIL_SIZE / aspectRatio),
+			width: maxSize,
+			height: Math.round(maxSize / aspectRatio),
 		};
 	} else {
 		// Portrait or square
 		return {
-			width: Math.round(MAX_THUMBNAIL_SIZE * aspectRatio),
-			height: MAX_THUMBNAIL_SIZE,
+			width: Math.round(maxSize * aspectRatio),
+			height: maxSize,
 		};
 	}
+}
+
+/**
+ * Get the pixel sizes for srcset.
+ */
+export function getThumbnailSizes(): typeof THUMBNAIL_SIZES {
+	return THUMBNAIL_SIZES;
 }

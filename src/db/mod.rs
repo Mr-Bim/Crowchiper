@@ -1,4 +1,4 @@
-mod attachments;
+pub mod attachments;
 mod challenge;
 mod encryption;
 mod login_challenge;
@@ -86,6 +86,10 @@ impl Database {
 
         if version < 4 {
             self.migrate_v4().await?;
+        }
+
+        if version < 5 {
+            self.migrate_v5().await?;
         }
 
         Ok(())
@@ -234,6 +238,23 @@ impl Database {
                     PRIMARY KEY (post_id, attachment_uuid)
                 )",
                 "CREATE INDEX idx_post_attachments_attachment ON post_attachments(attachment_uuid)",
+            ],
+        )
+        .await
+    }
+
+    async fn migrate_v5(&self) -> Result<(), sqlx::Error> {
+        self.run_migration(
+            5,
+            &[
+                // Rename old thumbnail columns and add new responsive sizes
+                // Small (200px), Medium (400px), Large (800px)
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumbnail TO encrypted_thumb_sm",
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumbnail_iv TO encrypted_thumb_sm_iv",
+                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_md BLOB",
+                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_md_iv TEXT",
+                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_lg BLOB",
+                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_lg_iv TEXT",
             ],
         )
         .await

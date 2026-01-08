@@ -95,37 +95,40 @@ export async function decryptPostContent(post: Post): Promise<string> {
 
 /**
  * Decrypt post title if encrypted and we have the key.
- * Modifies the post object in place.
+ * Returns the decrypted title, or the original title if decryption not possible.
  */
 export async function decryptPostTitle(
 	post: Post | PostSummary,
-): Promise<void> {
+): Promise<string> {
+	if (!post.title) {
+		return "Untitled";
+	}
+
 	if (
 		!post.title_encrypted ||
-		!post.title ||
 		!post.title_iv ||
 		!("encryption_version" in post ? post.encryption_version : null)
 	) {
-		return;
+		return post.title;
 	}
 
 	if (!isUnlocked()) {
-		return;
+		return post.title;
 	}
 
 	const key = getSessionEncryptionKey();
 	if (!key) {
-		return;
+		return post.title;
 	}
 
 	const encryptionVersion =
 		"encryption_version" in post ? post.encryption_version : null;
 	if (!encryptionVersion) {
-		return;
+		return post.title;
 	}
 
 	try {
-		post.title = await decryptContent(
+		return await decryptContent(
 			post.title,
 			post.title_iv,
 			encryptionVersion,
@@ -133,40 +136,23 @@ export async function decryptPostTitle(
 		);
 	} catch (err) {
 		console.error("Failed to decrypt title:", err);
+		return "[Decryption failed]";
 	}
 }
 
 /**
  * Decrypt titles for a list of post summaries.
- * Modifies the posts in place.
+ * Returns a map of UUID -> decrypted title.
+ * Does NOT modify the posts array.
  */
-export async function decryptPostTitles(posts: PostSummary[]): Promise<void> {
-	if (!isUnlocked()) {
-		return;
-	}
-
-	const key = getSessionEncryptionKey();
-	if (!key) {
-		return;
-	}
+export async function decryptPostTitles(
+	posts: PostSummary[],
+): Promise<Map<string, string>> {
+	const result = new Map<string, string>();
 
 	for (const post of posts) {
-		if (
-			post.title_encrypted &&
-			post.title &&
-			post.title_iv &&
-			post.encryption_version
-		) {
-			try {
-				post.title = await decryptContent(
-					post.title,
-					post.title_iv,
-					post.encryption_version,
-					key,
-				);
-			} catch (err) {
-				console.error("Failed to decrypt title:", err);
-			}
-		}
+		result.set(post.uuid, await decryptPostTitle(post));
 	}
+
+	return result;
 }

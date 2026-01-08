@@ -11,6 +11,8 @@ let editor: EditorView | null = null;
 let posts: PostSummary[] = [];
 let currentPost: Post | null = null;
 let currentDecryptedContent: string | null = null;
+let currentDecryptedTitle: string | null = null;
+let decryptedTitles: Map<string, string> = new Map();
 let saveTimeout: number | null = null;
 let previousAttachmentUuids: string[] = [];
 
@@ -105,6 +107,30 @@ export function getCurrentDecryptedContent(): string | null {
 
 export function setCurrentDecryptedContent(content: string | null): void {
 	currentDecryptedContent = content;
+}
+
+// --- Current Decrypted Title ---
+
+export function getCurrentDecryptedTitle(): string | null {
+	return currentDecryptedTitle;
+}
+
+export function setCurrentDecryptedTitle(title: string | null): void {
+	currentDecryptedTitle = title;
+}
+
+// --- Decrypted Titles Map (for post list display) ---
+
+export function getDecryptedTitles(): Map<string, string> {
+	return decryptedTitles;
+}
+
+export function setDecryptedTitles(titles: Map<string, string>): void {
+	decryptedTitles = titles;
+}
+
+export function setDecryptedTitle(uuid: string, title: string): void {
+	decryptedTitles.set(uuid, title);
 }
 
 // --- Save Timeout ---

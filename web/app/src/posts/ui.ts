@@ -32,6 +32,7 @@ import {
 	clearServerSaveInterval,
 	getCurrentDecryptedContent,
 	getCurrentPost,
+	getDecryptedTitles,
 	getEditor,
 	getIsDirty,
 	getPendingEncryptedData,
@@ -41,7 +42,10 @@ import {
 	movePost,
 	removePost,
 	setCurrentDecryptedContent,
+	setCurrentDecryptedTitle,
 	setCurrentPost,
+	setDecryptedTitle,
+	setDecryptedTitles,
 	setEditor,
 	setIsDirty,
 	setPendingEncryptedData,
@@ -108,20 +112,29 @@ async function encryptCurrentPost(): Promise<void> {
 			encryptionVersion: encrypted.encryptionVersion ?? null,
 		});
 
-		// Update local state with plaintext for display
-		currentPost.title = title;
-		currentPost.content = content;
+		// Update decrypted values for display (kept separate from currentPost)
+		setCurrentDecryptedTitle(title);
+		setCurrentDecryptedContent(content);
+
+		// Update currentPost with ENCRYPTED values (for server communication)
+		currentPost.title = encrypted.title;
 		currentPost.title_encrypted = encrypted.titleEncrypted;
+		currentPost.title_iv = encrypted.titleIv ?? null;
+		currentPost.content = encrypted.content;
 		currentPost.content_encrypted = encrypted.contentEncrypted;
+		currentPost.iv = encrypted.contentIv ?? null;
+		currentPost.encryption_version = encrypted.encryptionVersion ?? null;
 
 		// Mark as dirty (needs server save)
 		setIsDirty(true);
 
-		// Update post list UI
+		// Update post list UI with decrypted title for display
 		updatePostInList(currentPost.uuid, {
 			title,
 			title_encrypted: encrypted.titleEncrypted,
+			title_iv: encrypted.titleIv ?? null,
 			content_encrypted: encrypted.contentEncrypted,
+			encryption_version: encrypted.encryptionVersion ?? null,
 		});
 
 		renderPostList();
@@ -191,7 +204,7 @@ async function saveToServer(): Promise<void> {
 
 /**
  * Save to server immediately when navigating away from a post.
- * Always includes attachment UUIDs to update refs.
+ * Only saves if content has changed.
  */
 async function saveToServerNow(): Promise<void> {
 	const currentPost = getCurrentPost();
@@ -201,63 +214,49 @@ async function saveToServerNow(): Promise<void> {
 
 	const currentContent = editor.state.doc.toString();
 	const originalContent = getCurrentDecryptedContent();
+
+	// Only save if content has actually changed
+	if (currentContent === originalContent) {
+		return;
+	}
+
+	clearSaveTimeout();
+	await encryptCurrentPost();
+
+	const pendingData = getPendingEncryptedData();
+	if (!pendingData) return;
+
 	const attachmentUuids = parseAttachmentUuids(currentContent);
 
-	// Only encrypt and save if content has actually changed from the original
-	if (currentContent !== originalContent) {
-		clearSaveTimeout();
-		await encryptCurrentPost();
+	try {
+		await updatePost(currentPost.uuid, {
+			title: pendingData.title,
+			title_encrypted: pendingData.titleEncrypted,
+			title_iv: pendingData.titleIv ?? undefined,
+			content: pendingData.content,
+			content_encrypted: pendingData.contentEncrypted,
+			iv: pendingData.contentIv ?? undefined,
+			encryption_version: pendingData.encryptionVersion ?? undefined,
+			attachment_uuids: attachmentUuids,
+		});
+
+		currentPost.title_iv = pendingData.titleIv;
+		currentPost.iv = pendingData.contentIv;
+		currentPost.encryption_version = pendingData.encryptionVersion;
+		currentPost.updated_at = new Date().toISOString();
+
+		updatePostInList(currentPost.uuid, {
+			updated_at: currentPost.updated_at,
+		});
+
+		setIsDirty(false);
+
+		// Clear cache for deleted images
+		clearImageCacheExcept(attachmentUuids);
+		setPreviousAttachmentUuids([]);
+	} catch (err) {
+		console.error("Failed to save to server:", err);
 	}
-
-	// Always save to update attachment refs (even if content unchanged)
-	const pendingData = getPendingEncryptedData();
-	if (pendingData) {
-		try {
-			await updatePost(currentPost.uuid, {
-				title: pendingData.title,
-				title_encrypted: pendingData.titleEncrypted,
-				title_iv: pendingData.titleIv ?? undefined,
-				content: pendingData.content,
-				content_encrypted: pendingData.contentEncrypted,
-				iv: pendingData.contentIv ?? undefined,
-				encryption_version: pendingData.encryptionVersion ?? undefined,
-				attachment_uuids: attachmentUuids,
-			});
-
-			currentPost.title_iv = pendingData.titleIv;
-			currentPost.iv = pendingData.contentIv;
-			currentPost.encryption_version = pendingData.encryptionVersion;
-			currentPost.updated_at = new Date().toISOString();
-
-			updatePostInList(currentPost.uuid, {
-				updated_at: currentPost.updated_at,
-			});
-
-			setIsDirty(false);
-		} catch (err) {
-			console.error("Failed to save to server:", err);
-		}
-	} else {
-		// No pending data, but still need to update attachment refs
-		try {
-			await updatePost(currentPost.uuid, {
-				title: currentPost.title ?? undefined,
-				title_encrypted: currentPost.title_encrypted,
-				title_iv: currentPost.title_iv ?? undefined,
-				content: currentPost.content,
-				content_encrypted: currentPost.content_encrypted,
-				iv: currentPost.iv ?? undefined,
-				encryption_version: currentPost.encryption_version ?? undefined,
-				attachment_uuids: attachmentUuids,
-			});
-		} catch (err) {
-			console.error("Failed to update attachment references:", err);
-		}
-	}
-
-	// Clear cache for deleted images
-	clearImageCacheExcept(attachmentUuids);
-	setPreviousAttachmentUuids([]);
 }
 
 /**
@@ -381,15 +380,10 @@ export async function selectPost(postSummary: PostSummary): Promise<void> {
 	// Track initial attachment UUIDs for this post
 	setPreviousAttachmentUuids(parseAttachmentUuids(displayContent));
 
-	// Decrypt title for display
-	await decryptPostTitle(post);
-
-	// Update the summary in posts list too
-	const posts = getPosts();
-	const idx = posts.findIndex((p) => p.uuid === post.uuid);
-	if (idx !== -1) {
-		posts[idx].title = post.title;
-	}
+	// Decrypt title for display (stored separately, post.title stays encrypted)
+	const displayTitle = await decryptPostTitle(post);
+	setCurrentDecryptedTitle(displayTitle);
+	setDecryptedTitle(post.uuid, displayTitle);
 
 	renderPostList();
 
@@ -539,6 +533,9 @@ export async function handleDeletePost(): Promise<void> {
 
 export async function loadPosts(): Promise<void> {
 	try {
+	  // Save post and refs via beacon when page is unloading
+		window.addEventListener("pagehide", saveBeacon);
+
 		const posts = await listPosts();
 		setPosts(posts);
 

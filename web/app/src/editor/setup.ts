@@ -67,11 +67,20 @@ const editorTheme = EditorView.theme({
 		opacity: "0.6",
 		cursor: "wait",
 	},
-	".cm-attachment-image": {
+	".cm-attachment-thumbnail-wrapper": {
+		display: "inline-block",
+	},
+	".cm-attachment-thumbnail": {
 		maxWidth: "100%",
-		maxHeight: "400px",
+		width: "auto",
+		height: "auto",
 		borderRadius: "4px",
+		cursor: "pointer",
+		transition: "opacity 0.15s",
 		display: "block",
+	},
+	".cm-attachment-thumbnail:hover": {
+		opacity: "0.85",
 	},
 	".cm-attachment-loading": {
 		padding: "16px",
