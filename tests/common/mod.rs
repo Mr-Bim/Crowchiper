@@ -265,10 +265,48 @@ impl Drop for TestContext {
     }
 }
 
+/// Generate a random 32-byte test encryption key as base64url.
+pub fn generate_test_key() -> String {
+    use base64::Engine;
+    let mut key = [0u8; 32];
+    rand::RngCore::fill_bytes(&mut rand::rng(), &mut key);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(key)
+}
+
 impl TestContext {
     pub async fn teardown(self) {
         // Page is dropped, server_handle is aborted in Drop
         // Browser is shared and stays open for other tests
+    }
+
+    /// Enable encryption for a user and inject the test key into the page.
+    /// Returns the test key that was injected.
+    ///
+    /// This enables testing encrypted content without PRF support.
+    /// Requires the app to be built with TEST_MODE=1.
+    #[cfg(feature = "test-mode")]
+    pub async fn enable_test_encryption(&self, user_id: i64) -> String {
+        // Enable encryption in database (no PRF salt needed)
+        self.db
+            .encryption_settings()
+            .enable_for_test(user_id)
+            .await
+            .expect("Failed to enable test encryption");
+
+        // Generate and inject test key
+        let test_key = generate_test_key();
+        self.inject_test_key(&test_key).await;
+        test_key
+    }
+
+    /// Inject a test encryption key into the page.
+    /// The key should be base64url-encoded 32 bytes.
+    pub async fn inject_test_key(&self, key: &str) {
+        let script = format!("window.__TEST_ENCRYPTION_KEY__ = '{}';", key);
+        self.page
+            .evaluate(script)
+            .await
+            .expect("Failed to inject test key");
     }
 
     /// Clear all browser cookies via CDP

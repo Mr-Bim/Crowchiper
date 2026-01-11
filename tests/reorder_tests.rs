@@ -15,6 +15,9 @@ fn app_url(ctx: &common::TestContext) -> String {
 async fn setup_authenticated_app(ctx: &common::TestContext) -> i64 {
     let jwt = JwtConfig::new(b"test-jwt-secret-for-testing");
 
+    // Clear any cookies from previous tests
+    ctx.clear_cookies().await;
+
     // Create and activate user
     let user_id = ctx
         .db
@@ -23,6 +26,13 @@ async fn setup_authenticated_app(ctx: &common::TestContext) -> i64 {
         .await
         .unwrap();
     ctx.db.users().activate(user_id).await.unwrap();
+
+    // Mark encryption setup as done (without encryption)
+    ctx.db
+        .encryption_settings()
+        .mark_setup_done(user_id)
+        .await
+        .unwrap();
 
     // Generate a valid token
     let token = jwt

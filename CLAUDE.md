@@ -9,11 +9,13 @@ DO always update the appropriate CLAUDE.md after a finished task.
 
 ```bash
 npm run build-all          # Build frontend (required before cargo build)
+npm run build-all-test     # Build frontend with TEST_MODE (for testing encryption)
 npm run lint:fix           # TypeScript type check and fix
 cargo run -- --port 7291 --database crowchiper.db
 cargo run -- --base /app   # With base path for reverse proxy
 cargo run -- --no-signup   # Disable signups
 cargo test --tests -- --test-threads=1  # Run all tests
+cargo test --features test-mode --tests -- --test-threads=1  # Run tests with encryption test support
 ```
 
 ## URL Structure
@@ -64,3 +66,45 @@ Set in `inline.ts`, available via `declare const`:
 - Fix errors
 - Remove unused code
 - Update the relevant CLAUDE.md file if there's something relevate for future development
+
+## Testing Encryption Without PRF
+
+Chrome's virtual authenticator doesn't support PRF. To test encryption:
+
+1. Build frontend with test mode: `npm run build-all-test`
+2. Build/test Rust with test-mode feature: `cargo test --features test-mode`
+3. In tests, use `TestContext::enable_test_encryption(user_id)` to:
+   - Enable encryption for the user in the database (no PRF salt)
+   - Generate and inject a test key via `window.__TEST_ENCRYPTION_KEY__`
+4. The frontend (when built with TEST_MODE=1) checks for this global and imports it directly
+5. Use `AddScriptToEvaluateOnNewDocumentParams` to inject the key before page scripts run
+
+Example test usage:
+```rust
+use chromiumoxide::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
+
+#[cfg(feature = "test-mode")]
+let test_key = ctx.enable_test_encryption(user_id).await;
+
+// Inject key before navigation so it's available when main.ts initializes
+let script = format!("window.__TEST_ENCRYPTION_KEY__ = '{}';", test_key);
+ctx.page
+    .execute(AddScriptToEvaluateOnNewDocumentParams::new(script))
+    .await
+    .expect("Failed to inject test key");
+
+ctx.page.goto(&app_url).await.expect("Failed to navigate");
+```
+
+The test code is completely stripped from production builds:
+- Rust: `#[cfg(feature = "test-mode")]` guards the `enable_for_test()` method
+- JS: `__TEST_MODE__` constant is replaced at build time and dead code is eliminated
+
+## Save Button
+
+The app header includes a Save button that:
+- Shows "Saved" (disabled) when there are no unsaved changes
+- Shows "Save" (clickable, highlighted) when there are unsaved changes
+- Uses `data-dirty` attribute for styling (`data-dirty="true"` or `data-dirty="false"`)
+- Located in `web/app/index.html`, styled in `web/app/app.css`
+- Functionality in `web/app/src/posts/ui.ts` (`handleSave`, `updateSaveButton`)

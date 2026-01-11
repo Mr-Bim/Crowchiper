@@ -117,6 +117,7 @@ async function encryptCurrentPost(): Promise<void> {
 
     // Mark as dirty (needs server save)
     setIsDirty(true);
+    updateSaveButton(true);
 
     renderPostList();
 
@@ -168,6 +169,7 @@ async function saveToServer(): Promise<void> {
     });
 
     setIsDirty(false);
+    updateSaveButton(false);
   } catch (err) {
     console.error("Failed to save to server:", err);
   }
@@ -247,6 +249,58 @@ export function saveBeacon(): void {
     encryption_version: pendingData.encryptionVersion ?? undefined,
     attachment_uuids: attachmentUuids,
   });
+}
+
+// --- Save Button ---
+
+function updateSaveButton(dirty: boolean): void {
+  const btn = document.getElementById("save-btn") as HTMLButtonElement | null;
+  if (!btn) return;
+
+  btn.setAttribute("data-dirty", dirty ? "true" : "false");
+  btn.textContent = dirty ? "Save" : "Saved";
+  btn.disabled = !dirty;
+}
+
+export async function handleSave(): Promise<void> {
+  const loadedPost = getLoadedPost();
+  const editor = getEditor();
+
+  if (!loadedPost || !editor) return;
+
+  // Clear any pending debounced encryption
+  clearSaveTimeout();
+
+  // Encrypt and save immediately
+  await encryptCurrentPost();
+
+  const pendingData = getPendingEncryptedData();
+  if (!pendingData) return;
+
+  const content = editor.state.doc.toString();
+  const attachmentUuids = parseAttachmentUuids(content);
+
+  try {
+    await updatePost(loadedPost.uuid, {
+      title: pendingData.title,
+      title_encrypted: pendingData.titleEncrypted,
+      title_iv: pendingData.titleIv ?? undefined,
+      content: pendingData.content,
+      content_encrypted: pendingData.contentEncrypted,
+      iv: pendingData.contentIv ?? undefined,
+      encryption_version: pendingData.encryptionVersion ?? undefined,
+      attachment_uuids: attachmentUuids,
+    });
+
+    setIsDirty(false);
+    updateSaveButton(false);
+
+    // Clear cache for deleted images
+    clearImageCacheExcept(attachmentUuids);
+    setPreviousAttachmentUuids([]);
+  } catch (err) {
+    console.error("Failed to save:", err);
+  }
 }
 
 // --- Rendering ---

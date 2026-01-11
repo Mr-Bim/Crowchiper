@@ -48,6 +48,14 @@
                 <header class="app-header">
                     <div class="header-actions">
                         <button
+                            id="save-btn"
+                            class="info save-btn"
+                            disabled
+                            data-dirty="false"
+                        >
+                            Saved
+                        </button>
+                        <button
                             id="delete-btn"
                             class="warning delete-btn"
                             disabled
@@ -97,6 +105,9 @@
                 <div id="unlock-error" class="unlock-error" hidden></div>
             </div>
         </div>
+
+        <!-- Hidden file input for image uploads -->
+        <input type="file" id="image-upload-input" accept="image/*" hidden />
 
         <script type="module" src="./src/main.ts"></script>
     </body>

@@ -89,6 +89,21 @@ impl EncryptionSettingsStore {
             .await?;
         Ok(result.rows_affected() > 0)
     }
+
+    /// Enable encryption for testing without a PRF salt.
+    /// The test will inject the encryption key directly via JavaScript.
+    #[cfg(feature = "test-mode")]
+    pub async fn enable_for_test(&self, user_id: i64) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO user_encryption_settings (user_id, setup_done, encryption_enabled, prf_salt)
+             VALUES (?, 1, 1, NULL)
+             ON CONFLICT(user_id) DO UPDATE SET setup_done = 1, encryption_enabled = 1",
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

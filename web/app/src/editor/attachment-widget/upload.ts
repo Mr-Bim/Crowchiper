@@ -337,23 +337,58 @@ export async function uploadImageFile(file: File): Promise<string> {
   return uploadProcessedFile(file);
 }
 
+/** Get the hidden file input element from the DOM */
+function getFileInput(): HTMLInputElement {
+  const input = document.getElementById(
+    "image-upload-input",
+  ) as HTMLInputElement;
+  if (!input) {
+    throw new Error("File input element not found");
+  }
+  return input;
+}
+
+/** Current upload handler - replaced each time we trigger an upload */
+let currentUploadHandler: ((e: Event) => void) | null = null;
+
+/**
+ * Trigger the file input with a custom handler.
+ * Manages event listener cleanup automatically.
+ */
+export function triggerFileInput(handler: (file: File) => void): void {
+  const input = getFileInput();
+
+  // Remove previous handler if any
+  if (currentUploadHandler) {
+    input.removeEventListener("change", currentUploadHandler);
+  }
+
+  // Reset the input value so the same file can be selected again
+  input.value = "";
+
+  const wrappedHandler = () => {
+    const file = input.files?.[0];
+    if (file) {
+      handler(file);
+    }
+  };
+
+  currentUploadHandler = wrappedHandler;
+  input.addEventListener("change", wrappedHandler);
+  input.click();
+}
+
 /**
  * Trigger an image upload via file picker.
  * Opens a file dialog, uploads the selected image, and inserts a gallery at cursor.
  */
 export function triggerImageUpload(view: EditorView): void {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/*";
+  const pos = view.state.selection.main.head;
 
-  input.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
+  // Insert loading placeholder gallery
+  const loadingGallery = `::gallery{}![uploading...](attachment:pending)::`;
 
-    const pos = view.state.selection.main.head;
-
-    // Insert loading placeholder gallery
-    const loadingGallery = `::gallery{}![uploading...](attachment:pending)::`;
+  triggerFileInput(async (file) => {
     view.dispatch({
       changes: { from: pos, to: pos, insert: loadingGallery },
     });
@@ -410,6 +445,4 @@ export function triggerImageUpload(view: EditorView): void {
       }
     }
   });
-
-  input.click();
 }

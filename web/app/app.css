@@ -164,6 +164,24 @@
     font-size: 0.875rem;
 }
 
+.save-btn {
+    height: 2rem;
+    padding: 0 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+}
+
+.save-btn[data-dirty="true"] {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    cursor: pointer;
+}
+
+.save-btn[data-dirty="true"]:hover {
+    opacity: 0.9;
+}
+
 /* Editor */
 .editor-wrapper {
     flex: 1;

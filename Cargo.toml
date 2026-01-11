@@ -3,6 +3,12 @@ name = "crowchiper"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+# Enable test mode endpoints for injecting encryption keys.
+# Only enable for testing - NEVER in production builds.
+test-mode = []
+
 [build-dependencies]
 serde_json = "1.0"
 

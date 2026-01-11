@@ -21,8 +21,8 @@ let encryptionEnabled = true;
  * Call this when encryption settings indicate encryption is enabled.
  */
 export function initEncryption(salt: string): void {
-	prfSalt = salt;
-	encryptionEnabled = true;
+  prfSalt = salt;
+  encryptionEnabled = true;
 }
 
 /**
@@ -30,8 +30,8 @@ export function initEncryption(salt: string): void {
  * Call this when encryption settings indicate encryption is not enabled.
  */
 export function disableEncryption(): void {
-	encryptionEnabled = false;
-	prfSalt = null;
+  encryptionEnabled = false;
+  prfSalt = null;
 }
 
 // --- Session Key ---
@@ -40,7 +40,7 @@ export function disableEncryption(): void {
  * Store the derived encryption key for this session.
  */
 export function setSessionEncryptionKey(key: CryptoKey): void {
-	sessionEncryptionKey = key;
+  sessionEncryptionKey = key;
 }
 
 /**
@@ -48,14 +48,14 @@ export function setSessionEncryptionKey(key: CryptoKey): void {
  * Returns null if not unlocked.
  */
 export function getSessionEncryptionKey(): CryptoKey | null {
-	return sessionEncryptionKey;
+  return sessionEncryptionKey;
 }
 
 /**
  * Clear the session encryption key (on logout).
  */
 export function clearSessionEncryptionKey(): void {
-	sessionEncryptionKey = null;
+  sessionEncryptionKey = null;
 }
 
 // --- PRF Salt ---
@@ -64,7 +64,7 @@ export function clearSessionEncryptionKey(): void {
  * Get the stored PRF salt.
  */
 export function getPrfSalt(): string | null {
-	return prfSalt;
+  return prfSalt;
 }
 
 // --- State Queries ---
@@ -73,21 +73,21 @@ export function getPrfSalt(): string | null {
  * Check if encryption is enabled for this user.
  */
 export function isEncryptionEnabled(): boolean {
-	return encryptionEnabled;
+  return encryptionEnabled;
 }
 
 /**
  * Check if the user needs to unlock (has encryption but no key in session).
  */
 export function needsUnlock(): boolean {
-	return encryptionEnabled && sessionEncryptionKey === null;
+  return encryptionEnabled && sessionEncryptionKey === null;
 }
 
 /**
  * Check if the session is unlocked (has encryption key).
  */
 export function isUnlocked(): boolean {
-	return sessionEncryptionKey !== null;
+  return sessionEncryptionKey !== null;
 }
 
 // --- Cleanup ---
@@ -96,7 +96,39 @@ export function isUnlocked(): boolean {
  * Clear all session state.
  */
 export function clearAll(): void {
-	sessionEncryptionKey = null;
-	prfSalt = null;
-	encryptionEnabled = false;
+  sessionEncryptionKey = null;
+  prfSalt = null;
+  encryptionEnabled = false;
+}
+
+// --- Test Mode ---
+// These functions are only available when built with TEST_MODE=1.
+// The __TEST_MODE__ constant is replaced at build time by Vite.
+
+declare const __TEST_MODE__: boolean;
+
+/**
+ * Check if a test encryption key has been injected.
+ * Only available in test builds (TEST_MODE=1).
+ * Returns null in production builds (code is tree-shaken).
+ */
+export function getInjectedTestKey(): string | null {
+  if (__TEST_MODE__) {
+    return (
+      (window as unknown as { __TEST_ENCRYPTION_KEY__?: string })
+        .__TEST_ENCRYPTION_KEY__ ?? null
+    );
+  }
+  return null;
+}
+
+/**
+ * Initialize encryption for test mode (no PRF salt, key injected directly).
+ * Only available in test builds (TEST_MODE=1).
+ */
+export function initEncryptionForTest(): void {
+  if (__TEST_MODE__) {
+    encryptionEnabled = true;
+    prfSalt = null; // Not needed in test mode
+  }
 }

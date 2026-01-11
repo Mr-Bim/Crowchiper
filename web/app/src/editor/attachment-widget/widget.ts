@@ -14,7 +14,7 @@ import { decryptBinary } from "../../crypto/operations.ts";
 import { getSessionEncryptionKey } from "../../crypto/keystore.ts";
 
 import { thumbnailCache, fullImageCache } from "./cache.ts";
-import { processAndUploadFile } from "./upload.ts";
+import { processAndUploadFile, triggerFileInput } from "./upload.ts";
 
 // Pattern to find gallery with capturing groups for images
 const GALLERY_PATTERN =
@@ -307,10 +307,6 @@ export class GalleryContainerWidget extends WidgetType {
   }
 
   private addImage(view: EditorView): void {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-
     // Capture a known UUID to find the gallery later
     const knownUuid = this.images[0]?.uuid;
     if (!knownUuid) {
@@ -318,10 +314,7 @@ export class GalleryContainerWidget extends WidgetType {
       return;
     }
 
-    input.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-
+    triggerFileInput(async (file) => {
       // Find current gallery position
       const gallery = findGalleryByUuid(view.state.doc, knownUuid);
       if (!gallery) {
@@ -380,8 +373,6 @@ export class GalleryContainerWidget extends WidgetType {
         }
       }
     });
-
-    input.click();
   }
 
   private async showFullImage(uuid: string, alt: string): Promise<void> {
