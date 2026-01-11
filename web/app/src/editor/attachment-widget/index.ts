@@ -56,3 +56,17 @@ export function parseAttachmentUuids(content: string): string[] {
 
   return [...new Set(uuids)];
 }
+
+/**
+ * Callback triggered when attachments are uploaded or deleted.
+ * Used to trigger an immediate save to server.
+ */
+let onAttachmentChangeCallback: (() => void) | null = null;
+
+export function setOnAttachmentChange(callback: () => void): void {
+  onAttachmentChangeCallback = callback;
+}
+
+export function notifyAttachmentChange(): void {
+  onAttachmentChangeCallback?.();
+}

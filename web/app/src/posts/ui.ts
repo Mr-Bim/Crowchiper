@@ -20,6 +20,7 @@ import {
   parseAttachmentUuids,
 } from "../editor/attachment-widget/index.ts";
 import { initDragAndDrop } from "./drag-and-drop.ts";
+import { setOnAttachmentChange } from "../editor/attachment-widget/index.ts";
 import {
   decryptPostContent,
   decryptPostTitle,
@@ -538,6 +539,11 @@ export async function loadPosts(): Promise<void> {
   try {
     // Save post and refs via beacon when page is unloading
     window.addEventListener("pagehide", saveBeacon);
+
+    // Auto-save when attachments are uploaded or deleted
+    setOnAttachmentChange(() => {
+      handleSave();
+    });
 
     const posts = await listPosts();
     setPosts(posts);

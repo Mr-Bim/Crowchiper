@@ -38,12 +38,19 @@
 
 /* Checkbox widget */
 .cm-checkbox-widget {
-    width: 1em;
-    height: 1em;
+    width: 1.25em;
+    height: 1.25em;
     margin-right: 0.5em;
     vertical-align: middle;
     cursor: pointer;
     accent-color: var(--accent);
+}
+
+@media (max-width: 600px) {
+    .cm-checkbox-widget {
+        width: 1.5em;
+        height: 1.5em;
+    }
 }
 
 /* Attachment widgets */
@@ -247,6 +254,10 @@
     z-index: 10000;
 }
 
+.cm-upload-dialog-overlay[hidden] {
+    display: none;
+}
+
 .cm-upload-dialog {
     background: var(--surface);
     border-radius: 8px;
@@ -310,47 +321,6 @@
 
 .cm-upload-dialog-btn-primary:hover {
     filter: brightness(1.1);
-}
-
-/* Processing overlay */
-.cm-processing-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-}
-
-.cm-processing-dialog {
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 32px 48px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-}
-
-.cm-processing-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid transparent;
-    border-top-color: var(--accent);
-    border-right-color: var(--accent);
-    border-radius: 50%;
-    animation: cm-spin 0.6s ease-in-out infinite;
-}
-
-.cm-processing-stage {
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--text-muted);
 }
 
 .gl-minify-enable-editor {

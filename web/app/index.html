@@ -109,6 +109,35 @@
         <!-- Hidden file input for image uploads -->
         <input type="file" id="image-upload-input" accept="image/*" hidden />
 
+        <!-- Image too large dialog -->
+        <div
+            id="compress-dialog-overlay"
+            class="cm-upload-dialog-overlay"
+            hidden
+        >
+            <div class="cm-upload-dialog">
+                <h3 class="cm-upload-dialog-title">Image too large</h3>
+                <p
+                    id="compress-dialog-message"
+                    class="cm-upload-dialog-message"
+                ></p>
+                <div class="cm-upload-dialog-buttons">
+                    <button
+                        id="compress-dialog-cancel"
+                        class="cm-upload-dialog-btn cm-upload-dialog-btn-secondary"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="compress-dialog-confirm"
+                        class="cm-upload-dialog-btn cm-upload-dialog-btn-primary"
+                    >
+                        Compress
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <script type="module" src="./src/main.ts"></script>
     </body>
 </html>

@@ -14,7 +14,12 @@ import { decryptBinary } from "../../crypto/operations.ts";
 import { getSessionEncryptionKey } from "../../crypto/keystore.ts";
 
 import { thumbnailCache, fullImageCache } from "./cache.ts";
-import { processAndUploadFile, triggerFileInput } from "./upload.ts";
+import {
+  isHeicFile,
+  processAndUploadFile,
+  triggerFileInput,
+} from "./upload.ts";
+import { notifyAttachmentChange } from "./index.ts";
 
 // Pattern to find gallery with capturing groups for images
 const GALLERY_PATTERN =
@@ -167,12 +172,14 @@ export class GalleryContainerWidget extends WidgetType {
     img: GalleryImage,
     view: EditorView,
   ): Promise<void> {
-    // Show uploading state for pending attachments
-    if (img.uuid === "pending") {
-      const uploading = document.createElement("span");
-      uploading.className = "cm-attachment-uploading";
-      uploading.innerHTML = `<span class="cm-attachment-spinner"></span><span>Uploading...</span>`;
-      container.appendChild(uploading);
+    // Show processing states for special UUIDs
+    if (img.uuid === "pending" || img.uuid === "converting") {
+      const processing = document.createElement("span");
+      processing.className = "cm-attachment-uploading";
+      const label =
+        img.uuid === "converting" ? "Converting..." : "Uploading...";
+      processing.innerHTML = `<span class="cm-attachment-spinner"></span><span>${label}</span>`;
+      container.appendChild(processing);
       return;
     }
 
@@ -280,6 +287,7 @@ export class GalleryContainerWidget extends WidgetType {
         view.dispatch({
           changes: { from: gallery.from, to: gallery.to, insert: "" },
         });
+        notifyAttachmentChange();
       }
     } else {
       // Delete just this image - find its current position
@@ -288,6 +296,7 @@ export class GalleryContainerWidget extends WidgetType {
         view.dispatch({
           changes: { from: imagePos.from, to: imagePos.to, insert: "" },
         });
+        notifyAttachmentChange();
       }
     }
   }
@@ -301,6 +310,7 @@ export class GalleryContainerWidget extends WidgetType {
         view.dispatch({
           changes: { from: gallery.from, to: gallery.to, insert: "" },
         });
+        notifyAttachmentChange();
         return;
       }
     }
@@ -322,19 +332,55 @@ export class GalleryContainerWidget extends WidgetType {
         return;
       }
 
+      // Use "converting" state for HEIC files, "pending" for others
+      const initialState = isHeicFile(file) ? "converting" : "pending";
+      const initialAlt =
+        initialState === "converting" ? "converting..." : "uploading...";
+      const loadingPlaceholder = `![${initialAlt}](attachment:${initialState})`;
+
       // Insert loading placeholder before the closing ::
       const insertPos = gallery.to - 2;
-      const loadingPlaceholder = "![uploading...](attachment:pending)";
       view.dispatch({
         changes: { from: insertPos, to: insertPos, insert: loadingPlaceholder },
       });
 
+      // Track current state for cleanup and cancellation check
+      let currentState: "converting" | "pending" = initialState;
+
+      // Helper to check if placeholder still exists
+      const placeholderExists = () =>
+        findImageInGallery(view.state.doc, currentState) !== null;
+
       try {
-        const uuid = await processAndUploadFile(file);
+        const uuid = await processAndUploadFile(file, {
+          onStateChange: (newState) => {
+            // Update placeholder when state changes (converting -> pending)
+            if (newState === "pending" && initialState === "converting") {
+              const placeholderPos = findImageInGallery(
+                view.state.doc,
+                "converting",
+              );
+              if (placeholderPos) {
+                view.dispatch({
+                  changes: {
+                    from: placeholderPos.from,
+                    to: placeholderPos.to,
+                    insert: "![uploading...](attachment:pending)",
+                  },
+                });
+                currentState = "pending";
+              }
+            }
+          },
+          isCancelled: () => !placeholderExists(),
+        });
 
         if (uuid === null) {
-          // User cancelled - remove placeholder
-          const placeholderPos = findImageInGallery(view.state.doc, "pending");
+          // User cancelled or placeholder deleted - clean up if still exists
+          const placeholderPos = findImageInGallery(
+            view.state.doc,
+            currentState,
+          );
           if (placeholderPos) {
             view.dispatch({
               changes: {
@@ -358,10 +404,11 @@ export class GalleryContainerWidget extends WidgetType {
               insert: newImage,
             },
           });
+          notifyAttachmentChange();
         }
       } catch {
-        // Remove the placeholder on error
-        const placeholderPos = findImageInGallery(view.state.doc, "pending");
+        // Remove the placeholder on error if it still exists
+        const placeholderPos = findImageInGallery(view.state.doc, currentState);
         if (placeholderPos) {
           view.dispatch({
             changes: {

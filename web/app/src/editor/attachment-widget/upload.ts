@@ -5,6 +5,7 @@
 import type { EditorView } from "@codemirror/view";
 
 import { uploadAttachment } from "../../api/attachments.ts";
+import { notifyAttachmentChange } from "./index.ts";
 import {
   ENCRYPTED_FORMAT_VERSION,
   encryptBinary,
@@ -17,45 +18,15 @@ import { convertHeicIfNeeded } from "../heic-convert.ts";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 /**
- * Processing overlay for showing upload progress stages.
+ * Check if a file is a HEIC/HEIF image.
  */
-interface ProcessingOverlay {
-  element: HTMLElement;
-  updateStage: (stage: string) => void;
-  close: () => void;
-}
-
-/**
- * Create and show a processing overlay with spinner and stage message.
- */
-function showProcessingOverlay(initialStage: string): ProcessingOverlay {
-  const overlay = document.createElement("div");
-  overlay.className = "cm-processing-overlay";
-
-  const dialog = document.createElement("div");
-  dialog.className = "cm-processing-dialog";
-
-  const spinner = document.createElement("div");
-  spinner.className = "cm-processing-spinner";
-
-  const stage = document.createElement("p");
-  stage.className = "cm-processing-stage";
-  stage.textContent = initialStage;
-
-  dialog.appendChild(spinner);
-  dialog.appendChild(stage);
-  overlay.appendChild(dialog);
-  document.body.appendChild(overlay);
-
-  return {
-    element: overlay,
-    updateStage: (newStage: string) => {
-      stage.textContent = newStage;
-    },
-    close: () => {
-      overlay.remove();
-    },
-  };
+export function isHeicFile(file: File): boolean {
+  return (
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    file.name.toLowerCase().endsWith(".heic") ||
+    file.name.toLowerCase().endsWith(".heif")
+  );
 }
 
 /** Target size for compression (8 MB to leave room for encryption overhead) */
@@ -71,72 +42,66 @@ function formatFileSize(bytes: number): string {
 }
 
 /**
- * Show a dialog asking the user if they want to compress a large image.
+ * Show the compression dialog asking the user if they want to compress a large image.
+ * Uses the pre-existing HTML dialog element.
  * Returns true if user wants to compress, false if they cancel.
  */
 function showCompressionDialog(fileSize: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "cm-upload-dialog-overlay";
+    const overlay = document.getElementById(
+      "compress-dialog-overlay",
+    ) as HTMLElement;
+    const message = document.getElementById(
+      "compress-dialog-message",
+    ) as HTMLElement;
+    const cancelBtn = document.getElementById(
+      "compress-dialog-cancel",
+    ) as HTMLButtonElement;
+    const confirmBtn = document.getElementById(
+      "compress-dialog-confirm",
+    ) as HTMLButtonElement;
 
-    const dialog = document.createElement("div");
-    dialog.className = "cm-upload-dialog";
-
-    const title = document.createElement("h3");
-    title.className = "cm-upload-dialog-title";
-    title.textContent = "Image too large";
-
-    const message = document.createElement("p");
-    message.className = "cm-upload-dialog-message";
     message.textContent = `The selected image is ${formatFileSize(fileSize)}, which exceeds the maximum size of ${formatFileSize(MAX_FILE_SIZE)}. Would you like to compress it?`;
 
-    const buttons = document.createElement("div");
-    buttons.className = "cm-upload-dialog-buttons";
+    const cleanup = () => {
+      overlay.hidden = true;
+      overlay.removeEventListener("click", handleOverlayClick);
+      document.removeEventListener("keydown", handleKeydown);
+      cancelBtn.removeEventListener("click", handleCancel);
+      confirmBtn.removeEventListener("click", handleConfirm);
+    };
 
-    const cancelBtn = document.createElement("button");
-    cancelBtn.className = "cm-upload-dialog-btn cm-upload-dialog-btn-secondary";
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", () => {
-      overlay.remove();
+    const handleCancel = () => {
+      cleanup();
       resolve(false);
-    });
+    };
 
-    const compressBtn = document.createElement("button");
-    compressBtn.className = "cm-upload-dialog-btn cm-upload-dialog-btn-primary";
-    compressBtn.textContent = "Compress";
-    compressBtn.addEventListener("click", () => {
-      overlay.remove();
+    const handleConfirm = () => {
+      cleanup();
       resolve(true);
-    });
+    };
 
-    buttons.appendChild(cancelBtn);
-    buttons.appendChild(compressBtn);
-
-    dialog.appendChild(title);
-    dialog.appendChild(message);
-    dialog.appendChild(buttons);
-    overlay.appendChild(dialog);
-
-    // Close on overlay click
-    overlay.addEventListener("click", (e) => {
+    const handleOverlayClick = (e: MouseEvent) => {
       if (e.target === overlay) {
-        overlay.remove();
+        cleanup();
         resolve(false);
-      }
-    });
-
-    // Close on Escape key
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        overlay.remove();
-        resolve(false);
-        document.removeEventListener("keydown", handleKeydown);
       }
     };
+
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        cleanup();
+        resolve(false);
+      }
+    };
+
+    cancelBtn.addEventListener("click", handleCancel);
+    confirmBtn.addEventListener("click", handleConfirm);
+    overlay.addEventListener("click", handleOverlayClick);
     document.addEventListener("keydown", handleKeydown);
 
-    document.body.appendChild(overlay);
-    compressBtn.focus();
+    overlay.hidden = false;
+    confirmBtn.focus();
   });
 }
 
@@ -260,70 +225,77 @@ async function uploadProcessedFile(
   return response.uuid;
 }
 
+/** Processing state for callbacks */
+export type ProcessingState = "converting" | "pending";
+
+/** Options for processAndUploadFile */
+export interface ProcessAndUploadOptions {
+  /** Called when state changes (e.g., converting -> pending) */
+  onStateChange?: (state: ProcessingState) => void;
+  /** Called to check if upload was cancelled (e.g., placeholder deleted) */
+  isCancelled?: () => boolean;
+}
+
 /**
  * Process and upload an image file.
- * Handles HEIC conversion, compression dialog, and shows processing overlay.
+ * Handles HEIC conversion and compression dialog.
+ * Calls onStateChange when transitioning from converting to uploading.
  * Returns the UUID of the uploaded attachment, or null if cancelled.
  */
-export async function processAndUploadFile(file: File): Promise<string | null> {
-  // Show processing overlay immediately
-  const processing = showProcessingOverlay("Processing image...");
+export async function processAndUploadFile(
+  file: File,
+  options?: ProcessAndUploadOptions,
+): Promise<string | null> {
+  const { onStateChange, isCancelled } = options ?? {};
 
   try {
-    // Convert HEIC to JPEG first if needed
-    const isHeic =
-      file.type === "image/heic" ||
-      file.type === "image/heif" ||
-      file.name.toLowerCase().endsWith(".heic") ||
-      file.name.toLowerCase().endsWith(".heif");
-
-    if (isHeic) {
-      processing.updateStage("Converting HEIC image...");
-    }
-
     let processedFile: File;
     try {
       processedFile = await convertHeicIfNeeded(file);
+      // Check if cancelled during conversion
+      if (isCancelled?.()) {
+        return null;
+      }
+      // Notify that conversion is done, now uploading
+      if (isHeicFile(file)) {
+        onStateChange?.("pending");
+      }
     } catch (err) {
       console.error("Failed to convert HEIC image:", err);
-      processing.close();
       return null;
     }
 
     // Check file size and offer compression if too large
     if (processedFile.size > MAX_FILE_SIZE) {
-      processing.close();
+      // Check if cancelled before showing dialog
+      if (isCancelled?.()) {
+        return null;
+      }
       const shouldCompress = await showCompressionDialog(processedFile.size);
       if (!shouldCompress) {
         return null;
       }
-      // Re-show processing overlay for compression
-      const compressingOverlay = showProcessingOverlay("Compressing image...");
-      try {
-        processedFile = await compressImage(processedFile);
-        compressingOverlay.close();
-      } catch (err) {
-        console.error("Failed to compress image:", err);
-        compressingOverlay.close();
+      // Check if cancelled after dialog
+      if (isCancelled?.()) {
         return null;
       }
-      // Re-show for remaining stages
-      processing.element.remove();
-      Object.assign(
-        processing,
-        showProcessingOverlay("Generating thumbnails..."),
-      );
+      try {
+        processedFile = await compressImage(processedFile);
+      } catch (err) {
+        console.error("Failed to compress image:", err);
+        return null;
+      }
     }
 
-    const uuid = await uploadProcessedFile(processedFile, (stage) => {
-      processing.updateStage(stage);
-    });
+    // Check if cancelled before upload
+    if (isCancelled?.()) {
+      return null;
+    }
 
-    processing.close();
+    const uuid = await uploadProcessedFile(processedFile);
     return uuid;
   } catch (err) {
     console.error("Failed to upload image:", err);
-    processing.close();
     throw err;
   }
 }
@@ -379,41 +351,88 @@ export function triggerFileInput(handler: (file: File) => void): void {
 }
 
 /**
+ * Check if a placeholder exists in the document.
+ */
+function placeholderExists(
+  view: EditorView,
+  state: "converting" | "pending",
+): boolean {
+  const searchText =
+    state === "converting"
+      ? "![converting...](attachment:converting)"
+      : "![uploading...](attachment:pending)";
+  return view.state.doc.toString().includes(searchText);
+}
+
+/**
  * Trigger an image upload via file picker.
  * Opens a file dialog, uploads the selected image, and inserts a gallery at cursor.
  */
 export function triggerImageUpload(view: EditorView): void {
   const pos = view.state.selection.main.head;
 
-  // Insert loading placeholder gallery
-  const loadingGallery = `::gallery{}![uploading...](attachment:pending)::`;
-
   triggerFileInput(async (file) => {
+    // Use "converting" state for HEIC files, "pending" for others
+    const initialState = isHeicFile(file) ? "converting" : "pending";
+    const initialAlt =
+      initialState === "converting" ? "converting..." : "uploading...";
+    const loadingGallery = `::gallery{}![${initialAlt}](attachment:${initialState})::`;
+
     view.dispatch({
       changes: { from: pos, to: pos, insert: loadingGallery },
     });
 
+    // Track current state for cancellation check
+    let currentState: "converting" | "pending" = initialState;
+
     try {
-      const uuid = await processAndUploadFile(file);
+      const uuid = await processAndUploadFile(file, {
+        onStateChange: (newState) => {
+          // Update placeholder when state changes (converting -> pending)
+          if (newState === "pending" && initialState === "converting") {
+            const doc = view.state.doc;
+            const fullDoc = doc.toString();
+            const oldText = "![converting...](attachment:converting)";
+            const newText = "![uploading...](attachment:pending)";
+            const placeholderIndex = fullDoc.indexOf(oldText);
+            if (placeholderIndex !== -1) {
+              view.dispatch({
+                changes: {
+                  from: placeholderIndex,
+                  to: placeholderIndex + oldText.length,
+                  insert: newText,
+                },
+              });
+            }
+            currentState = "pending";
+          }
+        },
+        isCancelled: () => !placeholderExists(view, currentState),
+      });
 
       if (uuid === null) {
-        // User cancelled - remove placeholder
-        const doc = view.state.doc;
-        const fullDoc = doc.toString();
-        const placeholderIndex = fullDoc.indexOf(loadingGallery);
-        if (placeholderIndex !== -1) {
-          view.dispatch({
-            changes: {
-              from: placeholderIndex,
-              to: placeholderIndex + loadingGallery.length,
-              insert: "",
-            },
-          });
+        // User cancelled or placeholder was deleted - clean up if placeholder still exists
+        if (placeholderExists(view, currentState)) {
+          const searchText =
+            currentState === "converting"
+              ? "::gallery{}![converting...](attachment:converting)::"
+              : "::gallery{}![uploading...](attachment:pending)::";
+          const fullDoc = view.state.doc.toString();
+          const placeholderIndex = fullDoc.indexOf(searchText);
+          if (placeholderIndex !== -1) {
+            view.dispatch({
+              changes: {
+                from: placeholderIndex,
+                to: placeholderIndex + searchText.length,
+                insert: "",
+              },
+            });
+          }
         }
         return;
       }
 
-      // Find and replace the placeholder
+      // Find and replace the placeholder with the final image
       const doc = view.state.doc;
       const searchText = "![uploading...](attachment:pending)";
       const fullDoc = doc.toString();
@@ -428,20 +447,26 @@ export function triggerImageUpload(view: EditorView): void {
             insert: newImage,
           },
         });
+        notifyAttachmentChange();
       }
     } catch {
-      // Remove the placeholder gallery on error
-      const doc = view.state.doc;
-      const fullDoc = doc.toString();
-      const placeholderIndex = fullDoc.indexOf(loadingGallery);
-      if (placeholderIndex !== -1) {
-        view.dispatch({
-          changes: {
-            from: placeholderIndex,
-            to: placeholderIndex + loadingGallery.length,
-            insert: "",
-          },
-        });
+      // Remove the placeholder gallery on error if it still exists
+      if (placeholderExists(view, currentState)) {
+        const searchText =
+          currentState === "converting"
+            ? "::gallery{}![converting...](attachment:converting)::"
+            : "::gallery{}![uploading...](attachment:pending)::";
+        const fullDoc = view.state.doc.toString();
+        const placeholderIndex = fullDoc.indexOf(searchText);
+        if (placeholderIndex !== -1) {
+          view.dispatch({
+            changes: {
+              from: placeholderIndex,
+              to: placeholderIndex + searchText.length,
+              insert: "",
+            },
+          });
+        }
       }
     }
   });
