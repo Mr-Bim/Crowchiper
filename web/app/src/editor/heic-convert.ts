@@ -39,14 +39,14 @@ export async function convertHeicIfNeeded(file: File): Promise<File> {
     return file;
   }
 
-  // Convert HEIC to JPEG
-  const jpegBlob = await heicTo({
+  // Convert HEIC to WebP
+  const webpBlob = await heicTo({
     blob: file,
-    type: "image/jpeg",
+    type: "image/webp",
     quality: 0.92,
   });
 
-  // Create a new File with .jpg extension
-  const newName = file.name.replace(/\.heic$/i, ".jpg");
-  return new File([jpegBlob], newName, { type: "image/jpeg" });
+  // Create a new File with .webp extension
+  const newName = file.name.replace(/\.heic$/i, ".webp");
+  return new File([webpBlob], newName, { type: "image/webp" });
 }

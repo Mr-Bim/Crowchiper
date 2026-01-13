@@ -110,6 +110,44 @@ struct UpdatePostRequest {
     attachment_uuids: Option<Vec<String>>,
 }
 
+// --- Helpers ---
+
+/// Validate that encryption settings match user's configuration.
+/// - If user has encryption enabled, content must be encrypted (encryption_version > 0)
+/// - If user does not have encryption enabled, content must be unencrypted (encryption_version = 0 or None)
+async fn validate_encryption(
+    db: &Database,
+    user_id: i64,
+    encryption_version: &Option<i32>,
+    content_encrypted: bool,
+) -> Result<(), ApiError> {
+    let encryption_settings = db
+        .encryption_settings()
+        .get(user_id)
+        .await
+        .db_err("Failed to get encryption settings")?;
+
+    let user_has_encryption = encryption_settings
+        .map(|s| s.encryption_enabled)
+        .unwrap_or(false);
+
+    let is_encrypted = encryption_version.map(|v| v > 0).unwrap_or(false) || content_encrypted;
+
+    if user_has_encryption && !is_encrypted {
+        return Err(ApiError::bad_request(
+            "Encryption is enabled but unencrypted content was submitted",
+        ));
+    }
+
+    if !user_has_encryption && is_encrypted {
+        return Err(ApiError::bad_request(
+            "Encryption is not enabled but encrypted content was submitted",
+        ));
+    }
+
+    Ok(())
+}
+
 // --- Handlers ---
 
 async fn list_posts(
@@ -146,6 +184,15 @@ async fn create_post(
     ApiAuth(user): ApiAuth,
     Json(payload): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Validate encryption matches user settings
+    validate_encryption(
+        &state.db,
+        user.user_id,
+        &payload.encryption_version,
+        payload.content_encrypted,
+    )
+    .await?;
+
     let uuid = state
         .db
         .posts()
@@ -222,6 +269,15 @@ async fn update_post(
     Path(uuid): Path<String>,
     Json(payload): Json<UpdatePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Validate encryption matches user settings
+    validate_encryption(
+        &state.db,
+        user.user_id,
+        &payload.encryption_version,
+        payload.content_encrypted,
+    )
+    .await?;
+
     // Use a transaction to ensure atomicity when updating post and attachment refs
     let mut tx = state
         .db

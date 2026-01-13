@@ -69,7 +69,7 @@ async function generateSingleThumbnail(
 
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Export as JPEG
+  // Export as WebP
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (b) => {
@@ -79,7 +79,7 @@ async function generateSingleThumbnail(
           reject(new Error("Failed to create thumbnail blob"));
         }
       },
-      "image/jpeg",
+      "image/webp",
       THUMBNAIL_QUALITY,
     );
   });

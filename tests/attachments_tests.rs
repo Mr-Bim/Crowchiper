@@ -48,10 +48,11 @@ fn auth_cookie(token: &str) -> String {
     format!("auth_token={}", token)
 }
 
-/// Create a multipart form body for uploading an attachment with all thumbnail sizes.
+/// Create a multipart form body for uploading an unencrypted attachment with all thumbnail sizes.
+/// Uses encryption_version=0 and empty IVs for unencrypted uploads.
 fn create_multipart_body() -> (String, Vec<u8>) {
     let boundary = "----TestBoundary12345";
-    let image_data = b"fake encrypted image data";
+    let image_data = b"fake image data";
     let thumb_sm_data = b"fake thumb sm";
     let thumb_md_data = b"fake thumb md";
     let thumb_lg_data = b"fake thumb lg";
@@ -67,10 +68,10 @@ fn create_multipart_body() -> (String, Vec<u8>) {
     body.extend_from_slice(image_data);
     body.extend_from_slice(b"\r\n");
 
-    // Image IV field
+    // Image IV field (empty for unencrypted)
     body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
     body.extend_from_slice(b"Content-Disposition: form-data; name=\"image_iv\"\r\n\r\n");
-    body.extend_from_slice(b"image_iv_123");
+    body.extend_from_slice(b"");
     body.extend_from_slice(b"\r\n");
 
     // Small thumbnail
@@ -82,9 +83,10 @@ fn create_multipart_body() -> (String, Vec<u8>) {
     body.extend_from_slice(thumb_sm_data);
     body.extend_from_slice(b"\r\n");
 
+    // Small thumbnail IV (empty for unencrypted)
     body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
     body.extend_from_slice(b"Content-Disposition: form-data; name=\"thumb_sm_iv\"\r\n\r\n");
-    body.extend_from_slice(b"thumb_sm_iv");
+    body.extend_from_slice(b"");
     body.extend_from_slice(b"\r\n");
 
     // Medium thumbnail
@@ -96,9 +98,10 @@ fn create_multipart_body() -> (String, Vec<u8>) {
     body.extend_from_slice(thumb_md_data);
     body.extend_from_slice(b"\r\n");
 
+    // Medium thumbnail IV (empty for unencrypted)
     body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
     body.extend_from_slice(b"Content-Disposition: form-data; name=\"thumb_md_iv\"\r\n\r\n");
-    body.extend_from_slice(b"thumb_md_iv");
+    body.extend_from_slice(b"");
     body.extend_from_slice(b"\r\n");
 
     // Large thumbnail
@@ -110,15 +113,16 @@ fn create_multipart_body() -> (String, Vec<u8>) {
     body.extend_from_slice(thumb_lg_data);
     body.extend_from_slice(b"\r\n");
 
+    // Large thumbnail IV (empty for unencrypted)
     body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
     body.extend_from_slice(b"Content-Disposition: form-data; name=\"thumb_lg_iv\"\r\n\r\n");
-    body.extend_from_slice(b"thumb_lg_iv");
+    body.extend_from_slice(b"");
     body.extend_from_slice(b"\r\n");
 
-    // Encryption version field
+    // Encryption version field (0 = unencrypted)
     body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
     body.extend_from_slice(b"Content-Disposition: form-data; name=\"encryption_version\"\r\n\r\n");
-    body.extend_from_slice(b"1");
+    body.extend_from_slice(b"0");
     body.extend_from_slice(b"\r\n");
 
     // End boundary
@@ -134,12 +138,12 @@ fn create_db_attachment_input(
 ) -> crowchiper::db::attachments::CreateAttachmentInput<'static> {
     crowchiper::db::attachments::CreateAttachmentInput {
         user_id,
-        encrypted_image: b"encrypted_image_data",
-        encrypted_image_iv: "image_iv",
+        image_data: b"image_data_bytes",
+        image_iv: Some("image_iv"),
         thumb_sm: b"thumb_sm_data",
-        thumb_sm_iv: "thumb_sm_iv",
-        thumb_md: Some((b"thumb_md_data".as_slice(), "thumb_md_iv")),
-        thumb_lg: Some((b"thumb_lg_data".as_slice(), "thumb_lg_iv")),
+        thumb_sm_iv: Some("thumb_sm_iv"),
+        thumb_md: Some((b"thumb_md_data".as_slice(), Some("thumb_md_iv"))),
+        thumb_lg: Some((b"thumb_lg_data".as_slice(), Some("thumb_lg_iv"))),
         encryption_version: 1,
     }
 }
@@ -205,11 +209,11 @@ async fn test_get_attachment() {
     let content_type = response.headers().get("content-type").unwrap();
     assert_eq!(content_type.to_str().unwrap(), "application/octet-stream");
 
-    // Check the body is the raw encrypted image data
+    // Check the body is the raw image data
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
-    assert_eq!(&body[..], b"encrypted_image_data");
+    assert_eq!(&body[..], b"image_data_bytes");
 }
 
 #[tokio::test]
@@ -286,10 +290,10 @@ async fn test_cannot_access_other_users_attachment() {
     // Alice creates an attachment
     let input = crowchiper::db::attachments::CreateAttachmentInput {
         user_id: alice_id,
-        encrypted_image: b"alice_image",
-        encrypted_image_iv: "iv1",
+        image_data: b"alice_image",
+        image_iv: Some("iv1"),
         thumb_sm: b"alice_thumb",
-        thumb_sm_iv: "iv2",
+        thumb_sm_iv: Some("iv2"),
         thumb_md: None,
         thumb_lg: None,
         encryption_version: 1,
@@ -336,10 +340,10 @@ async fn test_update_refs_adds_attachment_to_post() {
     // Create an attachment
     let input = crowchiper::db::attachments::CreateAttachmentInput {
         user_id,
-        encrypted_image: b"img",
-        encrypted_image_iv: "iv1",
+        image_data: b"img",
+        image_iv: Some("iv1"),
         thumb_sm: b"thumb",
-        thumb_sm_iv: "iv2",
+        thumb_sm_iv: Some("iv2"),
         thumb_md: None,
         thumb_lg: None,
         encryption_version: 1,
@@ -405,10 +409,10 @@ async fn test_update_refs_removes_attachment_from_post() {
     // Create an attachment and add it to the post
     let input = crowchiper::db::attachments::CreateAttachmentInput {
         user_id,
-        encrypted_image: b"img",
-        encrypted_image_iv: "iv1",
+        image_data: b"img",
+        image_iv: Some("iv1"),
         thumb_sm: b"thumb",
-        thumb_sm_iv: "iv2",
+        thumb_sm_iv: Some("iv2"),
         thumb_md: None,
         thumb_lg: None,
         encryption_version: 1,
@@ -486,10 +490,10 @@ async fn test_delete_post_removes_attachment_refs() {
     // Create an attachment and add it to the post
     let input = crowchiper::db::attachments::CreateAttachmentInput {
         user_id,
-        encrypted_image: b"img",
-        encrypted_image_iv: "iv1",
+        image_data: b"img",
+        image_iv: Some("iv1"),
         thumb_sm: b"thumb",
-        thumb_sm_iv: "iv2",
+        thumb_sm_iv: Some("iv2"),
         thumb_md: None,
         thumb_lg: None,
         encryption_version: 1,
@@ -576,10 +580,10 @@ async fn test_attachment_shared_between_posts() {
     // Create an attachment
     let input = crowchiper::db::attachments::CreateAttachmentInput {
         user_id,
-        encrypted_image: b"img",
-        encrypted_image_iv: "iv1",
+        image_data: b"img",
+        image_iv: Some("iv1"),
         thumb_sm: b"thumb",
-        thumb_sm_iv: "iv2",
+        thumb_sm_iv: Some("iv2"),
         thumb_md: None,
         thumb_lg: None,
         encryption_version: 1,

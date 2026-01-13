@@ -92,6 +92,10 @@ impl Database {
             self.migrate_v5().await?;
         }
 
+        if version < 6 {
+            self.migrate_v6().await?;
+        }
+
         Ok(())
     }
 
@@ -255,6 +259,36 @@ impl Database {
                 "ALTER TABLE attachments ADD COLUMN encrypted_thumb_md_iv TEXT",
                 "ALTER TABLE attachments ADD COLUMN encrypted_thumb_lg BLOB",
                 "ALTER TABLE attachments ADD COLUMN encrypted_thumb_lg_iv TEXT",
+            ],
+        )
+        .await
+    }
+
+    async fn migrate_v6(&self) -> Result<(), sqlx::Error> {
+        // Rename columns to remove "encrypted_" prefix since data can now be unencrypted.
+        // Also make image_iv and thumb_sm_iv nullable (they were NOT NULL before).
+        // When encryption_version = 0, data is unencrypted and IVs are NULL.
+        // When encryption_version > 0, data is encrypted and IVs are set.
+        self.run_migration(
+            6,
+            &[
+                // Rename data columns (these keep their NOT NULL constraint which is fine)
+                "ALTER TABLE attachments RENAME COLUMN encrypted_image TO image_data",
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_sm TO thumb_sm",
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_md TO thumb_md",
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_lg TO thumb_lg",
+                // For IV columns that were NOT NULL, we need to: add new nullable column, copy data, drop old
+                // image_iv (was encrypted_image_iv NOT NULL)
+                "ALTER TABLE attachments ADD COLUMN image_iv TEXT",
+                "UPDATE attachments SET image_iv = encrypted_image_iv",
+                "ALTER TABLE attachments DROP COLUMN encrypted_image_iv",
+                // thumb_sm_iv (was encrypted_thumb_sm_iv NOT NULL)
+                "ALTER TABLE attachments ADD COLUMN thumb_sm_iv TEXT",
+                "UPDATE attachments SET thumb_sm_iv = encrypted_thumb_sm_iv",
+                "ALTER TABLE attachments DROP COLUMN encrypted_thumb_sm_iv",
+                // thumb_md_iv and thumb_lg_iv were already nullable, just rename
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_md_iv TO thumb_md_iv",
+                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_lg_iv TO thumb_lg_iv",
             ],
         )
         .await

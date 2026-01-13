@@ -550,7 +550,14 @@ async fn test_posts_with_base_path() {
 #[tokio::test]
 async fn test_create_encrypted_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+
+    // Enable encryption for user (required to submit encrypted posts)
+    let prf_salt = vec![0u8; 32];
+    db.encryption_settings()
+        .create(user_id, &prf_salt)
+        .await
+        .unwrap();
 
     // Create a post with encrypted flags set
     let encrypted_content = r#"{"v":1,"ct":"abc123","iv":"def456"}"#;
@@ -614,23 +621,30 @@ async fn test_update_post_encryption_flags() {
     let (app, db, jwt) = create_test_app().await;
     let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
 
-    // Create a plaintext post
+    // Enable encryption for user (required to submit encrypted posts)
+    let prf_salt = vec![0u8; 32];
+    db.encryption_settings()
+        .create(user_id, &prf_salt)
+        .await
+        .unwrap();
+
+    // Create an encrypted post (since user has encryption enabled)
     let post_uuid = db
         .posts()
         .create(
             user_id,
-            Some("Plain Title"),
-            false,
-            None,
-            "Plain content",
-            false,
-            None,
-            None,
+            Some("Encrypted Title"),
+            true,
+            Some("title_iv"),
+            "encrypted content",
+            true,
+            Some("content_iv"),
+            Some(1),
         )
         .await
         .unwrap();
 
-    // Update to encrypted
+    // Update to different encrypted content
     let encrypted_content = r#"{"v":1,"ct":"encrypted","iv":"iv123"}"#;
 
     let response = app

@@ -10,7 +10,10 @@ import {
   ENCRYPTED_FORMAT_VERSION,
   encryptBinary,
 } from "../../crypto/operations.ts";
-import { getSessionEncryptionKey } from "../../crypto/keystore.ts";
+import {
+  getSessionEncryptionKey,
+  isEncryptionEnabled,
+} from "../../crypto/keystore.ts";
 import { generateThumbnails } from "../thumbnail.ts";
 import { convertHeicIfNeeded } from "../heic-convert.ts";
 
@@ -149,7 +152,7 @@ async function compressImage(file: File): Promise<File> {
 
       while (quality > 0.1) {
         blob = await new Promise<Blob | null>((res) =>
-          canvas.toBlob(res, "image/jpeg", quality),
+          canvas.toBlob(res, "image/webp", quality),
         );
 
         if (blob && blob.size <= TARGET_COMPRESSED_SIZE) {
@@ -165,9 +168,9 @@ async function compressImage(file: File): Promise<File> {
 
       const compressedFile = new File(
         [blob],
-        file.name.replace(/\.[^.]+$/, ".jpg"),
+        file.name.replace(/\.[^.]+$/, ".webp"),
         {
-          type: "image/jpeg",
+          type: "image/webp",
         },
       );
 
@@ -183,8 +186,11 @@ async function compressImage(file: File): Promise<File> {
   });
 }
 
+/** Encryption version 0 indicates no encryption */
+const UNENCRYPTED_VERSION = 0;
+
 /**
- * Upload an already-processed image file with encryption.
+ * Upload an already-processed image file (with or without encryption).
  * The file should already be converted from HEIC and compressed if needed.
  * Returns the UUID of the uploaded attachment.
  */
@@ -192,37 +198,56 @@ async function uploadProcessedFile(
   file: File,
   onStage?: (stage: string) => void,
 ): Promise<string> {
-  const sessionEncryptionKey = getSessionEncryptionKey();
-  if (!sessionEncryptionKey) {
-    throw new Error("Encryption key not available. Please unlock first.");
-  }
-
   onStage?.("Generating thumbnails...");
   const imageData = await file.arrayBuffer();
   const thumbnails = await generateThumbnails(file);
 
-  onStage?.("Encrypting and uploading...");
-  const [encryptedImage, encThumbSm, encThumbMd, encThumbLg] =
-    await Promise.all([
-      encryptBinary(imageData, sessionEncryptionKey),
-      encryptBinary(thumbnails.sm, sessionEncryptionKey),
-      encryptBinary(thumbnails.md, sessionEncryptionKey),
-      encryptBinary(thumbnails.lg, sessionEncryptionKey),
-    ]);
+  // Check if encryption is enabled
+  if (isEncryptionEnabled()) {
+    const sessionEncryptionKey = getSessionEncryptionKey();
+    if (!sessionEncryptionKey) {
+      throw new Error("Encryption key not available. Please unlock first.");
+    }
 
-  const response = await uploadAttachment({
-    image: encryptedImage.ciphertext,
-    image_iv: encryptedImage.iv,
-    thumb_sm: encThumbSm.ciphertext,
-    thumb_sm_iv: encThumbSm.iv,
-    thumb_md: encThumbMd.ciphertext,
-    thumb_md_iv: encThumbMd.iv,
-    thumb_lg: encThumbLg.ciphertext,
-    thumb_lg_iv: encThumbLg.iv,
-    encryption_version: ENCRYPTED_FORMAT_VERSION,
-  });
+    onStage?.("Encrypting and uploading...");
+    const [encryptedImage, encThumbSm, encThumbMd, encThumbLg] =
+      await Promise.all([
+        encryptBinary(imageData, sessionEncryptionKey),
+        encryptBinary(thumbnails.sm, sessionEncryptionKey),
+        encryptBinary(thumbnails.md, sessionEncryptionKey),
+        encryptBinary(thumbnails.lg, sessionEncryptionKey),
+      ]);
 
-  return response.uuid;
+    const response = await uploadAttachment({
+      image: encryptedImage.ciphertext,
+      image_iv: encryptedImage.iv,
+      thumb_sm: encThumbSm.ciphertext,
+      thumb_sm_iv: encThumbSm.iv,
+      thumb_md: encThumbMd.ciphertext,
+      thumb_md_iv: encThumbMd.iv,
+      thumb_lg: encThumbLg.ciphertext,
+      thumb_lg_iv: encThumbLg.iv,
+      encryption_version: ENCRYPTED_FORMAT_VERSION,
+    });
+
+    return response.uuid;
+  } else {
+    // No encryption - upload raw data
+    onStage?.("Uploading...");
+    const response = await uploadAttachment({
+      image: imageData,
+      image_iv: "",
+      thumb_sm: thumbnails.sm,
+      thumb_sm_iv: "",
+      thumb_md: thumbnails.md,
+      thumb_md_iv: "",
+      thumb_lg: thumbnails.lg,
+      thumb_lg_iv: "",
+      encryption_version: UNENCRYPTED_VERSION,
+    });
+
+    return response.uuid;
+  }
 }
 
 /** Processing state for callbacks */

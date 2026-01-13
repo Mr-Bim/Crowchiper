@@ -11,7 +11,8 @@ pub struct AttachmentStore {
 #[derive(Debug, Clone)]
 pub struct ThumbnailData {
     pub data: Vec<u8>,
-    pub iv: String,
+    /// IV for decryption, None if unencrypted
+    pub iv: Option<String>,
 }
 
 /// All thumbnail sizes for an attachment.
@@ -28,8 +29,9 @@ pub struct Attachment {
     pub id: i64,
     pub uuid: String,
     pub user_id: i64,
-    pub encrypted_image: Vec<u8>,
-    pub encrypted_image_iv: String,
+    pub image_data: Vec<u8>,
+    /// IV for decryption, None if unencrypted (encryption_version = 0)
+    pub image_iv: Option<String>,
     pub thumbnails: Thumbnails,
     pub encryption_version: i32,
     pub reference_count: i32,
@@ -41,14 +43,14 @@ struct AttachmentRow {
     id: i64,
     uuid: String,
     user_id: i64,
-    encrypted_image: Vec<u8>,
-    encrypted_image_iv: String,
-    encrypted_thumb_sm: Vec<u8>,
-    encrypted_thumb_sm_iv: String,
-    encrypted_thumb_md: Option<Vec<u8>>,
-    encrypted_thumb_md_iv: Option<String>,
-    encrypted_thumb_lg: Option<Vec<u8>>,
-    encrypted_thumb_lg_iv: Option<String>,
+    image_data: Vec<u8>,
+    image_iv: Option<String>,
+    thumb_sm: Vec<u8>,
+    thumb_sm_iv: Option<String>,
+    thumb_md: Option<Vec<u8>>,
+    thumb_md_iv: Option<String>,
+    thumb_lg: Option<Vec<u8>>,
+    thumb_lg_iv: Option<String>,
     encryption_version: i32,
     reference_count: i32,
     created_at: String,
@@ -60,21 +62,21 @@ impl From<AttachmentRow> for Attachment {
             id: row.id,
             uuid: row.uuid,
             user_id: row.user_id,
-            encrypted_image: row.encrypted_image,
-            encrypted_image_iv: row.encrypted_image_iv,
+            image_data: row.image_data,
+            image_iv: row.image_iv,
             thumbnails: Thumbnails {
                 sm: ThumbnailData {
-                    data: row.encrypted_thumb_sm,
-                    iv: row.encrypted_thumb_sm_iv,
+                    data: row.thumb_sm,
+                    iv: row.thumb_sm_iv,
                 },
-                md: row
-                    .encrypted_thumb_md
-                    .zip(row.encrypted_thumb_md_iv)
-                    .map(|(data, iv)| ThumbnailData { data, iv }),
-                lg: row
-                    .encrypted_thumb_lg
-                    .zip(row.encrypted_thumb_lg_iv)
-                    .map(|(data, iv)| ThumbnailData { data, iv }),
+                md: row.thumb_md.map(|data| ThumbnailData {
+                    data,
+                    iv: row.thumb_md_iv,
+                }),
+                lg: row.thumb_lg.map(|data| ThumbnailData {
+                    data,
+                    iv: row.thumb_lg_iv,
+                }),
             },
             encryption_version: row.encryption_version,
             reference_count: row.reference_count,
@@ -86,12 +88,17 @@ impl From<AttachmentRow> for Attachment {
 /// Input for creating an attachment with multiple thumbnail sizes.
 pub struct CreateAttachmentInput<'a> {
     pub user_id: i64,
-    pub encrypted_image: &'a [u8],
-    pub encrypted_image_iv: &'a str,
+    pub image_data: &'a [u8],
+    /// IV for encryption, None if unencrypted
+    pub image_iv: Option<&'a str>,
     pub thumb_sm: &'a [u8],
-    pub thumb_sm_iv: &'a str,
-    pub thumb_md: Option<(&'a [u8], &'a str)>,
-    pub thumb_lg: Option<(&'a [u8], &'a str)>,
+    /// IV for encryption, None if unencrypted
+    pub thumb_sm_iv: Option<&'a str>,
+    /// Medium thumbnail data and optional IV
+    pub thumb_md: Option<(&'a [u8], Option<&'a str>)>,
+    /// Large thumbnail data and optional IV
+    pub thumb_lg: Option<(&'a [u8], Option<&'a str>)>,
+    /// 0 = unencrypted, >0 = encrypted with that version
     pub encryption_version: i32,
 }
 
@@ -106,23 +113,23 @@ impl AttachmentStore {
         let uuid = uuid::Uuid::new_v4().to_string();
 
         sqlx::query(
-            "INSERT INTO attachments (uuid, user_id, encrypted_image, encrypted_image_iv,
-             encrypted_thumb_sm, encrypted_thumb_sm_iv,
-             encrypted_thumb_md, encrypted_thumb_md_iv,
-             encrypted_thumb_lg, encrypted_thumb_lg_iv,
+            "INSERT INTO attachments (uuid, user_id, image_data, image_iv,
+             thumb_sm, thumb_sm_iv,
+             thumb_md, thumb_md_iv,
+             thumb_lg, thumb_lg_iv,
              encryption_version, reference_count)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
         )
         .bind(&uuid)
         .bind(input.user_id)
-        .bind(input.encrypted_image)
-        .bind(input.encrypted_image_iv)
+        .bind(input.image_data)
+        .bind(input.image_iv)
         .bind(input.thumb_sm)
         .bind(input.thumb_sm_iv)
         .bind(input.thumb_md.map(|(d, _)| d))
-        .bind(input.thumb_md.map(|(_, iv)| iv))
+        .bind(input.thumb_md.and_then(|(_, iv)| iv))
         .bind(input.thumb_lg.map(|(d, _)| d))
-        .bind(input.thumb_lg.map(|(_, iv)| iv))
+        .bind(input.thumb_lg.and_then(|(_, iv)| iv))
         .bind(input.encryption_version)
         .execute(&self.pool)
         .await?;
@@ -137,10 +144,10 @@ impl AttachmentStore {
         user_id: i64,
     ) -> Result<Option<Attachment>, sqlx::Error> {
         let row: Option<AttachmentRow> = sqlx::query_as(
-            "SELECT id, uuid, user_id, encrypted_image, encrypted_image_iv,
-             encrypted_thumb_sm, encrypted_thumb_sm_iv,
-             encrypted_thumb_md, encrypted_thumb_md_iv,
-             encrypted_thumb_lg, encrypted_thumb_lg_iv,
+            "SELECT id, uuid, user_id, image_data, image_iv,
+             thumb_sm, thumb_sm_iv,
+             thumb_md, thumb_md_iv,
+             thumb_lg, thumb_lg_iv,
              encryption_version, reference_count, created_at
              FROM attachments WHERE uuid = ? AND user_id = ?",
         )
@@ -159,15 +166,15 @@ impl AttachmentStore {
     ) -> Result<Option<Thumbnails>, sqlx::Error> {
         let row: Option<(
             Vec<u8>,
-            String,
+            Option<String>,
             Option<Vec<u8>>,
             Option<String>,
             Option<Vec<u8>>,
             Option<String>,
         )> = sqlx::query_as(
-            "SELECT encrypted_thumb_sm, encrypted_thumb_sm_iv,
-             encrypted_thumb_md, encrypted_thumb_md_iv,
-             encrypted_thumb_lg, encrypted_thumb_lg_iv
+            "SELECT thumb_sm, thumb_sm_iv,
+             thumb_md, thumb_md_iv,
+             thumb_lg, thumb_lg_iv
              FROM attachments WHERE uuid = ? AND user_id = ?",
         )
         .bind(uuid)
@@ -181,12 +188,8 @@ impl AttachmentStore {
                     data: sm_data,
                     iv: sm_iv,
                 },
-                md: md_data
-                    .zip(md_iv)
-                    .map(|(data, iv)| ThumbnailData { data, iv }),
-                lg: lg_data
-                    .zip(lg_iv)
-                    .map(|(data, iv)| ThumbnailData { data, iv }),
+                md: md_data.map(|data| ThumbnailData { data, iv: md_iv }),
+                lg: lg_data.map(|data| ThumbnailData { data, iv: lg_iv }),
             },
         ))
     }
@@ -203,7 +206,7 @@ impl AttachmentStore {
         let row: Option<(Option<Vec<u8>>, Option<String>)> = match size {
             "sm" => {
                 sqlx::query_as(
-                    "SELECT encrypted_thumb_sm, encrypted_thumb_sm_iv
+                    "SELECT thumb_sm, thumb_sm_iv
                      FROM attachments WHERE uuid = ? AND user_id = ?",
                 )
                 .bind(uuid)
@@ -213,7 +216,7 @@ impl AttachmentStore {
             }
             "md" => {
                 sqlx::query_as(
-                    "SELECT encrypted_thumb_md, encrypted_thumb_md_iv
+                    "SELECT thumb_md, thumb_md_iv
                      FROM attachments WHERE uuid = ? AND user_id = ?",
                 )
                 .bind(uuid)
@@ -223,7 +226,7 @@ impl AttachmentStore {
             }
             "lg" => {
                 sqlx::query_as(
-                    "SELECT encrypted_thumb_lg, encrypted_thumb_lg_iv
+                    "SELECT thumb_lg, thumb_lg_iv
                      FROM attachments WHERE uuid = ? AND user_id = ?",
                 )
                 .bind(uuid)
@@ -238,8 +241,8 @@ impl AttachmentStore {
             return Ok(None);
         };
 
-        // Return thumbnail if both data and IV are present
-        Ok(data.zip(iv).map(|(data, iv)| ThumbnailData { data, iv }))
+        // Return thumbnail if data is present (IV may be None for unencrypted)
+        Ok(data.map(|data| ThumbnailData { data, iv }))
     }
 
     /// Increment reference count for an attachment.
@@ -442,12 +445,12 @@ mod tests {
     fn create_test_input(user_id: i64) -> CreateAttachmentInput<'static> {
         CreateAttachmentInput {
             user_id,
-            encrypted_image: b"encrypted_image_data",
-            encrypted_image_iv: "image_iv_123",
+            image_data: b"image_data_bytes",
+            image_iv: Some("image_iv_123"),
             thumb_sm: b"thumb_sm_data",
-            thumb_sm_iv: "thumb_sm_iv",
-            thumb_md: Some((b"thumb_md_data", "thumb_md_iv")),
-            thumb_lg: Some((b"thumb_lg_data", "thumb_lg_iv")),
+            thumb_sm_iv: Some("thumb_sm_iv"),
+            thumb_md: Some((b"thumb_md_data", Some("thumb_md_iv"))),
+            thumb_lg: Some((b"thumb_lg_data", Some("thumb_lg_iv"))),
             encryption_version: 1,
         }
     }
@@ -469,10 +472,10 @@ mod tests {
 
         assert_eq!(attachment.uuid, attachment_uuid);
         assert_eq!(attachment.user_id, user_id);
-        assert_eq!(attachment.encrypted_image, b"encrypted_image_data");
-        assert_eq!(attachment.encrypted_image_iv, "image_iv_123");
+        assert_eq!(attachment.image_data, b"image_data_bytes");
+        assert_eq!(attachment.image_iv, Some("image_iv_123".to_string()));
         assert_eq!(attachment.thumbnails.sm.data, b"thumb_sm_data");
-        assert_eq!(attachment.thumbnails.sm.iv, "thumb_sm_iv");
+        assert_eq!(attachment.thumbnails.sm.iv, Some("thumb_sm_iv".to_string()));
         assert_eq!(
             attachment.thumbnails.md.as_ref().unwrap().data,
             b"thumb_md_data"
@@ -501,7 +504,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(thumbs.sm.data, b"thumb_sm_data");
-        assert_eq!(thumbs.sm.iv, "thumb_sm_iv");
+        assert_eq!(thumbs.sm.iv, Some("thumb_sm_iv".to_string()));
         assert_eq!(thumbs.md.as_ref().unwrap().data, b"thumb_md_data");
         assert_eq!(thumbs.lg.as_ref().unwrap().data, b"thumb_lg_data");
     }
@@ -513,10 +516,10 @@ mod tests {
 
         let input = CreateAttachmentInput {
             user_id,
-            encrypted_image: b"img",
-            encrypted_image_iv: "iv1",
+            image_data: b"img",
+            image_iv: Some("iv1"),
             thumb_sm: b"thumb",
-            thumb_sm_iv: "iv2",
+            thumb_sm_iv: Some("iv2"),
             thumb_md: None,
             thumb_lg: None,
             encryption_version: 1,
@@ -587,10 +590,10 @@ mod tests {
 
         let input = CreateAttachmentInput {
             user_id: alice_id,
-            encrypted_image: b"img",
-            encrypted_image_iv: "iv1",
+            image_data: b"img",
+            image_iv: Some("iv1"),
             thumb_sm: b"thumb",
-            thumb_sm_iv: "iv2",
+            thumb_sm_iv: Some("iv2"),
             thumb_md: None,
             thumb_lg: None,
             encryption_version: 1,
@@ -638,20 +641,20 @@ mod tests {
         // Create two attachments
         let input1 = CreateAttachmentInput {
             user_id,
-            encrypted_image: b"img1",
-            encrypted_image_iv: "iv1",
+            image_data: b"img1",
+            image_iv: Some("iv1"),
             thumb_sm: b"thumb1",
-            thumb_sm_iv: "iv1t",
+            thumb_sm_iv: Some("iv1t"),
             thumb_md: None,
             thumb_lg: None,
             encryption_version: 1,
         };
         let input2 = CreateAttachmentInput {
             user_id,
-            encrypted_image: b"img2",
-            encrypted_image_iv: "iv2",
+            image_data: b"img2",
+            image_iv: Some("iv2"),
             thumb_sm: b"thumb2",
-            thumb_sm_iv: "iv2t",
+            thumb_sm_iv: Some("iv2t"),
             thumb_md: None,
             thumb_lg: None,
             encryption_version: 1,
@@ -745,10 +748,10 @@ mod tests {
         // Create an attachment
         let input = CreateAttachmentInput {
             user_id,
-            encrypted_image: b"img",
-            encrypted_image_iv: "iv",
+            image_data: b"img",
+            image_iv: Some("iv"),
             thumb_sm: b"thumb",
-            thumb_sm_iv: "ivt",
+            thumb_sm_iv: Some("ivt"),
             thumb_md: None,
             thumb_lg: None,
             encryption_version: 1,

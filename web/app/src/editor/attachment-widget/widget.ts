@@ -195,23 +195,33 @@ export class GalleryContainerWidget extends WidgetType {
     container.appendChild(loading);
 
     try {
-      const sessionEncryptionKey = getSessionEncryptionKey();
-      if (!sessionEncryptionKey) {
-        loading.textContent = "Unlock required";
-        loading.className = "cm-attachment-error";
-        return;
-      }
-
       const response = await getAttachmentThumbnail(
         img.uuid,
         getOptimalThumbnailSize(),
       );
-      const decrypted = await decryptBinary(
-        response.data,
-        response.iv,
-        sessionEncryptionKey,
-      );
-      const blob = new Blob([decrypted], { type: "image/jpeg" });
+
+      let imageData: ArrayBuffer;
+
+      // Check if data is encrypted (IV is non-empty)
+      if (response.iv) {
+        // Encrypted data - need to decrypt
+        const sessionEncryptionKey = getSessionEncryptionKey();
+        if (!sessionEncryptionKey) {
+          loading.textContent = "Unlock required";
+          loading.className = "cm-attachment-error";
+          return;
+        }
+        imageData = await decryptBinary(
+          response.data,
+          response.iv,
+          sessionEncryptionKey,
+        );
+      } else {
+        // Unencrypted data - use directly
+        imageData = response.data;
+      }
+
+      const blob = new Blob([imageData], { type: "image/webp" });
       const blobUrl = URL.createObjectURL(blob);
 
       thumbnailCache.set(img.uuid, blobUrl);
@@ -449,19 +459,29 @@ export class GalleryContainerWidget extends WidgetType {
     document.body.appendChild(overlay);
 
     try {
-      const sessionEncryptionKey = getSessionEncryptionKey();
-      if (!sessionEncryptionKey) {
-        loading.textContent = "Unlock required to view image";
-        return;
+      const response = await getAttachment(uuid);
+
+      let imageData: ArrayBuffer;
+
+      // Check if data is encrypted (IV is non-empty)
+      if (response.iv) {
+        // Encrypted data - need to decrypt
+        const sessionEncryptionKey = getSessionEncryptionKey();
+        if (!sessionEncryptionKey) {
+          loading.textContent = "Unlock required to view image";
+          return;
+        }
+        imageData = await decryptBinary(
+          response.data,
+          response.iv,
+          sessionEncryptionKey,
+        );
+      } else {
+        // Unencrypted data - use directly
+        imageData = response.data;
       }
 
-      const response = await getAttachment(uuid);
-      const decrypted = await decryptBinary(
-        response.data,
-        response.iv,
-        sessionEncryptionKey,
-      );
-      const blob = new Blob([decrypted], { type: "image/jpeg" });
+      const blob = new Blob([imageData], { type: "image/webp" });
       const blobUrl = URL.createObjectURL(blob);
 
       fullImageCache.set(uuid, blobUrl);

@@ -19,6 +19,9 @@ use crate::auth::{ApiAuth, HasAuthState};
 use crate::db::{Database, attachments::CreateAttachmentInput};
 use crate::jwt::JwtConfig;
 
+/// Encryption version 0 means unencrypted data
+const UNENCRYPTED_VERSION: i32 = 0;
+
 /// State for attachments endpoints.
 #[derive(Clone)]
 pub struct AttachmentsState {
@@ -55,25 +58,29 @@ struct UploadResponse {
 
 // --- Handlers ---
 
-/// Upload an encrypted attachment using multipart form data.
+/// Upload an attachment using multipart form data.
+/// Supports both encrypted (encryption_version > 0) and unencrypted (encryption_version = 0) uploads.
 ///
 /// Expected fields:
-/// - `image`: Binary encrypted image data
-/// - `image_iv`: IV for image (base64url string)
-/// - `thumb_sm`: Binary encrypted small thumbnail (200px)
-/// - `thumb_sm_iv`: IV for small thumbnail
-/// - `thumb_md`: Binary encrypted medium thumbnail (400px) - optional
+/// - `image`: Binary image data (encrypted or raw)
+/// - `image_iv`: IV for image (base64url string, empty for unencrypted)
+/// - `thumb_sm`: Binary small thumbnail (200px)
+/// - `thumb_sm_iv`: IV for small thumbnail (empty for unencrypted)
+/// - `thumb_md`: Binary medium thumbnail (400px) - optional
 /// - `thumb_md_iv`: IV for medium thumbnail - optional
-/// - `thumb_lg`: Binary encrypted large thumbnail (800px) - optional
+/// - `thumb_lg`: Binary large thumbnail (800px) - optional
 /// - `thumb_lg_iv`: IV for large thumbnail - optional
-/// - `encryption_version`: Version number (string, parsed as i32)
+/// - `encryption_version`: Version number (0 = unencrypted, >0 = encrypted)
+///
+/// If user has encryption enabled, encryption_version must be > 0.
+/// If user does not have encryption enabled, encryption_version must be 0.
 async fn upload_attachment(
     State(state): State<AttachmentsState>,
     ApiAuth(user): ApiAuth,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut encrypted_image: Option<Vec<u8>> = None;
-    let mut encrypted_image_iv: Option<String> = None;
+    let mut image_data: Option<Vec<u8>> = None;
+    let mut image_iv: Option<String> = None;
     let mut thumb_sm: Option<Vec<u8>> = None;
     let mut thumb_sm_iv: Option<String> = None;
     let mut thumb_md: Option<Vec<u8>> = None;
@@ -94,14 +101,14 @@ async fn upload_attachment(
                     .bytes()
                     .await
                     .map_err(|_| ApiError::bad_request("Failed to read image data"))?;
-                encrypted_image = Some(data.to_vec());
+                image_data = Some(data.to_vec());
             }
             "image_iv" => {
                 let text = field
                     .text()
                     .await
                     .map_err(|_| ApiError::bad_request("Failed to read image_iv"))?;
-                encrypted_image_iv = Some(text);
+                image_iv = Some(text);
             }
             "thumb_sm" => {
                 let data = field
@@ -161,18 +168,40 @@ async fn upload_attachment(
         }
     }
 
-    let encrypted_image =
-        encrypted_image.ok_or_else(|| ApiError::bad_request("Missing image field"))?;
-    let encrypted_image_iv =
-        encrypted_image_iv.ok_or_else(|| ApiError::bad_request("Missing image_iv field"))?;
+    let image_data = image_data.ok_or_else(|| ApiError::bad_request("Missing image field"))?;
+    let image_iv = image_iv.ok_or_else(|| ApiError::bad_request("Missing image_iv field"))?;
     let thumb_sm = thumb_sm.ok_or_else(|| ApiError::bad_request("Missing thumb_sm field"))?;
     let thumb_sm_iv =
         thumb_sm_iv.ok_or_else(|| ApiError::bad_request("Missing thumb_sm_iv field"))?;
     let encryption_version = encryption_version
         .ok_or_else(|| ApiError::bad_request("Missing encryption_version field"))?;
 
+    // Check user's encryption settings and validate encryption_version
+    let encryption_settings = state
+        .db
+        .encryption_settings()
+        .get(user.user_id)
+        .await
+        .db_err("Failed to get encryption settings")?;
+
+    let user_has_encryption = encryption_settings
+        .map(|s| s.encryption_enabled)
+        .unwrap_or(false);
+
+    if user_has_encryption && encryption_version == UNENCRYPTED_VERSION {
+        return Err(ApiError::bad_request(
+            "Encryption is enabled but unencrypted data was submitted",
+        ));
+    }
+
+    if !user_has_encryption && encryption_version != UNENCRYPTED_VERSION {
+        return Err(ApiError::bad_request(
+            "Encryption is not enabled but encrypted data was submitted",
+        ));
+    }
+
     // Limit image size to 10MB
-    if encrypted_image.len() > 10 * 1024 * 1024 {
+    if image_data.len() > 10 * 1024 * 1024 {
         return Err(ApiError::bad_request("Image too large (max 10MB)"));
     }
 
@@ -197,20 +226,44 @@ async fn upload_attachment(
         }
     }
 
+    // Convert empty IVs to None for unencrypted uploads
+    let image_iv_opt = if image_iv.is_empty() {
+        None
+    } else {
+        Some(image_iv)
+    };
+    let thumb_sm_iv_opt = if thumb_sm_iv.is_empty() {
+        None
+    } else {
+        Some(thumb_sm_iv)
+    };
+
     let input = CreateAttachmentInput {
         user_id: user.user_id,
-        encrypted_image: &encrypted_image,
-        encrypted_image_iv: &encrypted_image_iv,
+        image_data: &image_data,
+        image_iv: image_iv_opt.as_deref(),
         thumb_sm: &thumb_sm,
-        thumb_sm_iv: &thumb_sm_iv,
-        thumb_md: thumb_md
-            .as_ref()
-            .zip(thumb_md_iv.as_ref())
-            .map(|(d, iv)| (d.as_slice(), iv.as_str())),
-        thumb_lg: thumb_lg
-            .as_ref()
-            .zip(thumb_lg_iv.as_ref())
-            .map(|(d, iv)| (d.as_slice(), iv.as_str())),
+        thumb_sm_iv: thumb_sm_iv_opt.as_deref(),
+        thumb_md: thumb_md.as_ref().zip(thumb_md_iv.as_ref()).map(|(d, iv)| {
+            (
+                d.as_slice(),
+                if iv.is_empty() {
+                    None
+                } else {
+                    Some(iv.as_str())
+                },
+            )
+        }),
+        thumb_lg: thumb_lg.as_ref().zip(thumb_lg_iv.as_ref()).map(|(d, iv)| {
+            (
+                d.as_slice(),
+                if iv.is_empty() {
+                    None
+                } else {
+                    Some(iv.as_str())
+                },
+            )
+        }),
         encryption_version,
     };
 
@@ -224,8 +277,8 @@ async fn upload_attachment(
     Ok((StatusCode::CREATED, axum::Json(UploadResponse { uuid })))
 }
 
-/// Get an encrypted attachment as binary stream.
-/// IV is returned in the `X-Encryption-IV` header.
+/// Get an attachment as binary stream.
+/// IV is returned in the `X-Encryption-IV` header (empty string if unencrypted).
 async fn get_attachment(
     State(state): State<AttachmentsState>,
     ApiAuth(user): ApiAuth,
@@ -244,16 +297,15 @@ async fn get_attachment(
         header::CONTENT_TYPE,
         "application/octet-stream".parse().unwrap(),
     );
-    headers.insert(
-        "X-Encryption-IV",
-        attachment.encrypted_image_iv.parse().unwrap(),
-    );
+    // Empty string for unencrypted attachments
+    let iv = attachment.image_iv.unwrap_or_default();
+    headers.insert("X-Encryption-IV", iv.parse().unwrap());
 
-    Ok((headers, Body::from(attachment.encrypted_image)))
+    Ok((headers, Body::from(attachment.image_data)))
 }
 
-/// Get a single encrypted thumbnail by size as binary stream.
-/// IV is returned in the `X-Encryption-IV` header.
+/// Get a single thumbnail by size as binary stream.
+/// IV is returned in the `X-Encryption-IV` header (empty string if unencrypted).
 /// Size must be "sm", "md", or "lg".
 async fn get_thumbnail(
     State(state): State<AttachmentsState>,
@@ -278,13 +330,15 @@ async fn get_thumbnail(
         header::CONTENT_TYPE,
         "application/octet-stream".parse().unwrap(),
     );
-    headers.insert("X-Encryption-IV", thumbnail.iv.parse().unwrap());
+    // Empty string for unencrypted attachments
+    let iv = thumbnail.iv.unwrap_or_default();
+    headers.insert("X-Encryption-IV", iv.parse().unwrap());
 
     Ok((headers, Body::from(thumbnail.data)))
 }
 
-/// Get all encrypted thumbnails as a multipart response.
-/// Each part has `X-Thumbnail-Size` header (sm, md, lg) and `X-Encryption-IV` header.
+/// Get all thumbnails as a multipart response.
+/// Each part has `X-Thumbnail-Size` header (sm, md, lg) and `X-Encryption-IV` header (empty if unencrypted).
 async fn get_thumbnails(
     State(state): State<AttachmentsState>,
     ApiAuth(user): ApiAuth,
@@ -303,29 +357,32 @@ async fn get_thumbnails(
     let mut body = Vec::new();
 
     // Small thumbnail (always present)
+    let sm_iv = thumbnails.sm.iv.as_deref().unwrap_or("");
     body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
     body.extend_from_slice(b"Content-Type: application/octet-stream\r\n");
-    body.extend_from_slice(format!("X-Thumbnail-Size: sm\r\n").as_bytes());
-    body.extend_from_slice(format!("X-Encryption-IV: {}\r\n\r\n", thumbnails.sm.iv).as_bytes());
+    body.extend_from_slice(b"X-Thumbnail-Size: sm\r\n");
+    body.extend_from_slice(format!("X-Encryption-IV: {}\r\n\r\n", sm_iv).as_bytes());
     body.extend_from_slice(&thumbnails.sm.data);
     body.extend_from_slice(b"\r\n");
 
     // Medium thumbnail (optional)
     if let Some(ref md) = thumbnails.md {
+        let md_iv = md.iv.as_deref().unwrap_or("");
         body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
         body.extend_from_slice(b"Content-Type: application/octet-stream\r\n");
-        body.extend_from_slice(format!("X-Thumbnail-Size: md\r\n").as_bytes());
-        body.extend_from_slice(format!("X-Encryption-IV: {}\r\n\r\n", md.iv).as_bytes());
+        body.extend_from_slice(b"X-Thumbnail-Size: md\r\n");
+        body.extend_from_slice(format!("X-Encryption-IV: {}\r\n\r\n", md_iv).as_bytes());
         body.extend_from_slice(&md.data);
         body.extend_from_slice(b"\r\n");
     }
 
     // Large thumbnail (optional)
     if let Some(ref lg) = thumbnails.lg {
+        let lg_iv = lg.iv.as_deref().unwrap_or("");
         body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
         body.extend_from_slice(b"Content-Type: application/octet-stream\r\n");
-        body.extend_from_slice(format!("X-Thumbnail-Size: lg\r\n").as_bytes());
-        body.extend_from_slice(format!("X-Encryption-IV: {}\r\n\r\n", lg.iv).as_bytes());
+        body.extend_from_slice(b"X-Thumbnail-Size: lg\r\n");
+        body.extend_from_slice(format!("X-Encryption-IV: {}\r\n\r\n", lg_iv).as_bytes());
         body.extend_from_slice(&lg.data);
         body.extend_from_slice(b"\r\n");
     }
