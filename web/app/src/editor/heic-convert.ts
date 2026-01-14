@@ -76,7 +76,7 @@ export async function convertHeicIfNeeded(file: File): Promise<File> {
     webpBlob = await heicTo({
       blob: file,
       type: "image/webp",
-      quality: 0.92,
+      quality: 0.85,
     });
   } catch (err) {
     throw new HeicConversionError(

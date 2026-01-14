@@ -2,42 +2,45 @@
  * Safely extract an error message from a fetch Response.
  *
  * Handles cases where the server returns non-JSON (e.g., Cloudflare 500 HTML pages).
- * Returns a user-friendly error message.
+ * Returns a user-friendly error message with status code for debugging.
  */
 export async function getErrorMessage(
-	response: Response,
-	fallback: string,
+  response: Response,
+  fallback: string,
 ): Promise<string> {
-	try {
-		const text = await response.text();
-		if (!text) {
-			return fallback;
-		}
+  const status = response.status;
+  try {
+    const text = await response.text();
+    if (!text) {
+      return `${fallback} (${status})`;
+    }
 
-		// Try to parse as JSON
-		const json = JSON.parse(text);
-		if (json.error && typeof json.error === "string") {
-			return json.error;
-		}
+    // Try to parse as JSON
+    const json = JSON.parse(text);
+    if (json.error && typeof json.error === "string") {
+      return json.error;
+    }
 
-		return fallback;
-	} catch {
-		// JSON parse failed - likely HTML error page
-		return fallback;
-	}
+    // JSON but no error field - include raw text (truncated)
+    const preview = text.length > 100 ? text.slice(0, 100) + "..." : text;
+    return `${fallback} (${status}): ${preview}`;
+  } catch {
+    // JSON parse failed - likely HTML error page
+    return `${fallback} (${status})`;
+  }
 }
 
 /**
  * Check if an error is likely a transient server error that could be retried.
  */
 function isRetryableStatus(status: number): boolean {
-	return status >= 500 && status < 600;
+  return status >= 500 && status < 600;
 }
 
 interface RetryOptions {
-	maxRetries?: number;
-	delayMs?: number;
-	fallbackError: string;
+  maxRetries?: number;
+  delayMs?: number;
+  fallbackError: string;
 }
 
 /**
@@ -47,31 +50,31 @@ interface RetryOptions {
  * This is useful for handling transient issues like Cloudflare errors.
  */
 export async function fetchWithRetry(
-	input: RequestInfo | URL,
-	init: RequestInit,
-	options: RetryOptions,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  options: RetryOptions,
 ): Promise<Response> {
-	const { maxRetries = 2, delayMs = 1000, fallbackError } = options;
+  const { maxRetries = 2, delayMs = 1000, fallbackError } = options;
 
-	const attempt = async (retriesLeft: number): Promise<Response> => {
-		const response = await fetch(input, init);
+  const attempt = async (retriesLeft: number): Promise<Response> => {
+    const response = await fetch(input, init);
 
-		if (response.ok) {
-			return response;
-		}
+    if (response.ok) {
+      return response;
+    }
 
-		if (isRetryableStatus(response.status) && retriesLeft > 0) {
-			const errorMsg = await getErrorMessage(response, "Server error");
-			console.warn(
-				`Request failed with ${response.status}: ${errorMsg}, retrying...`,
-			);
-			await new Promise((resolve) => setTimeout(resolve, delayMs));
-			return attempt(retriesLeft - 1);
-		}
+    if (isRetryableStatus(response.status) && retriesLeft > 0) {
+      const errorMsg = await getErrorMessage(response, "Server error");
+      console.warn(
+        `Request failed with ${response.status}: ${errorMsg}, retrying...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return attempt(retriesLeft - 1);
+    }
 
-		const errorMsg = await getErrorMessage(response, fallbackError);
-		throw new Error(errorMsg);
-	};
+    const errorMsg = await getErrorMessage(response, fallbackError);
+    throw new Error(errorMsg);
+  };
 
-	return attempt(maxRetries);
+  return attempt(maxRetries);
 }

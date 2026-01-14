@@ -153,7 +153,7 @@ async function compressImage(file: File): Promise<File> {
 
       while (quality > 0.1) {
         blob = await new Promise<Blob | null>((res) =>
-          canvas.toBlob(res, "image/webp", quality),
+          canvas.toBlob(res, "image/jpeg", quality),
         );
 
         if (blob && blob.size <= TARGET_COMPRESSED_SIZE) {
@@ -169,9 +169,9 @@ async function compressImage(file: File): Promise<File> {
 
       const compressedFile = new File(
         [blob],
-        file.name.replace(/\.[^.]+$/, ".webp"),
+        file.name.replace(/\.[^.]+$/, ".jpg"),
         {
-          type: "image/webp",
+          type: "image/jpeg",
         },
       );
 

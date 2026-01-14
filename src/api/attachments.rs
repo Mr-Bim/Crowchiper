@@ -44,8 +44,8 @@ pub fn router(state: AttachmentsState) -> Router {
         .route("/{uuid}", get(get_attachment))
         .route("/{uuid}/thumbnails", get(get_thumbnails))
         .route("/{uuid}/thumbnail/{size}", get(get_thumbnail))
-        // 15MB limit: 10MB image + thumbnails + overhead
-        .layer(DefaultBodyLimit::max(15 * 1024 * 1024))
+        // 20MB limit: 10MB image + thumbnails + overhead
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024))
         .with_state(state)
 }
 
@@ -205,23 +205,23 @@ async fn upload_attachment(
         return Err(ApiError::bad_request("Image too large (max 10MB)"));
     }
 
-    // Limit thumbnail sizes
-    if thumb_sm.len() > 100 * 1024 {
+    // Limit thumbnail sizes (allow extra headroom for iOS JPEG encoding + encryption overhead)
+    if thumb_sm.len() > 250 * 1024 {
         return Err(ApiError::bad_request(
-            "Small thumbnail too large (max 100KB)",
+            "Small thumbnail too large (max 250KB)",
         ));
     }
     if let Some(ref data) = thumb_md {
-        if data.len() > 200 * 1024 {
+        if data.len() > 400 * 1024 {
             return Err(ApiError::bad_request(
-                "Medium thumbnail too large (max 200KB)",
+                "Medium thumbnail too large (max 400KB)",
             ));
         }
     }
     if let Some(ref data) = thumb_lg {
-        if data.len() > 500 * 1024 {
+        if data.len() > 750 * 1024 {
             return Err(ApiError::bad_request(
-                "Large thumbnail too large (max 500KB)",
+                "Large thumbnail too large (max 750KB)",
             ));
         }
     }

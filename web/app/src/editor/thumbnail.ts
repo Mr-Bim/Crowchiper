@@ -1,6 +1,6 @@
 /**
  * Thumbnail generation using canvas.
- * Creates JPEG thumbnails at multiple sizes for responsive display.
+ * Creates WebP thumbnails at multiple sizes for responsive display.
  */
 
 import { convertHeicIfNeeded } from "./heic-convert.ts";
@@ -11,7 +11,15 @@ const THUMBNAIL_SIZES = {
   lg: 800, // Large - desktop
 } as const;
 
-const THUMBNAIL_QUALITY = 0.85;
+const THUMBNAIL_QUALITY = 0.75;
+const MIN_QUALITY = 0.2;
+
+// Maximum sizes in bytes (matching server limits, with headroom for encryption overhead)
+const MAX_SIZES_BYTES = {
+  sm: 200 * 1024, // 200KB
+  md: 350 * 1024, // 350KB
+  lg: 700 * 1024, // 700KB
+} as const;
 
 export type ThumbnailSize = keyof typeof THUMBNAIL_SIZES;
 
@@ -23,7 +31,7 @@ export interface GeneratedThumbnails {
 
 /**
  * Generate thumbnails at all sizes from an image file.
- * Returns thumbnails as JPEG ArrayBuffers.
+ * Returns thumbnails as WebP ArrayBuffers.
  */
 export async function generateThumbnails(
   file: File,
@@ -35,9 +43,9 @@ export async function generateThumbnails(
   const img = await loadImage(convertedFile);
 
   const [sm, md, lg] = await Promise.all([
-    generateSingleThumbnail(img, THUMBNAIL_SIZES.sm),
-    generateSingleThumbnail(img, THUMBNAIL_SIZES.md),
-    generateSingleThumbnail(img, THUMBNAIL_SIZES.lg),
+    generateSingleThumbnail(img, THUMBNAIL_SIZES.sm, MAX_SIZES_BYTES.sm),
+    generateSingleThumbnail(img, THUMBNAIL_SIZES.md, MAX_SIZES_BYTES.md),
+    generateSingleThumbnail(img, THUMBNAIL_SIZES.lg, MAX_SIZES_BYTES.lg),
   ]);
 
   return { sm, md, lg };
@@ -45,10 +53,12 @@ export async function generateThumbnails(
 
 /**
  * Generate a single thumbnail at the specified max size.
+ * Compresses with lower quality if the result exceeds maxBytes.
  */
 async function generateSingleThumbnail(
   img: HTMLImageElement,
   maxSize: number,
+  maxBytes: number,
 ): Promise<ArrayBuffer> {
   // Calculate scaled dimensions
   const { width, height } = calculateThumbnailSize(
@@ -69,8 +79,33 @@ async function generateSingleThumbnail(
 
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Export as WebP
-  const blob = await new Promise<Blob>((resolve, reject) => {
+  // Try progressively lower quality until we fit within maxBytes
+  let quality = THUMBNAIL_QUALITY;
+  let blob: Blob;
+
+  while (quality >= MIN_QUALITY) {
+    blob = await canvasToBlob(canvas, quality);
+
+    if (blob.size <= maxBytes) {
+      return blob.arrayBuffer();
+    }
+
+    // Reduce quality by 10% and try again
+    quality -= 0.1;
+  }
+
+  // Return the last attempt even if still over limit (best effort)
+  return blob!.arrayBuffer();
+}
+
+/**
+ * Convert canvas to WebP blob at specified quality.
+ */
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  quality: number,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => {
         if (b) {
@@ -80,11 +115,9 @@ async function generateSingleThumbnail(
         }
       },
       "image/webp",
-      THUMBNAIL_QUALITY,
+      quality,
     );
   });
-
-  return blob.arrayBuffer();
 }
 
 /**
