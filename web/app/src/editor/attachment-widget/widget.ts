@@ -20,10 +20,7 @@ import {
   triggerFileInput,
 } from "./upload.ts";
 import { notifyAttachmentChange } from "./index.ts";
-
-// Pattern to find gallery with capturing groups for images
-const GALLERY_PATTERN =
-  /::gallery\{[^}]*\}((?:!\[[^\]]*\]\(attachment:[a-zA-Z0-9-]+\))+)::/g;
+import { GALLERY_PATTERN } from "./patterns.ts";
 
 interface GalleryPosition {
   from: number;
@@ -45,7 +42,7 @@ function findGalleryByUuid(
 
   let match: RegExpExecArray | null;
   while ((match = GALLERY_PATTERN.exec(text)) !== null) {
-    const imagesContent = match[1];
+    const imagesContent = match[2]; // Group 2 is images, group 1 is config
     if (imagesContent.includes(`attachment:${uuid}`)) {
       const galleryFrom = match.index;
       const galleryTo = galleryFrom + match[0].length;

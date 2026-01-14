@@ -17,6 +17,7 @@ import {
 } from "../api/posts.ts";
 import {
   clearImageCacheExcept,
+  cleanupPendingUploads,
   parseAttachmentUuids,
 } from "../editor/attachment-widget/index.ts";
 import { initDragAndDrop } from "./drag-and-drop.ts";
@@ -377,8 +378,9 @@ export async function selectPost(postSummary: PostSummary): Promise<void> {
   const post = await getPost(postSummary.uuid);
   setLoadedPost(post);
 
-  // Decrypt content
-  const displayContent = await decryptPostContent(post);
+  // Decrypt content and clean up any interrupted upload placeholders
+  const decryptedContent = await decryptPostContent(post);
+  const displayContent = cleanupPendingUploads(decryptedContent);
   setLoadedDecryptedContent(displayContent);
 
   // Track initial attachment UUIDs for this post

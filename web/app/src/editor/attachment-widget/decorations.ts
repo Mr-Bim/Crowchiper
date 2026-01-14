@@ -11,13 +11,7 @@ import {
 } from "@codemirror/view";
 
 import { GalleryContainerWidget, type GalleryImage } from "./widget.ts";
-
-// Pattern matches ::gallery{}...:: with images inside
-const GALLERY_PATTERN =
-  /::gallery\{([^}]*)\}((?:!\[[^\]]*\]\(attachment:[a-zA-Z0-9-]+\))+)::/g;
-
-// Pattern for extracting individual images from gallery content
-const GALLERY_IMAGE_PATTERN = /!\[([^\]]*)\]\(attachment:([a-zA-Z0-9-]+)\)/g;
+import { GALLERY_LINE_PATTERN, GALLERY_IMAGE_PATTERN } from "./patterns.ts";
 
 // ============================================================================
 // Build decorations
@@ -30,9 +24,9 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
     let match: RegExpExecArray | null;
-    GALLERY_PATTERN.lastIndex = 0;
+    GALLERY_LINE_PATTERN.lastIndex = 0;
 
-    while ((match = GALLERY_PATTERN.exec(line.text)) !== null) {
+    while ((match = GALLERY_LINE_PATTERN.exec(line.text)) !== null) {
       const galleryStart = line.from + match.index;
       const galleryEnd = galleryStart + match[0].length;
       const configPart = match[1];
@@ -108,9 +102,9 @@ function buildAtomicRanges(view: EditorView): DecorationSet {
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
     let match: RegExpExecArray | null;
-    GALLERY_PATTERN.lastIndex = 0;
+    GALLERY_LINE_PATTERN.lastIndex = 0;
 
-    while ((match = GALLERY_PATTERN.exec(line.text)) !== null) {
+    while ((match = GALLERY_LINE_PATTERN.exec(line.text)) !== null) {
       const galleryStart = line.from + match.index;
       const galleryEnd = galleryStart + match[0].length;
 

@@ -3,14 +3,9 @@
  */
 
 import { StateField } from "@codemirror/state";
-import {
-  EditorView,
-  keymap,
-} from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 
-// Pattern matches ::gallery{}...:: with images inside
-const GALLERY_PATTERN =
-  /::gallery\{([^}]*)\}((?:!\[[^\]]*\]\(attachment:[a-zA-Z0-9-]+\))+)::/g;
+import { GALLERY_LINE_PATTERN } from "./patterns.ts";
 
 // ============================================================================
 // Gallery line tracking
@@ -24,8 +19,8 @@ function findGalleryLines(doc: {
 
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
-    GALLERY_PATTERN.lastIndex = 0;
-    if (GALLERY_PATTERN.test(line.text)) {
+    GALLERY_LINE_PATTERN.lastIndex = 0;
+    if (GALLERY_LINE_PATTERN.test(line.text)) {
       galleryLines.add(i);
     }
   }

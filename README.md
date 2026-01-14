@@ -89,7 +89,7 @@ npm run build-all
 cargo test --tests -- --test-threads=1
 
 # Type check frontend
-npm run check
+npm run lint
 ```
 
 ## License

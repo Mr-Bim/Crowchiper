@@ -269,6 +269,59 @@
     --marker: 1;
 }
 
+/* Error toast notification */
+.gl-minify-disable-error-toast {
+    --marker: 1;
+}
+
+.error-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: oklch(0.95 0.05 25);
+    border: 1px solid oklch(0.8 0.1 25);
+    color: oklch(0.4 0.15 25);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10001;
+    max-width: 90vw;
+    font-size: 0.875rem;
+}
+
+.error-toast[hidden] {
+    display: none;
+}
+
+.error-toast-close {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.error-toast-close:hover {
+    opacity: 1;
+}
+
+:root[data-theme="dark"] .error-toast {
+    background: oklch(0.25 0.05 25);
+    border-color: oklch(0.4 0.1 25);
+    color: oklch(0.8 0.1 25);
+}
+
+.gl-minify-enable-error-toast {
+    --marker: 1;
+}
+
 @media (max-width: 48rem) {
     #sidebar-toggle {
         display: flex;

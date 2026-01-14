@@ -1,8 +1,19 @@
 /**
  * HEIC image conversion utility.
- * Converts HEIC/HEIF images to JPEG for browser compatibility.
+ * Converts HEIC/HEIF images to WebP for browser compatibility.
  * Uses dynamic import to lazy-load the heic-to library only when needed.
  */
+
+/** Custom error class for HEIC conversion failures */
+export class HeicConversionError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "HeicConversionError";
+  }
+}
 
 /**
  * Check if a file might be HEIC based on extension or MIME type.
@@ -20,9 +31,10 @@ function mightBeHeic(file: File): boolean {
 }
 
 /**
- * Check if a file is HEIC format and convert to JPEG if needed.
- * Returns the original file if not HEIC, or a converted JPEG File.
+ * Check if a file is HEIC format and convert to WebP if needed.
+ * Returns the original file if not HEIC, or a converted WebP File.
  * The heic-to library is only loaded when a HEIC file is detected.
+ * Throws HeicConversionError with user-friendly message on failure.
  */
 export async function convertHeicIfNeeded(file: File): Promise<File> {
   // Quick check based on extension/mime before loading heavy library
@@ -31,20 +43,47 @@ export async function convertHeicIfNeeded(file: File): Promise<File> {
   }
 
   // Dynamically import heic-to only when needed
-  const { isHeic, heicTo } = await import("heic-to/csp");
+  let heicModule;
+  try {
+    heicModule = await import("heic-to/csp");
+  } catch (err) {
+    throw new HeicConversionError(
+      "Failed to load image converter. Please try a different image format.",
+      err,
+    );
+  }
+
+  const { isHeic, heicTo } = heicModule;
 
   // Verify it's actually a HEIC file
-  const isHeicFile = await isHeic(file);
+  let isHeicFile: boolean;
+  try {
+    isHeicFile = await isHeic(file);
+  } catch (err) {
+    throw new HeicConversionError(
+      "Failed to read the image file. The file may be corrupted.",
+      err,
+    );
+  }
+
   if (!isHeicFile) {
     return file;
   }
 
   // Convert HEIC to WebP
-  const webpBlob = await heicTo({
-    blob: file,
-    type: "image/webp",
-    quality: 0.92,
-  });
+  let webpBlob: Blob;
+  try {
+    webpBlob = await heicTo({
+      blob: file,
+      type: "image/webp",
+      quality: 0.92,
+    });
+  } catch (err) {
+    throw new HeicConversionError(
+      "Failed to convert HEIC image. Try taking a screenshot of the image instead.",
+      err,
+    );
+  }
 
   // Create a new File with .webp extension
   const newName = file.name.replace(/\.heic$/i, ".webp");
