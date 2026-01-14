@@ -11,4 +11,3 @@ export {
 } from "./attachment-widget/index.ts";
 export { checkboxPlugin } from "./checkbox-widget.ts";
 export { slashCommands } from "./slash-commands.ts";
-export { generateThumbnails, getThumbnailSizes } from "./thumbnail.ts";

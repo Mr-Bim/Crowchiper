@@ -3,9 +3,10 @@
     "build-iife": "IIFE=1 vite build",
     "build-login": "BUILD=login vite build",
     "build-app": "BUILD=app vite build",
-    "build-app-test": "BUILD=app TEST_MODE=1 vite build",
+    "build-app-release": "BUILD=app RELEASE_MODE=1 vite build",
     "build-all": "npm run build-iife && npm run build-login && npm run build-app",
-    "build-all-test": "npm run build-iife && npm run build-login && npm run build-app-test",
+    "build-all-release": "npm run build-iife && npm run build-login && npm run build-app-release",
+    "check": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix"
   },

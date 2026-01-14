@@ -205,23 +205,23 @@ async fn upload_attachment(
         return Err(ApiError::bad_request("Image too large (max 10MB)"));
     }
 
-    // Limit thumbnail sizes (allow extra headroom for iOS JPEG encoding + encryption overhead)
-    if thumb_sm.len() > 250 * 1024 {
+    // Limit thumbnail sizes (frontend targets: sm=100KB, md=200KB, lg=400KB + encryption overhead)
+    if thumb_sm.len() > 150 * 1024 {
         return Err(ApiError::bad_request(
-            "Small thumbnail too large (max 250KB)",
+            "Small thumbnail too large (max 150KB)",
         ));
     }
     if let Some(ref data) = thumb_md {
-        if data.len() > 400 * 1024 {
+        if data.len() > 250 * 1024 {
             return Err(ApiError::bad_request(
-                "Medium thumbnail too large (max 400KB)",
+                "Medium thumbnail too large (max 250KB)",
             ));
         }
     }
     if let Some(ref data) = thumb_lg {
-        if data.len() > 750 * 1024 {
+        if data.len() > 500 * 1024 {
             return Err(ApiError::bad_request(
-                "Large thumbnail too large (max 750KB)",
+                "Large thumbnail too large (max 500KB)",
             ));
         }
     }

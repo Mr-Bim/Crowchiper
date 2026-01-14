@@ -283,8 +283,7 @@ impl TestContext {
     /// Returns the test key that was injected.
     ///
     /// This enables testing encrypted content without PRF support.
-    /// Requires the app to be built with TEST_MODE=1.
-    #[cfg(feature = "test-mode")]
+    /// Test mode is enabled by default in development builds.
     pub async fn enable_test_encryption(&self, user_id: i64) -> String {
         // Enable encryption in database (no PRF salt needed)
         self.db

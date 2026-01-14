@@ -15,7 +15,6 @@ fn app_url(ctx: &common::TestContext) -> String {
 
 /// Helper to create an authenticated user with encryption enabled
 /// Returns (user_id, test_key) - caller must inject test_key after navigating to app page
-#[cfg(feature = "test-mode")]
 async fn setup_authenticated_user_with_encryption(ctx: &common::TestContext) -> (i64, String) {
     let jwt = JwtConfig::new(b"test-jwt-secret-for-testing");
 
@@ -53,7 +52,6 @@ async fn setup_authenticated_user_with_encryption(ctx: &common::TestContext) -> 
 }
 
 /// Navigate to app and inject test key before page loads
-#[cfg(feature = "test-mode")]
 async fn navigate_to_app_with_key(ctx: &common::TestContext, app_base: &str, test_key: &str) {
     // Use CDP to inject the test key before any page scripts run
     // This ensures the key is available when main.ts initializes
@@ -71,7 +69,6 @@ async fn navigate_to_app_with_key(ctx: &common::TestContext, app_base: &str, tes
 }
 
 #[test]
-#[cfg(feature = "test-mode")]
 fn test_new_post_content_is_encrypted_in_database() {
     runtime().block_on(async {
         let ctx = setup().await;
@@ -182,7 +179,6 @@ fn test_new_post_content_is_encrypted_in_database() {
 }
 
 #[test]
-#[cfg(feature = "test-mode")]
 fn test_updated_post_content_is_encrypted_in_database() {
     runtime().block_on(async {
         let ctx = setup().await;
@@ -295,7 +291,6 @@ fn test_updated_post_content_is_encrypted_in_database() {
 }
 
 #[test]
-#[cfg(feature = "test-mode")]
 fn test_post_title_extracted_and_encrypted() {
     runtime().block_on(async {
         let ctx = setup().await;
@@ -379,7 +374,6 @@ fn test_post_title_extracted_and_encrypted() {
 }
 
 #[test]
-#[cfg(feature = "test-mode")]
 fn test_encrypted_content_decrypts_correctly_on_reload() {
     runtime().block_on(async {
         let ctx = setup().await;
@@ -476,7 +470,6 @@ fn test_encrypted_content_decrypts_correctly_on_reload() {
 }
 
 #[test]
-#[cfg(feature = "test-mode")]
 fn test_save_button_shows_unsaved_changes() {
     runtime().block_on(async {
         let ctx = setup().await;

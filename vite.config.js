@@ -63,9 +63,9 @@ const app = defineConfig({
   root: "web/app/",
   base: `${config.assets}/`,
   define: {
-    // Enable test mode when TEST_MODE env var is set.
-    // This allows injecting encryption keys for testing without PRF support.
-    __TEST_MODE__: JSON.stringify(!!process.env.TEST_MODE),
+    // Test mode is enabled by default for development/testing.
+    // Set RELEASE_MODE=1 to disable test mode for production builds.
+    __RELEASE_MODE__: JSON.stringify(!!process.env.RELEASE_MODE),
   },
   build: {
     outDir: "../../dist/app",

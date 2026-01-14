@@ -331,90 +331,71 @@ export class GalleryContainerWidget extends WidgetType {
       return;
     }
 
-    triggerFileInput(async (file) => {
-      // Find current gallery position
-      const gallery = findGalleryByUuid(view.state.doc, knownUuid);
-      if (!gallery) {
-        console.error("Could not find gallery position");
-        return;
+    triggerFileInput(async (files) => {
+      // Process files one at a time
+      for (const file of files) {
+        await this.addSingleImage(view, file, knownUuid);
       }
+    });
+  }
 
-      // Use "converting" state for HEIC files, "pending" for others
-      const initialState = isHeicFile(file) ? "converting" : "pending";
-      const initialAlt =
-        initialState === "converting" ? "converting..." : "uploading...";
-      const loadingPlaceholder = `![${initialAlt}](attachment:${initialState})`;
+  private async addSingleImage(
+    view: EditorView,
+    file: File,
+    knownUuid: string,
+  ): Promise<void> {
+    // Find current gallery position
+    const gallery = findGalleryByUuid(view.state.doc, knownUuid);
+    if (!gallery) {
+      console.error("Could not find gallery position");
+      return;
+    }
 
-      // Insert loading placeholder before the closing ::
-      const insertPos = gallery.to - 2;
-      view.dispatch({
-        changes: { from: insertPos, to: insertPos, insert: loadingPlaceholder },
+    // Use "converting" state for HEIC files, "pending" for others
+    const initialState = isHeicFile(file) ? "converting" : "pending";
+    const initialAlt =
+      initialState === "converting" ? "converting..." : "uploading...";
+    const loadingPlaceholder = `![${initialAlt}](attachment:${initialState})`;
+
+    // Insert loading placeholder before the closing ::
+    const insertPos = gallery.to - 2;
+    view.dispatch({
+      changes: { from: insertPos, to: insertPos, insert: loadingPlaceholder },
+    });
+
+    // Track current state for cleanup and cancellation check
+    let currentState: "converting" | "pending" = initialState;
+
+    // Helper to check if placeholder still exists
+    const placeholderExists = () =>
+      findImageInGallery(view.state.doc, currentState) !== null;
+
+    try {
+      const uuid = await processAndUploadFile(file, {
+        onStateChange: (newState) => {
+          // Update placeholder when state changes (converting -> pending)
+          if (newState === "pending" && initialState === "converting") {
+            const placeholderPos = findImageInGallery(
+              view.state.doc,
+              "converting",
+            );
+            if (placeholderPos) {
+              view.dispatch({
+                changes: {
+                  from: placeholderPos.from,
+                  to: placeholderPos.to,
+                  insert: "![uploading...](attachment:pending)",
+                },
+              });
+              currentState = "pending";
+            }
+          }
+        },
+        isCancelled: () => !placeholderExists(),
       });
 
-      // Track current state for cleanup and cancellation check
-      let currentState: "converting" | "pending" = initialState;
-
-      // Helper to check if placeholder still exists
-      const placeholderExists = () =>
-        findImageInGallery(view.state.doc, currentState) !== null;
-
-      try {
-        const uuid = await processAndUploadFile(file, {
-          onStateChange: (newState) => {
-            // Update placeholder when state changes (converting -> pending)
-            if (newState === "pending" && initialState === "converting") {
-              const placeholderPos = findImageInGallery(
-                view.state.doc,
-                "converting",
-              );
-              if (placeholderPos) {
-                view.dispatch({
-                  changes: {
-                    from: placeholderPos.from,
-                    to: placeholderPos.to,
-                    insert: "![uploading...](attachment:pending)",
-                  },
-                });
-                currentState = "pending";
-              }
-            }
-          },
-          isCancelled: () => !placeholderExists(),
-        });
-
-        if (uuid === null) {
-          // User cancelled or placeholder deleted - clean up if still exists
-          const placeholderPos = findImageInGallery(
-            view.state.doc,
-            currentState,
-          );
-          if (placeholderPos) {
-            view.dispatch({
-              changes: {
-                from: placeholderPos.from,
-                to: placeholderPos.to,
-                insert: "",
-              },
-            });
-          }
-          return;
-        }
-
-        // Find the placeholder and replace it with the real UUID
-        const placeholderPos = findImageInGallery(view.state.doc, "pending");
-        if (placeholderPos) {
-          const newImage = `![image](attachment:${uuid})`;
-          view.dispatch({
-            changes: {
-              from: placeholderPos.from,
-              to: placeholderPos.to,
-              insert: newImage,
-            },
-          });
-          notifyAttachmentChange();
-        }
-      } catch {
-        // Remove the placeholder on error if it still exists
+      if (uuid === null) {
+        // User cancelled or placeholder deleted - clean up if still exists
         const placeholderPos = findImageInGallery(view.state.doc, currentState);
         if (placeholderPos) {
           view.dispatch({
@@ -425,8 +406,35 @@ export class GalleryContainerWidget extends WidgetType {
             },
           });
         }
+        return;
       }
-    });
+
+      // Find the placeholder and replace it with the real UUID
+      const placeholderPos = findImageInGallery(view.state.doc, "pending");
+      if (placeholderPos) {
+        const newImage = `![image](attachment:${uuid})`;
+        view.dispatch({
+          changes: {
+            from: placeholderPos.from,
+            to: placeholderPos.to,
+            insert: newImage,
+          },
+        });
+        notifyAttachmentChange();
+      }
+    } catch {
+      // Remove the placeholder on error if it still exists
+      const placeholderPos = findImageInGallery(view.state.doc, currentState);
+      if (placeholderPos) {
+        view.dispatch({
+          changes: {
+            from: placeholderPos.from,
+            to: placeholderPos.to,
+            insert: "",
+          },
+        });
+      }
+    }
   }
 
   private async showFullImage(uuid: string, alt: string): Promise<void> {
