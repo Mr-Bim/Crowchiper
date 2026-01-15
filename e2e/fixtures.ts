@@ -6,6 +6,15 @@ import {
   CDPSession,
 } from "@playwright/test";
 import { getServer, getDefaultServer, ServerOptions } from "./server.ts";
+import config from "../config.json" with { type: "json" };
+
+/** App assets path from config.json (e.g., "/fiery-sparrow") */
+export const APP_PATH = config.assets;
+
+/** Build the full app URL from a base URL */
+export function appUrl(baseUrl: string): string {
+  return `${baseUrl}${APP_PATH}`;
+}
 
 interface TestFixtures {
   context: BrowserContext;
