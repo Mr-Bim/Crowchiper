@@ -9,6 +9,7 @@ import { EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, keymap } from "@codemirror/view";
 import { attachmentPlugin } from "./attachment-widget/index.ts";
 import { checkboxPlugin } from "./checkbox-widget.ts";
+import { dateShortcuts } from "./date-shortcuts.ts";
 import { slashCommands } from "./slash-commands.ts";
 import "../../editor.css";
 
@@ -25,6 +26,7 @@ export function createEditor(
       syntaxHighlighting(defaultHighlightStyle),
       markdown(),
       attachmentPlugin, // Must come before default keymap to intercept Backspace/Delete
+      dateShortcuts, // Date insertion shortcuts (must come before default keymap)
       keymap.of([...completionKeymap, ...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
       slashCommands,

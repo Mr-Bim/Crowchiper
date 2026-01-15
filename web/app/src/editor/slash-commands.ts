@@ -14,6 +14,7 @@ import {
 } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
 import { triggerImageUpload } from "./attachment-widget/index.ts";
+import { getToday, getYesterday, getTomorrow } from "./date-shortcuts.ts";
 
 interface SlashCommand {
   label: string;
@@ -60,6 +61,39 @@ const commands: SlashCommand[] = [
       view.dispatch({ changes: { from, to, insert: "" } });
       // Then trigger file picker
       triggerImageUpload(view);
+    },
+  },
+  {
+    label: "Today",
+    description: "Insert today's date (YYYY-MM-DD)",
+    apply: (view, _completion, from, to) => {
+      const date = getToday();
+      view.dispatch({
+        changes: { from, to, insert: date },
+        selection: { anchor: from + date.length },
+      });
+    },
+  },
+  {
+    label: "Yesterday",
+    description: "Insert yesterday's date (YYYY-MM-DD)",
+    apply: (view, _completion, from, to) => {
+      const date = getYesterday();
+      view.dispatch({
+        changes: { from, to, insert: date },
+        selection: { anchor: from + date.length },
+      });
+    },
+  },
+  {
+    label: "Tomorrow",
+    description: "Insert tomorrow's date (YYYY-MM-DD)",
+    apply: (view, _completion, from, to) => {
+      const date = getTomorrow();
+      view.dispatch({
+        changes: { from, to, insert: date },
+        selection: { anchor: from + date.length },
+      });
     },
   },
 ];

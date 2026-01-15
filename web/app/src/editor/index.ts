@@ -10,4 +10,10 @@ export {
   clearImageCacheExcept,
 } from "./attachment-widget/index.ts";
 export { checkboxPlugin } from "./checkbox-widget.ts";
+export {
+  dateShortcuts,
+  getToday,
+  getYesterday,
+  getTomorrow,
+} from "./date-shortcuts.ts";
 export { slashCommands } from "./slash-commands.ts";
