@@ -85,8 +85,11 @@ Users without PRF support can skip encryption and use plaintext storage.
 # Build frontend
 npm run build-all
 
-# Run tests (single-threaded due to shared browser)
+# Run Rust browser tests (single-threaded due to shared browser)
 cargo test --tests -- --test-threads=1
+
+# Run Playwright e2e tests
+npx playwright test
 
 # Type check frontend
 npm run lint

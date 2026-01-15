@@ -21,6 +21,7 @@ import {
   type ProcessedImage,
 } from "../heic-convert.ts";
 import { showError } from "../../toast.ts";
+import { GALLERY_PATTERN } from "./patterns.ts";
 
 /**
  * Check if a file is a HEIC/HEIF image.
@@ -244,22 +245,50 @@ function placeholderExists(
 
 /**
  * Process a single file and insert/update the placeholder in the editor.
- * Returns true if successful, false if failed/cancelled.
+ * If galleryCreated is false, creates a new gallery. Otherwise appends to existing.
+ * Returns the UUID if successful, null if failed/cancelled.
  */
 async function uploadSingleFile(
   view: EditorView,
   file: File,
   insertPos: number,
-): Promise<boolean> {
+  galleryCreated: boolean,
+): Promise<string | null> {
   // Use "converting" state for HEIC files, "pending" for others
   const initialState = isHeicFile(file) ? "converting" : "pending";
   const initialAlt =
     initialState === "converting" ? "converting..." : "uploading...";
-  const loadingGallery = `\n::gallery{}![${initialAlt}](attachment:${initialState})::`;
 
-  view.dispatch({
-    changes: { from: insertPos, to: insertPos, insert: loadingGallery },
-  });
+  if (galleryCreated) {
+    // Append to existing gallery - insert before the closing ::
+    const doc = view.state.doc.toString();
+    GALLERY_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let lastMatchEnd = -1;
+
+    while ((match = GALLERY_PATTERN.exec(doc)) !== null) {
+      if (match.index >= insertPos - 50) {
+        // Found a gallery near our insert position
+        lastMatchEnd = match.index + match[0].length;
+        break;
+      }
+    }
+
+    if (lastMatchEnd !== -1) {
+      // Insert before the closing ::
+      const appendPos = lastMatchEnd - 2;
+      const placeholder = `![${initialAlt}](attachment:${initialState})`;
+      view.dispatch({
+        changes: { from: appendPos, to: appendPos, insert: placeholder },
+      });
+    }
+  } else {
+    // Create new gallery
+    const loadingGallery = `\n::gallery{}![${initialAlt}](attachment:${initialState})::`;
+    view.dispatch({
+      changes: { from: insertPos, to: insertPos, insert: loadingGallery },
+    });
+  }
 
   // Track current state for cancellation check
   let currentState: "converting" | "pending" = initialState;
@@ -268,8 +297,7 @@ async function uploadSingleFile(
     onStateChange: (newState) => {
       // Update placeholder when state changes (converting -> pending)
       if (newState === "pending" && initialState === "converting") {
-        const doc = view.state.doc;
-        const fullDoc = doc.toString();
+        const fullDoc = view.state.doc.toString();
         const oldText = "![converting...](attachment:converting)";
         const newText = "![uploading...](attachment:pending)";
         const placeholderIndex = fullDoc.indexOf(oldText);
@@ -291,29 +319,42 @@ async function uploadSingleFile(
   // uuid is null on cancel or error - clean up placeholder if it still exists
   if (uuid === null) {
     if (placeholderExists(view, currentState)) {
-      const searchText =
+      // Try to remove just the placeholder image, not the whole gallery
+      const placeholderText =
         currentState === "converting"
-          ? "::gallery{}![converting...](attachment:converting)::"
-          : "::gallery{}![uploading...](attachment:pending)::";
+          ? "![converting...](attachment:converting)"
+          : "![uploading...](attachment:pending)";
       const fullDoc = view.state.doc.toString();
-      const placeholderIndex = fullDoc.indexOf(searchText);
+      const placeholderIndex = fullDoc.indexOf(placeholderText);
       if (placeholderIndex !== -1) {
         view.dispatch({
           changes: {
             from: placeholderIndex,
-            to: placeholderIndex + searchText.length,
+            to: placeholderIndex + placeholderText.length,
+            insert: "",
+          },
+        });
+      }
+
+      // Clean up empty galleries
+      const emptyGallery = "\n::gallery{}::";
+      const emptyIndex = view.state.doc.toString().indexOf(emptyGallery);
+      if (emptyIndex !== -1) {
+        view.dispatch({
+          changes: {
+            from: emptyIndex,
+            to: emptyIndex + emptyGallery.length,
             insert: "",
           },
         });
       }
     }
-    return false;
+    return null;
   }
 
   // Find and replace the placeholder with the final image
-  const doc = view.state.doc;
   const searchText = "![uploading...](attachment:pending)";
-  const fullDoc = doc.toString();
+  const fullDoc = view.state.doc.toString();
   const placeholderIndex = fullDoc.indexOf(searchText);
 
   if (placeholderIndex !== -1) {
@@ -328,12 +369,12 @@ async function uploadSingleFile(
     notifyAttachmentChange();
   }
 
-  return true;
+  return uuid;
 }
 
 /**
  * Trigger an image upload via file picker.
- * Opens a file dialog, uploads the selected images one at a time, and inserts galleries on new lines below the cursor.
+ * Opens a file dialog, uploads the selected images, and inserts them into a single gallery.
  * Multiple files can be selected but they are processed sequentially.
  * If one fails, continues to the next.
  */
@@ -341,14 +382,22 @@ export function triggerImageUpload(view: EditorView): void {
   // Get the end of the current line to insert after it
   const cursorPos = view.state.selection.main.head;
   const currentLine = view.state.doc.lineAt(cursorPos);
-  let insertPos = currentLine.to;
+  const insertPos = currentLine.to;
 
   triggerFileInput(async (files) => {
-    // Process files one at a time
+    let galleryCreated = false;
+
+    // Process files one at a time, all into the same gallery
     for (const file of files) {
-      await uploadSingleFile(view, file, insertPos);
-      // Update insert position to end of document for next file
-      insertPos = view.state.doc.length;
+      const uuid = await uploadSingleFile(
+        view,
+        file,
+        insertPos,
+        galleryCreated,
+      );
+      if (uuid !== null) {
+        galleryCreated = true;
+      }
     }
   });
 }

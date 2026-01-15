@@ -5,6 +5,10 @@
 
   "compilerOptions": {
     "rewriteRelativeImportExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@fixtures": ["e2e/fixtures.ts"],
+    },
     "lib": [
       "DOM",
       "es2024",

@@ -28,6 +28,20 @@ async fn main() {
         std::process::exit(1);
     };
 
+    let addr = format!("0.0.0.0:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .unwrap_or_else(|e| {
+            error!(address = %addr, error = %e, "Failed to bind");
+            std::process::exit(1);
+        });
+
+    let local_addr = listener.local_addr().unwrap();
+
+    // In test mode, update rp_origin to include actual port when using port 0 with localhost
+    #[cfg(feature = "test-mode")]
+    let rp_origin = test_mode::maybe_update_rp_origin(rp_origin, args.port, local_addr.port());
+
     let config = build_config(
         args.base,
         db,
@@ -38,18 +52,33 @@ async fn main() {
     );
     let app = create_app(&config);
 
-    let addr = format!("0.0.0.0:{}", args.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .unwrap_or_else(|e| {
-            error!(address = %addr, error = %e, "Failed to bind");
-            std::process::exit(1);
-        });
+    info!(address = %local_addr, "Listening");
 
-    info!(address = %addr, "Listening");
+    #[cfg(feature = "test-mode")]
+    println!("CROWCHIPER_READY port={}", local_addr.port());
 
     if let Err(e) = axum::serve(listener, app).await {
         error!(error = %e, "Server error");
         std::process::exit(1);
+    }
+}
+
+#[cfg(feature = "test-mode")]
+mod test_mode {
+    use url::Url;
+
+    /// Update rp_origin to include the actual port when using port 0 with localhost.
+    pub fn maybe_update_rp_origin(
+        mut rp_origin: Url,
+        requested_port: u16,
+        actual_port: u16,
+    ) -> Url {
+        if requested_port == 0
+            && rp_origin.host_str() == Some("localhost")
+            && rp_origin.port().is_none()
+        {
+            rp_origin.set_port(Some(actual_port)).ok();
+        }
+        rp_origin
     }
 }

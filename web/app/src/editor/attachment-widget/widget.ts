@@ -20,7 +20,7 @@ import {
   triggerFileInput,
 } from "./upload.ts";
 import { notifyAttachmentChange } from "./index.ts";
-import { GALLERY_PATTERN } from "./patterns.ts";
+import { GALLERY_PATTERN, GALLERY_IMAGE_PATTERN } from "./patterns.ts";
 
 interface GalleryPosition {
   from: number;
@@ -246,9 +246,13 @@ export class GalleryContainerWidget extends WidgetType {
     imgEl.className = "cm-attachment-thumbnail";
     imgEl.title = "Click to view full size";
 
-    imgEl.addEventListener("click", () =>
-      this.showFullImage(img.uuid, img.alt),
-    );
+    imgEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Blur editor to hide mobile keyboard
+      view.contentDOM.blur();
+      this.showFullImage(img.uuid, view);
+    });
 
     wrapper.appendChild(imgEl);
     container.appendChild(wrapper);
@@ -437,78 +441,250 @@ export class GalleryContainerWidget extends WidgetType {
     }
   }
 
-  private async showFullImage(uuid: string, alt: string): Promise<void> {
+  /**
+   * Get all images from all galleries in the document.
+   */
+  private getAllImagesFromDocument(
+    view: EditorView,
+  ): { uuid: string; alt: string }[] {
+    const text = view.state.doc.toString();
+    const images: { uuid: string; alt: string }[] = [];
+
+    GALLERY_PATTERN.lastIndex = 0;
+    let galleryMatch: RegExpExecArray | null;
+
+    while ((galleryMatch = GALLERY_PATTERN.exec(text)) !== null) {
+      const imagesContent = galleryMatch[2];
+      GALLERY_IMAGE_PATTERN.lastIndex = 0;
+      let imageMatch: RegExpExecArray | null;
+
+      while (
+        (imageMatch = GALLERY_IMAGE_PATTERN.exec(imagesContent)) !== null
+      ) {
+        const uuid = imageMatch[2];
+        // Skip pending/converting placeholders
+        if (uuid !== "pending" && uuid !== "converting") {
+          images.push({ uuid, alt: imageMatch[1] });
+        }
+      }
+    }
+
+    return images;
+  }
+
+  private showFullImage(uuid: string, view: EditorView): void {
+    const allImages = this.getAllImagesFromDocument(view);
+    if (allImages.length === 0) return;
+
+    let currentIndex = allImages.findIndex((img) => img.uuid === uuid);
+    if (currentIndex === -1) currentIndex = 0;
+
     const overlay = document.createElement("div");
     overlay.className = "cm-attachment-overlay";
 
-    const closeHandler = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
-      if (e instanceof MouseEvent && e.target !== overlay) return;
-      overlay.remove();
-      document.removeEventListener("keydown", closeHandler);
-    };
-    overlay.addEventListener("click", closeHandler);
-    document.addEventListener("keydown", closeHandler);
+    // Image container for centering
+    const imageContainer = document.createElement("div");
+    imageContainer.className = "cm-attachment-image-container";
 
-    const cachedFull = fullImageCache.get(uuid);
-    if (cachedFull) {
-      this.displayFullImage(overlay, cachedFull, alt);
-      document.body.appendChild(overlay);
-      return;
+    // Navigation buttons (only show if multiple images)
+    let prevBtn: HTMLButtonElement | null = null;
+    let nextBtn: HTMLButtonElement | null = null;
+
+    if (allImages.length > 1) {
+      prevBtn = document.createElement("button");
+      prevBtn.type = "button";
+      prevBtn.className = "cm-attachment-nav-btn cm-attachment-nav-prev";
+      prevBtn.setAttribute("aria-label", "Previous image");
+      prevBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+
+      nextBtn = document.createElement("button");
+      nextBtn.type = "button";
+      nextBtn.className = "cm-attachment-nav-btn cm-attachment-nav-next";
+      nextBtn.setAttribute("aria-label", "Next image");
+      nextBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+
+      overlay.appendChild(prevBtn);
+      overlay.appendChild(nextBtn);
     }
 
-    const loading = document.createElement("div");
-    loading.className = "cm-attachment-overlay-loading";
-    loading.textContent = "Loading full image...";
-    overlay.appendChild(loading);
+    // Image counter
+    const counter = document.createElement("div");
+    counter.className = "cm-attachment-counter";
+    overlay.appendChild(counter);
+
+    overlay.appendChild(imageContainer);
     document.body.appendChild(overlay);
 
-    try {
-      const response = await getAttachment(uuid);
+    // Navigation functions
+    const showImage = async (index: number) => {
+      currentIndex = index;
+      const img = allImages[currentIndex];
 
-      let imageData: ArrayBuffer;
+      // Update counter
+      counter.textContent = `${currentIndex + 1} / ${allImages.length}`;
 
-      // Check if data is encrypted (IV is non-empty)
-      if (response.iv) {
-        // Encrypted data - need to decrypt
-        const sessionEncryptionKey = getSessionEncryptionKey();
-        if (!sessionEncryptionKey) {
-          loading.textContent = "Unlock required to view image";
-          return;
-        }
-        imageData = await decryptBinary(
-          response.data,
-          response.iv,
-          sessionEncryptionKey,
-        );
-      } else {
-        // Unencrypted data - use directly
-        imageData = response.data;
+      // Update button visibility
+      if (prevBtn) {
+        prevBtn.style.visibility = currentIndex > 0 ? "visible" : "hidden";
+      }
+      if (nextBtn) {
+        nextBtn.style.visibility =
+          currentIndex < allImages.length - 1 ? "visible" : "hidden";
       }
 
-      const blob = new Blob([imageData], { type: "image/webp" });
-      const blobUrl = URL.createObjectURL(blob);
+      // Clear current content
+      imageContainer.innerHTML = "";
 
-      fullImageCache.set(uuid, blobUrl);
-      overlay.removeChild(loading);
-      this.displayFullImage(overlay, blobUrl, alt);
-    } catch (err) {
-      console.error("Failed to load full image:", err);
-      loading.textContent = "Failed to load image";
+      // Check cache first
+      const cached = fullImageCache.get(img.uuid);
+      if (cached) {
+        const imgEl = document.createElement("img");
+        imgEl.src = cached;
+        imgEl.alt = img.alt || "Attached image";
+        imgEl.className = "cm-attachment-full-image";
+        imgEl.addEventListener("click", (e) => e.stopPropagation());
+        imageContainer.appendChild(imgEl);
+        return;
+      }
+
+      // Show loading
+      const loading = document.createElement("div");
+      loading.className = "cm-attachment-overlay-loading";
+      loading.textContent = "Loading...";
+      imageContainer.appendChild(loading);
+
+      try {
+        const response = await getAttachment(img.uuid);
+        let imageData: ArrayBuffer;
+
+        if (response.iv) {
+          const sessionEncryptionKey = getSessionEncryptionKey();
+          if (!sessionEncryptionKey) {
+            loading.textContent = "Unlock required";
+            return;
+          }
+          imageData = await decryptBinary(
+            response.data,
+            response.iv,
+            sessionEncryptionKey,
+          );
+        } else {
+          imageData = response.data;
+        }
+
+        const blob = new Blob([imageData], { type: "image/webp" });
+        const blobUrl = URL.createObjectURL(blob);
+        fullImageCache.set(img.uuid, blobUrl);
+
+        imageContainer.innerHTML = "";
+        const imgEl = document.createElement("img");
+        imgEl.src = blobUrl;
+        imgEl.alt = img.alt || "Attached image";
+        imgEl.className = "cm-attachment-full-image";
+        imgEl.addEventListener("click", (e) => e.stopPropagation());
+        imageContainer.appendChild(imgEl);
+      } catch (err) {
+        console.error("Failed to load full image:", err);
+        loading.textContent = "Failed to load";
+      }
+    };
+
+    const goNext = () => {
+      if (currentIndex < allImages.length - 1) {
+        showImage(currentIndex + 1);
+      }
+    };
+
+    const goPrev = () => {
+      if (currentIndex > 0) {
+        showImage(currentIndex - 1);
+      }
+    };
+
+    const close = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", keyHandler);
+    };
+
+    // Keyboard handler
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        close();
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        goNext();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        goPrev();
+      }
+    };
+    document.addEventListener("keydown", keyHandler);
+
+    // Click to close (on overlay background only)
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        close();
+      }
+    });
+
+    // Navigation button handlers
+    if (prevBtn) {
+      prevBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        goPrev();
+      });
     }
-  }
+    if (nextBtn) {
+      nextBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        goNext();
+      });
+    }
 
-  private displayFullImage(
-    overlay: HTMLElement,
-    src: string,
-    alt: string,
-  ): void {
-    const img = document.createElement("img");
-    img.src = src;
-    img.alt = alt || "Attached image";
-    img.className = "cm-attachment-full-image";
-    img.addEventListener("click", (e) => e.stopPropagation());
-    overlay.appendChild(img);
+    // Touch swipe support
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+
+    overlay.addEventListener(
+      "touchstart",
+      (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+      },
+      { passive: true },
+    );
+
+    overlay.addEventListener(
+      "touchend",
+      (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipe();
+      },
+      { passive: true },
+    );
+
+    const handleSwipe = () => {
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+      const minSwipeDistance = 50;
+
+      // Only handle horizontal swipes (ignore if vertical movement is larger)
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (deltaX < -minSwipeDistance) {
+          // Swipe left -> next image
+          goNext();
+        } else if (deltaX > minSwipeDistance) {
+          // Swipe right -> previous image
+          goPrev();
+        }
+      }
+    };
+
+    // Show the initial image
+    showImage(currentIndex);
   }
 
   ignoreEvent(): boolean {

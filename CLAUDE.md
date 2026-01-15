@@ -14,7 +14,8 @@ npm run lint:fix           # TypeScript type check and fix
 cargo run -- --port 7291 --database crowchiper.db
 cargo run -- --base /app   # With base path for reverse proxy
 cargo run -- --no-signup   # Disable signups
-cargo test --tests -- --test-threads=1  # Run all tests (test-mode enabled by default)
+cargo test --tests -- --test-threads=1  # Run Rust browser tests (test-mode enabled by default)
+npx playwright test        # Run Playwright e2e tests
 cargo build --release --no-default-features  # Release build without test-mode
 ```
 
@@ -31,10 +32,11 @@ With `--base /app`, all paths are prefixed.
 
 - Run `cargo build` when finished with new functionality
 - Write tests for new functionality and run all tests before finishing
-- Run `npm run link:fix` when changing frontend code
+- Run `npm run lint:fix` when changing frontend code
 - Never expose internal database IDs - use UUIDs for API responses
 - Use data attributes for JS-controlled visibility (CSS minifier mangles class names)
 - Page-specific CSS in separate files, not inline `<style>` blocks
+- **Use `.ts` extensions** for all relative imports in `web/` and `e2e/` folders (e.g., `import { foo } from "./bar.ts"`)
 
 ## CSS Minifier Control
 
@@ -101,6 +103,15 @@ The test code is stripped from release/production builds:
 - JS: Use `npm run build-all-release` to build with RELEASE_MODE (strips test code)
 - `__RELEASE_MODE__` constant is replaced at build time and dead code is eliminated
 
+## Gallery/Attachment Patterns
+
+Shared regex patterns for gallery parsing are in `web/app/src/editor/attachment-widget/patterns.ts`:
+- `GALLERY_PATTERN` - Match gallery syntax anywhere in text
+- `GALLERY_LINE_PATTERN` - Match gallery syntax on a single line (with ^ anchor)
+- `GALLERY_IMAGE_PATTERN` - Extract individual images from gallery content
+
+Always import and reuse these patterns instead of defining new regex for galleries.
+
 ## Save Button
 
 The app header includes a Save button that:
@@ -109,3 +120,37 @@ The app header includes a Save button that:
 - Uses `data-dirty` attribute for styling (`data-dirty="true"` or `data-dirty="false"`)
 - Located in `web/app/index.html`, styled in `web/app/app.css`
 - Functionality in `web/app/src/posts/ui.ts` (`handleSave`, `updateSaveButton`)
+
+## Playwright E2E Tests
+
+E2E tests use Playwright with Chrome. Located in `e2e/` folder.
+
+**Features**:
+- Chrome's virtual authenticator for passkey testing
+- File upload support
+- CDP session for WebAuthn configuration
+
+**Server management** (`e2e/server.ts`):
+- Servers are lazy-loaded and cached by config
+- Default server uses `:memory:` database
+- Use `serverWithOptions()` fixture for tests needing specific flags (e.g., `--no-signup`)
+
+**Usage in tests**:
+```typescript
+import { test, expect } from "./fixtures.ts";
+
+// Default server
+test("basic test", async ({ page, baseUrl }) => {
+  await page.goto(`${baseUrl}/login/`);
+});
+
+// Server with specific options
+test("no-signup test", async ({ page, serverWithOptions }) => {
+  const { baseUrl } = await serverWithOptions({ noSignup: true });
+  await page.goto(`${baseUrl}/login/`);
+});
+```
+
+The Rust server outputs `CROWCHIPER_READY port=<port>` in test-mode for the test harness to capture the port.
+
+**First-time setup**: Run `npx playwright install chromium` to download the browser.

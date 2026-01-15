@@ -49,3 +49,9 @@ Don't leak internal errors. Use `db_err()` and `webauthn_err()` from `ResultExt`
 Uses `webauthn-rs`. CLI args: `--rp-id`, `--rp-origin`.
 
 Challenge storage in database (persists across restarts, 5min expiry).
+
+## Test Mode
+
+Test-mode specific code is gated with `#[cfg(feature = "test-mode")]`. In `main.rs`:
+- `test_mode::maybe_update_rp_origin()` - Updates rp_origin to include actual port when using `--port 0` with localhost (needed for WebAuthn origin validation in e2e tests)
+- `CROWCHIPER_READY port=<port>` - Printed to stdout for test harnesses to capture the port

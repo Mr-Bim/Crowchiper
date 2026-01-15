@@ -252,6 +252,14 @@
     cursor: pointer;
 }
 
+.cm-attachment-image-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
 .cm-attachment-overlay-loading {
     color: white;
     font-size: 0.875rem;
@@ -263,6 +271,64 @@
     max-height: 90vh;
     object-fit: contain;
     cursor: default;
+}
+
+.cm-attachment-nav-btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+    transition: background 0.15s;
+    z-index: 10001;
+}
+
+.cm-attachment-nav-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.cm-attachment-nav-prev {
+    left: 16px;
+}
+
+.cm-attachment-nav-next {
+    right: 16px;
+}
+
+.cm-attachment-counter {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 0.875rem;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 4px 12px;
+    border-radius: 16px;
+    z-index: 10001;
+}
+
+@media (max-width: 600px) {
+    .cm-attachment-nav-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .cm-attachment-nav-prev {
+        left: 8px;
+    }
+
+    .cm-attachment-nav-next {
+        right: 8px;
+    }
 }
 
 .gl-minify-enable-attachment-overlay {
