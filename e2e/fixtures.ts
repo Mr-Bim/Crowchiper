@@ -24,9 +24,10 @@ interface TestFixtures {
   serverWithOptions: (options: ServerOptions) => Promise<{ baseUrl: string }>;
 }
 
-async function setupWebAuthn(page: Page): Promise<CDPSession> {
-  const client = await page.context().newCDPSession(page);
-
+/** Add a virtual authenticator to an existing CDP session */
+export async function addVirtualAuthenticator(
+  client: CDPSession,
+): Promise<void> {
   await client.send("WebAuthn.enable");
 
   await client.send("WebAuthn.addVirtualAuthenticator", {
@@ -36,10 +37,16 @@ async function setupWebAuthn(page: Page): Promise<CDPSession> {
       hasResidentKey: true,
       hasUserVerification: true,
       isUserVerified: true,
+      hasPrf: true,
       automaticPresenceSimulation: true,
     },
   });
+}
 
+/** Set up WebAuthn for a page, creating a new CDP session */
+async function setupWebAuthn(page: Page): Promise<CDPSession> {
+  const client = await page.context().newCDPSession(page);
+  await addVirtualAuthenticator(client);
   return client;
 }
 

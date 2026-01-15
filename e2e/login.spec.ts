@@ -1,4 +1,4 @@
-import { test, expect, APP_PATH } from "./fixtures.ts";
+import { test, expect, APP_PATH, addVirtualAuthenticator } from "./fixtures.ts";
 
 test.describe("Login page", () => {
   test("page loads with correct title", async ({ page, baseUrl }) => {
@@ -55,18 +55,7 @@ test.describe("Login page", () => {
     // Create a fresh page for registration
     const page = await context.newPage();
     const client = await page.context().newCDPSession(page);
-
-    await client.send("WebAuthn.enable");
-    await client.send("WebAuthn.addVirtualAuthenticator", {
-      options: {
-        protocol: "ctap2",
-        transport: "internal",
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        automaticPresenceSimulation: true,
-      },
-    });
+    await addVirtualAuthenticator(client);
 
     // First, register a user via the register page
     await page.goto(`${baseUrl}/login/register.html`);
@@ -120,18 +109,7 @@ test.describe("Login with base path", () => {
     // Create a fresh page
     const page = await context.newPage();
     const client = await page.context().newCDPSession(page);
-
-    await client.send("WebAuthn.enable");
-    await client.send("WebAuthn.addVirtualAuthenticator", {
-      options: {
-        protocol: "ctap2",
-        transport: "internal",
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        automaticPresenceSimulation: true,
-      },
-    });
+    await addVirtualAuthenticator(client);
 
     // First, register a user
     await page.goto(`${baseUrl}/login/register.html`);
