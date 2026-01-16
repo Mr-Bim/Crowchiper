@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export interface ServerOptions {
+interface ServerOptions {
   noSignup?: boolean;
   base?: string;
 }
@@ -15,36 +15,41 @@ interface ServerInstance {
   baseUrl: string;
 }
 
-// Cache servers by their config key
-const servers = new Map<string, ServerInstance>();
-
-function optionsToKey(options: ServerOptions): string {
-  return JSON.stringify({
-    noSignup: options.noSignup ?? false,
-    base: options.base ?? "",
-  });
+/** Available server configurations */
+export enum Server {
+  Default = "default",
+  NoSignup = "noSignup",
+  BasePath = "basePath",
 }
 
-export async function getServer(
-  options: ServerOptions = {},
-): Promise<{ port: number; baseUrl: string }> {
-  const key = optionsToKey(options);
+/** Server configuration definitions */
+const SERVER_CONFIGS: Record<Server, ServerOptions> = {
+  [Server.Default]: {},
+  [Server.NoSignup]: { noSignup: true },
+  [Server.BasePath]: { base: "/crow-chipher" },
+};
 
+// Cache servers by their config key
+const servers = new Map<Server, ServerInstance>();
+
+export async function getServer(
+  server: Server,
+): Promise<{ port: number; baseUrl: string }> {
   // Return existing server if available
-  const existing = servers.get(key);
+  const existing = servers.get(server);
   if (existing) {
     return { port: existing.port, baseUrl: existing.baseUrl };
   }
 
   // Spawn new server
-  const instance = await spawnServer(options);
-  servers.set(key, instance);
+  const instance = await spawnServer(SERVER_CONFIGS[server]);
+  servers.set(server, instance);
 
   return { port: instance.port, baseUrl: instance.baseUrl };
 }
 
 async function spawnServer(options: ServerOptions): Promise<ServerInstance> {
-  const binaryPath = path.resolve(__dirname, "../target/debug/crowchiper");
+  const binaryPath = path.resolve(__dirname, "../../target/debug/crowchiper");
 
   const args = [
     "--port",
@@ -61,9 +66,9 @@ async function spawnServer(options: ServerOptions): Promise<ServerInstance> {
 
   if (options.base) {
     args.push("--base", options.base);
-    args.push("--rp-origin", "http://localhost"); // Will be updated with actual port
+    args.push("--rp-origin", "http://localhost");
   } else {
-    args.push("--rp-origin", "http://localhost"); // Will be updated with actual port
+    args.push("--rp-origin", "http://localhost");
   }
 
   const proc = spawn(binaryPath, args, {
@@ -119,17 +124,28 @@ function waitForReady(proc: ChildProcess): Promise<number> {
   });
 }
 
-export async function shutdownAllServers(): Promise<void> {
-  for (const [key, instance] of servers) {
+export function shutdownAllServers(): void {
+  for (const [, instance] of servers) {
     instance.proc.kill();
-    servers.delete(key);
   }
+  servers.clear();
 }
 
-// Default server getter for convenience
-export async function getDefaultServer(): Promise<{
-  port: number;
-  baseUrl: string;
-}> {
-  return getServer({});
+// Handle process termination signals to clean up servers
+process.on("SIGTERM", () => {
+  shutdownAllServers();
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  shutdownAllServers();
+  process.exit(0);
+});
+
+/**
+ * Pre-start all server configurations.
+ * Called from global setup to ensure servers are ready before parallel tests run.
+ */
+export async function startAllServers(): Promise<void> {
+  await Promise.all(Object.values(Server).map((server) => getServer(server)));
 }

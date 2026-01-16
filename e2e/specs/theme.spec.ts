@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures.ts";
+import { test, expect } from "../utils/fixtures.ts";
 
 test.describe("Theme toggle", () => {
   test("changes theme when selecting different option", async ({

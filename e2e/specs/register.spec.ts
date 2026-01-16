@@ -1,4 +1,9 @@
-import { test, expect, addVirtualAuthenticator } from "./fixtures.ts";
+import {
+  test,
+  expect,
+  addVirtualAuthenticator,
+  Server,
+} from "../utils/fixtures.ts";
 
 test.describe("Register page", () => {
   test("page loads with correct title", async ({ page, baseUrl }) => {
@@ -72,7 +77,7 @@ test.describe("Register page", () => {
     await expect(page).toHaveTitle("Crowchiper", { timeout: 5000 });
   });
 
-  test("claim username success", async ({ page, baseUrl }) => {
+  test("claim username success", async ({ page, baseUrl, testId }) => {
     await page.goto(`${baseUrl}/login/register.html`);
 
     // Wait for JS to load
@@ -80,8 +85,10 @@ test.describe("Register page", () => {
       timeout: 5000,
     });
 
+    const username = `claim_${testId}`;
+
     // Type username and click register
-    await page.fill("#username", "testuser");
+    await page.fill("#username", username);
     await page.click("#register-button");
 
     // Wait for redirect to setup-encryption page (user is now logged in)
@@ -91,7 +98,13 @@ test.describe("Register page", () => {
     });
   });
 
-  test("claim duplicate username fails", async ({ context, baseUrl }) => {
+  test("claim duplicate username fails", async ({
+    context,
+    baseUrl,
+    testId,
+  }) => {
+    const username = `dup_${testId}`;
+
     // First page - register first user
     const page1 = await context.newPage();
     const client1 = await page1.context().newCDPSession(page1);
@@ -102,7 +115,7 @@ test.describe("Register page", () => {
       timeout: 5000,
     });
 
-    await page1.fill("#username", "duplicateuser");
+    await page1.fill("#username", username);
     await page1.click("#register-button");
 
     // Wait for registration to complete
@@ -124,7 +137,7 @@ test.describe("Register page", () => {
       timeout: 5000,
     });
 
-    await page2.fill("#username", "duplicateuser");
+    await page2.fill("#username", username);
     await page2.click("#register-button");
 
     // Wait for error message
@@ -137,7 +150,7 @@ test.describe("Register page", () => {
     await page2.close();
   });
 
-  test("multiple users can register", async ({ context, baseUrl }) => {
+  test("multiple users can register", async ({ context, baseUrl, testId }) => {
     // First user
     const page1 = await context.newPage();
     const client1 = await page1.context().newCDPSession(page1);
@@ -148,7 +161,7 @@ test.describe("Register page", () => {
       timeout: 5000,
     });
 
-    await page1.fill("#username", "firstuser");
+    await page1.fill("#username", `first_${testId}`);
     await page1.click("#register-button");
     await expect(page1).toHaveTitle("Setup Encryption - Crowchiper", {
       timeout: 10000,
@@ -164,7 +177,7 @@ test.describe("Register page", () => {
       timeout: 5000,
     });
 
-    await page2.fill("#username", "seconduser");
+    await page2.fill("#username", `second_${testId}`);
     await page2.click("#register-button");
     await expect(page2).toHaveTitle("Setup Encryption - Crowchiper", {
       timeout: 10000,
@@ -178,9 +191,9 @@ test.describe("Register page", () => {
 test.describe("Register with signup disabled", () => {
   test("register page redirects to login when signup disabled", async ({
     page,
-    serverWithOptions,
+    getServerUrl,
   }) => {
-    const { baseUrl } = await serverWithOptions({ noSignup: true });
+    const baseUrl = await getServerUrl(Server.NoSignup);
     await page.goto(`${baseUrl}/login/register.html`);
 
     // Should redirect to login page
@@ -192,9 +205,9 @@ test.describe("Register with signup disabled", () => {
 
   test("register link hidden when signup disabled", async ({
     page,
-    serverWithOptions,
+    getServerUrl,
   }) => {
-    const { baseUrl } = await serverWithOptions({ noSignup: true });
+    const baseUrl = await getServerUrl(Server.NoSignup);
     await page.goto(`${baseUrl}/login/index.html`);
 
     // Wait for JS to load

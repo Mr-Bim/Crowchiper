@@ -6,18 +6,24 @@ import {
   generateTestPrfOutput,
   injectTestPrfOutput,
   injectTestUsername,
-} from "./fixtures.ts";
+  createUser,
+  uniqueTestId,
+  CreateUserResult,
+} from "../utils/fixtures.ts";
+import { getServer, Server } from "../utils/server.ts";
+import { BrowserContext } from "@playwright/test";
 
 test.describe("Encryption setup flow", () => {
   test("registers user, tests PRF support, enables encryption", async ({
     context,
     baseUrl,
+    testId,
   }) => {
     const page = await context.newPage();
     const client = await page.context().newCDPSession(page);
     await addVirtualAuthenticator(client);
 
-    const username = "prfuser";
+    const username = `prf_${testId}`;
 
     // Inject test PRF output and username (Chrome's virtual authenticator limitations)
     const testPrfOutput = generateTestPrfOutput();
@@ -63,13 +69,14 @@ test.describe("Encryption setup flow", () => {
   test("registers user without PRF, skips encryption", async ({
     context,
     baseUrl,
+    testId,
   }) => {
     const page = await context.newPage();
     const client = await page.context().newCDPSession(page);
     // No PRF support and no injected PRF output
     await addVirtualAuthenticator(client, { hasPrf: false });
 
-    const username = "noprfuser";
+    const username = `noprf_${testId}`;
     await injectTestUsername(page, username);
 
     // Register a new user
@@ -107,106 +114,38 @@ test.describe("Encryption setup flow", () => {
 
     await page.close();
   });
+});
 
-  test("user can unlock with PRF and view posts", async ({
-    context,
-    baseUrl,
-  }) => {
-    const page = await context.newPage();
-    const client = await page.context().newCDPSession(page);
-    await addVirtualAuthenticator(client);
+test.describe("Encryption usage", () => {
+  let context: BrowserContext;
+  let userResult: CreateUserResult;
 
-    const username = "unlockuser";
-
-    // Inject test PRF output and username
-    const testPrfOutput = generateTestPrfOutput();
-    await injectTestPrfOutput(page, testPrfOutput);
-    await injectTestUsername(page, username);
-
-    // Register and enable encryption
-    await page.goto(`${baseUrl}/login/register.html`);
-    await expect(page.locator("#register-button")).toBeEnabled({
-      timeout: 5000,
+  test.beforeAll(async ({ browser }) => {
+    const { baseUrl } = await getServer(Server.Default);
+    context = await browser.newContext();
+    const username = `encuser_${uniqueTestId()}`;
+    userResult = await createUser({
+      context,
+      baseUrl,
+      username,
+      enableEncryption: true,
     });
-
-    await page.fill("#username", username);
-    await page.click("#register-button");
-
-    await expect(page).toHaveTitle("Setup Encryption - Crowchiper", {
-      timeout: 10000,
-    });
-
-    const testPrfBtn = page.locator("#test-prf-btn");
-    await expect(testPrfBtn).toBeEnabled({ timeout: 5000 });
-    await testPrfBtn.click();
-
-    const enableEncryptionBtn = page.locator("#enable-encryption-btn");
-    await expect(enableEncryptionBtn).toBeVisible({ timeout: 10000 });
-    await enableEncryptionBtn.click();
-
-    // Should redirect to app with unlock overlay
-    await expect(page).toHaveURL(new RegExp(`${APP_PATH}`), { timeout: 10000 });
-
-    const unlockOverlay = page.locator("#unlock-overlay");
-    await expect(unlockOverlay).toBeVisible({ timeout: 5000 });
-
-    // Click unlock button
-    const unlockBtn = page.locator("#unlock-btn");
-    await expect(unlockBtn).toBeEnabled({ timeout: 5000 });
-    await unlockBtn.click();
-
-    // Unlock overlay should disappear
-    await expect(unlockOverlay).toBeHidden({ timeout: 10000 });
-
-    // The editor should be visible (app is functional)
-    const editor = page.locator("#editor");
-    await expect(editor).toBeVisible({ timeout: 5000 });
-
-    await page.close();
   });
 
-  test("can create and save encrypted post", async ({ context, baseUrl }) => {
-    const page = await context.newPage();
-    const client = await page.context().newCDPSession(page);
-    await addVirtualAuthenticator(client);
+  test.afterAll(async () => {
+    await context?.close();
+  });
 
-    const username = "encryptedpostuser";
+  test("editor is visible after unlock", async () => {
+    const { page } = userResult;
 
-    // Inject test PRF output and username
-    const testPrfOutput = generateTestPrfOutput();
-    await injectTestPrfOutput(page, testPrfOutput);
-    await injectTestUsername(page, username);
+    // The editor should be visible (app is functional after createUser unlocks)
+    const editor = page.locator("#editor");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+  });
 
-    // Register and enable encryption
-    await page.goto(`${baseUrl}/login/register.html`);
-    await expect(page.locator("#register-button")).toBeEnabled({
-      timeout: 5000,
-    });
-
-    await page.fill("#username", username);
-    await page.click("#register-button");
-
-    await expect(page).toHaveTitle("Setup Encryption - Crowchiper", {
-      timeout: 10000,
-    });
-
-    const testPrfBtn = page.locator("#test-prf-btn");
-    await expect(testPrfBtn).toBeEnabled({ timeout: 5000 });
-    await testPrfBtn.click();
-
-    const enableEncryptionBtn = page.locator("#enable-encryption-btn");
-    await expect(enableEncryptionBtn).toBeVisible({ timeout: 10000 });
-    await enableEncryptionBtn.click();
-
-    // Unlock
-    await expect(page).toHaveURL(new RegExp(`${APP_PATH}`), { timeout: 10000 });
-
-    const unlockBtn = page.locator("#unlock-btn");
-    await expect(unlockBtn).toBeEnabled({ timeout: 5000 });
-    await unlockBtn.click();
-
-    const unlockOverlay = page.locator("#unlock-overlay");
-    await expect(unlockOverlay).toBeHidden({ timeout: 10000 });
+  test("can create and save encrypted post", async () => {
+    const { page } = userResult;
 
     // Create a new post
     const newPostBtn = page.locator("#new-post-btn");
@@ -234,7 +173,5 @@ test.describe("Encryption setup flow", () => {
     await expect(postList.locator(".post-wrapper")).toHaveCount(2, {
       timeout: 5000,
     }); // 1 new post + 1 default "Untitled"
-
-    await page.close();
   });
 });

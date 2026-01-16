@@ -1,5 +1,5 @@
 import * as jose from "jose";
-import { test, expect, appUrl, APP_PATH } from "./fixtures.ts";
+import { test, expect, appUrl, APP_PATH, Server } from "../utils/fixtures.ts";
 
 // JWT helper utilities
 const JWT_SECRET = new TextEncoder().encode(
@@ -189,9 +189,9 @@ test.describe("App authentication", () => {
 test.describe("App authentication with base path", () => {
   test("app with base path redirects to login", async ({
     page,
-    serverWithOptions,
+    getServerUrl,
   }) => {
-    const { baseUrl } = await serverWithOptions({ base: "/myapp" });
+    const baseUrl = await getServerUrl(Server.BasePath);
 
     // Navigate to login first to clear any cookies
     await page.goto(`${baseUrl}/login/index.html`);
@@ -208,9 +208,9 @@ test.describe("App authentication with base path", () => {
 
   test("app with base path accessible with token", async ({
     page,
-    serverWithOptions,
+    getServerUrl,
   }) => {
-    const { baseUrl } = await serverWithOptions({ base: "/crowchiper" });
+    const baseUrl = await getServerUrl(Server.BasePath);
 
     // Generate a valid token
     const token = await generateToken("test-uuid", "testuser", UserRole.User);

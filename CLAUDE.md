@@ -132,34 +132,6 @@ The app header includes a Save button that:
 
 ## Playwright E2E Tests
 
-E2E tests use Playwright with Chrome. Located in `e2e/` folder.
-
-**Features**:
-- Chrome's virtual authenticator for passkey testing
-- File upload support
-- CDP session for WebAuthn configuration
-
-**Server management** (`e2e/server.ts`):
-- Servers are lazy-loaded and cached by config
-- Default server uses `:memory:` database
-- Use `serverWithOptions()` fixture for tests needing specific flags (e.g., `--no-signup`)
-
-**Usage in tests**:
-```typescript
-import { test, expect } from "./fixtures.ts";
-
-// Default server
-test("basic test", async ({ page, baseUrl }) => {
-  await page.goto(`${baseUrl}/login/`);
-});
-
-// Server with specific options
-test("no-signup test", async ({ page, serverWithOptions }) => {
-  const { baseUrl } = await serverWithOptions({ noSignup: true });
-  await page.goto(`${baseUrl}/login/`);
-});
-```
-
-The Rust server outputs `CROWCHIPER_READY port=<port>` in test-mode for the test harness to capture the port.
+E2E tests located in `e2e/` folder. See `e2e/CLAUDE.md` for details.
 
 **First-time setup**: Run `npx playwright install chromium` to download the browser.

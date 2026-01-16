@@ -1,6 +1,6 @@
 # E2E Tests
 
-Playwright tests using Lightpanda browser.
+Playwright tests with Chrome. Tests run in parallel across files.
 
 ## Commands
 
@@ -15,45 +15,143 @@ All relative imports MUST include the `.ts` extension:
 
 ```typescript
 // Correct
-import { test, expect } from "./fixtures.ts";
-import { getServer } from "./server.ts";
+import { test, expect, Server } from "./fixtures.ts";
 
 // Wrong - will fail
 import { test, expect } from "./fixtures";
-import { getServer } from "./server";
 ```
-
-This applies to the web folder as well.
 
 ## Files
 
-- `fixtures.ts` - Test fixtures (`page`, `baseUrl`, `serverWithOptions`)
-- `server.ts` - Server manager for lazy-loading Crowchiper servers
-- `global-setup.ts` - Starts Lightpanda and default server
-- `global-teardown.ts` - Stops all servers and Lightpanda
+- `fixtures.ts` - Test fixtures and utilities
+- `server.ts` - Server manager with `Server` enum
+- `global-setup.ts` - Pre-starts all server configurations
+- `global-teardown.ts` - Stops all servers
 
-## Writing Tests
+## Writing Parallel-Safe Tests
+
+Tests across different files run in parallel. To avoid conflicts:
+
+### 1. Always use `testId` for usernames
 
 ```typescript
 import { test, expect } from "./fixtures.ts";
 
-// Use default server
+test("register user", async ({ page, baseUrl, testId }) => {
+  const username = `mytest_${testId}`;
+  await page.fill("#username", username);
+  await page.click("#register-button");
+});
+```
+
+### 2. Use the `Server` enum for different server configs
+
+```typescript
+import { test, expect, Server } from "./fixtures.ts";
+
+// Default server
 test("basic test", async ({ page, baseUrl }) => {
   await page.goto(`${baseUrl}/login/`);
 });
 
-// Use server with specific options (lazy-loaded, cached)
-test("no-signup test", async ({ page, serverWithOptions }) => {
-  const { baseUrl } = await serverWithOptions({ noSignup: true });
+// Server with signup disabled
+test("no-signup test", async ({ page, getServerUrl }) => {
+  const baseUrl = await getServerUrl(Server.NoSignup);
+  await page.goto(`${baseUrl}/login/`);
+});
+
+// Server with base path (/crow-chipher)
+test("base path test", async ({ page, getServerUrl }) => {
+  const baseUrl = await getServerUrl(Server.BasePath);
   await page.goto(`${baseUrl}/login/`);
 });
 ```
 
-## Server Options
+## Available Fixtures
 
-Available options for `serverWithOptions()`:
+- `baseUrl` - Default server URL
+- `getServerUrl(server: Server)` - Get URL for any server configuration
+- `testId` - Unique ID for test isolation (use for usernames)
+- `page` - Playwright page with WebAuthn enabled
+- `context` - Browser context
+- `cdpSession` - CDP session for advanced WebAuthn control
 
-- `noSignup: boolean` - Start server with `--no-signup` flag
-- `base: string` - Start server with `--base` path (e.g., `/app`)
+## Creating Users in beforeAll
 
-Servers are cached by config - requesting the same options twice returns the same server.
+Use `createUser()` to set up a user once for all tests in a file. This avoids repeating registration/encryption setup in each test.
+
+```typescript
+import {
+  test,
+  expect,
+  createUser,
+  uniqueTestId,
+  CreateUserResult,
+} from "./fixtures.ts";
+import { getServer, Server } from "./server.ts";
+import { BrowserContext, Page } from "@playwright/test";
+
+test.describe("My feature tests", () => {
+  let context: BrowserContext;
+  let userResult: CreateUserResult;
+  let username: string;
+
+  test.beforeAll(async ({ browser }) => {
+    // Get server URL
+    const { baseUrl } = await getServer(Server.Default);
+
+    // Create a shared context
+    context = await browser.newContext();
+
+    // Create user with encryption enabled
+    username = `myfeature_${uniqueTestId()}`;
+    userResult = await createUser({
+      context,
+      baseUrl,
+      username,
+      enableEncryption: true, // default, can omit
+    });
+  });
+
+  test.afterAll(async () => {
+    await context?.close();
+  });
+
+  test("first test", async () => {
+    const { page } = userResult;
+    // page is already logged in and unlocked
+    await expect(page.locator("#editor")).toBeVisible();
+  });
+
+  test("second test", async () => {
+    const { page } = userResult;
+    // same user, same session
+  });
+});
+```
+
+### createUser Options
+
+- `context` - Browser context (create via `browser.newContext()`)
+- `baseUrl` - Server base URL (get via `getServer(Server.Default)`)
+- `username` - Unique username (use `uniqueTestId()` for isolation)
+- `enableEncryption` - Whether to enable encryption (default: `true`)
+
+### createUser Returns
+
+- `page` - Logged-in page (at app index, unlocked if encryption enabled)
+- `cdpSession` - CDP session for the page
+- `prfOutput` - The PRF output used (null if encryption disabled)
+
+## Available Server Configurations
+
+Defined in `Server` enum:
+- `Server.Default` - Standard server
+- `Server.NoSignup` - Server with `--no-signup` flag
+- `Server.BasePath` - Server with `--base /crow-chipher`
+
+## Adding a New Server Configuration
+
+1. Add to `Server` enum in `server.ts`
+2. Add config to `SERVER_CONFIGS` object
+3. It will be auto-started in global setup

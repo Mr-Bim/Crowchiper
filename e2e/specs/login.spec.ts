@@ -1,4 +1,10 @@
-import { test, expect, APP_PATH, addVirtualAuthenticator } from "./fixtures.ts";
+import {
+  test,
+  expect,
+  APP_PATH,
+  addVirtualAuthenticator,
+  Server,
+} from "../utils/fixtures.ts";
 
 test.describe("Login page", () => {
   test("page loads with correct title", async ({ page, baseUrl }) => {
@@ -51,11 +57,14 @@ test.describe("Login page", () => {
   test("login success redirects to encryption setup", async ({
     context,
     baseUrl,
+    testId,
   }) => {
     // Create a fresh page for registration
     const page = await context.newPage();
     const client = await page.context().newCDPSession(page);
     await addVirtualAuthenticator(client);
+
+    const username = `login_${testId}`;
 
     // First, register a user via the register page
     await page.goto(`${baseUrl}/login/register.html`);
@@ -63,7 +72,7 @@ test.describe("Login page", () => {
       timeout: 5000,
     });
 
-    await page.fill("#username", "loginuser");
+    await page.fill("#username", username);
     await page.click("#register-button");
 
     // Wait for redirect to encryption setup after registration
@@ -84,7 +93,7 @@ test.describe("Login page", () => {
     await expect(page.locator("#login-button")).toBeEnabled({ timeout: 5000 });
 
     // Fill username and click login
-    await page.fill("#username", "loginuser");
+    await page.fill("#username", username);
     await page.click("#login-button");
 
     // Wait for redirect to encryption setup (user hasn't set up encryption yet)
@@ -102,14 +111,17 @@ test.describe("Login page", () => {
 test.describe("Login with base path", () => {
   test("login redirects to app with base path", async ({
     context,
-    serverWithOptions,
+    getServerUrl,
+    testId,
   }) => {
-    const { baseUrl } = await serverWithOptions({ base: "/myapp" });
+    const baseUrl = await getServerUrl(Server.BasePath);
 
     // Create a fresh page
     const page = await context.newPage();
     const client = await page.context().newCDPSession(page);
     await addVirtualAuthenticator(client);
+
+    const username = `base_${testId}`;
 
     // First, register a user
     await page.goto(`${baseUrl}/login/register.html`);
@@ -117,12 +129,12 @@ test.describe("Login with base path", () => {
       timeout: 5000,
     });
 
-    await page.fill("#username", "baseuser");
+    await page.fill("#username", username);
     await page.click("#register-button");
 
     // Registration redirects directly to encryption setup with base path
     await expect(page).toHaveURL(
-      new RegExp(`/myapp${APP_PATH}/setup-encryption.html`),
+      new RegExp(`/crow-chipher${APP_PATH}/setup-encryption.html`),
       {
         timeout: 10000,
       },
@@ -130,7 +142,7 @@ test.describe("Login with base path", () => {
 
     // Verify URL contains both base path and app path
     const url = page.url();
-    expect(url).toContain("/myapp");
+    expect(url).toContain("/crow-chipher");
     expect(url).toContain(APP_PATH);
     expect(url).toContain("setup-encryption.html");
 
@@ -144,12 +156,12 @@ test.describe("Login with base path", () => {
     await expect(page.locator("#login-button")).toBeEnabled({ timeout: 5000 });
 
     // Fill username and click login
-    await page.fill("#username", "baseuser");
+    await page.fill("#username", username);
     await page.click("#login-button");
 
     // Wait for redirect to encryption setup with base path
     await expect(page).toHaveURL(
-      new RegExp(`/myapp${APP_PATH}/setup-encryption.html`),
+      new RegExp(`/crow-chipher${APP_PATH}/setup-encryption.html`),
       {
         timeout: 10000,
       },
@@ -157,7 +169,7 @@ test.describe("Login with base path", () => {
 
     // Verify URL again after login
     const loginUrl = page.url();
-    expect(loginUrl).toContain("/myapp");
+    expect(loginUrl).toContain("/crow-chipher");
     expect(loginUrl).toContain(APP_PATH);
     expect(loginUrl).toContain("setup-encryption.html");
 
@@ -168,9 +180,9 @@ test.describe("Login with base path", () => {
 test.describe("Login with signup disabled", () => {
   test("register link hidden when signup disabled", async ({
     page,
-    serverWithOptions,
+    getServerUrl,
   }) => {
-    const { baseUrl } = await serverWithOptions({ noSignup: true });
+    const baseUrl = await getServerUrl(Server.NoSignup);
 
     await page.goto(`${baseUrl}/login/index.html`);
 
