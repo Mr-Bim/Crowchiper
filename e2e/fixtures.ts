@@ -24,10 +24,18 @@ interface TestFixtures {
   serverWithOptions: (options: ServerOptions) => Promise<{ baseUrl: string }>;
 }
 
+/** Options for virtual authenticator setup */
+export interface VirtualAuthenticatorOptions {
+  hasPrf?: boolean;
+}
+
 /** Add a virtual authenticator to an existing CDP session */
 export async function addVirtualAuthenticator(
   client: CDPSession,
+  options: VirtualAuthenticatorOptions = {},
 ): Promise<void> {
+  const { hasPrf = true } = options;
+
   await client.send("WebAuthn.enable");
 
   await client.send("WebAuthn.addVirtualAuthenticator", {
@@ -37,10 +45,52 @@ export async function addVirtualAuthenticator(
       hasResidentKey: true,
       hasUserVerification: true,
       isUserVerified: true,
-      hasPrf: true,
+      hasPrf,
       automaticPresenceSimulation: true,
     },
   });
+}
+
+/**
+ * Generate a random 32-byte PRF output as base64url.
+ * Used for testing since Chrome's virtual authenticator doesn't return PRF output.
+ */
+export function generateTestPrfOutput(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  // Convert to base64url
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+/**
+ * Inject test PRF output into a page before navigation.
+ * This is needed because Chrome's virtual authenticator doesn't actually return PRF output.
+ */
+export async function injectTestPrfOutput(
+  page: Page,
+  prfOutput: string,
+): Promise<void> {
+  await page.addInitScript((prf) => {
+    (window as unknown as { __TEST_PRF_OUTPUT__: string }).__TEST_PRF_OUTPUT__ =
+      prf;
+  }, prfOutput);
+}
+
+/**
+ * Inject test username into a page before navigation.
+ * This is needed because Chrome's virtual authenticator doesn't support discoverable credentials.
+ */
+export async function injectTestUsername(
+  page: Page,
+  username: string,
+): Promise<void> {
+  await page.addInitScript((u) => {
+    (window as unknown as { __TEST_USERNAME__: string }).__TEST_USERNAME__ = u;
+  }, username);
 }
 
 /** Set up WebAuthn for a page, creating a new CDP session */

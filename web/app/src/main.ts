@@ -8,13 +8,9 @@
 import { getEncryptionSettings } from "./api/encryption-settings.ts";
 import {
   disableEncryption,
-  getInjectedTestKey,
   initEncryption,
-  initEncryptionForTest,
   needsUnlock,
-  setSessionEncryptionKey,
 } from "./crypto/keystore.ts";
-import { importRawKey } from "./crypto/operations.ts";
 import {
   handleDeletePost,
   handleNewPost,
@@ -67,20 +63,12 @@ async function init(): Promise<void> {
     // Set up sidebar toggle for mobile
     setupSidebarToggle();
 
-    // Check for injected test key (dev builds only)
-    const testKey = getInjectedTestKey();
-
     // Check encryption settings first
     const settings = await getEncryptionSettings();
 
     if (settings.encryption_enabled) {
-      if (testKey) {
-        // Test mode: use injected key directly
-        initEncryptionForTest();
-        const key = await importRawKey(testKey);
-        setSessionEncryptionKey(key);
-      } else if (settings.prf_salt) {
-        // Normal mode: use PRF salt for unlock flow
+      if (settings.prf_salt) {
+        // Use PRF salt for unlock flow
         initEncryption(settings.prf_salt);
       } else {
         throw new Error("Encryption enabled but PRF salt is missing");

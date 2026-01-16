@@ -100,36 +100,3 @@ export function clearAll(): void {
   prfSalt = null;
   encryptionEnabled = false;
 }
-
-// --- Test Mode ---
-// Test mode is enabled by default for development/testing.
-// Set RELEASE_MODE=1 at build time to disable test mode.
-// The __RELEASE_MODE__ constant is replaced at build time by Vite.
-
-declare const __RELEASE_MODE__: boolean;
-
-/**
- * Check if a test encryption key has been injected.
- * Available in development/test builds (default).
- * Returns null in release builds (code is tree-shaken).
- */
-export function getInjectedTestKey(): string | null {
-  if (!__RELEASE_MODE__) {
-    return (
-      (window as unknown as { __TEST_ENCRYPTION_KEY__?: string })
-        .__TEST_ENCRYPTION_KEY__ ?? null
-    );
-  }
-  return null;
-}
-
-/**
- * Initialize encryption for test mode (no PRF salt, key injected directly).
- * Available in development/test builds (default).
- */
-export function initEncryptionForTest(): void {
-  if (!__RELEASE_MODE__) {
-    encryptionEnabled = true;
-    prfSalt = null; // Not needed in test mode
-  }
-}

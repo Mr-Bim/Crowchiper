@@ -70,36 +70,45 @@ Set in `inline.ts`, available via `declare const`:
 - Remove unused code
 - Update the relevant CLAUDE.md file if there's something relevate for future development
 
-## Testing Encryption Without PRF
+## Testing Encryption (PRF Injection)
 
-Chrome's virtual authenticator doesn't support PRF. Test mode is enabled by default for development:
+Chrome's virtual authenticator has two limitations:
+1. Doesn't return PRF output (even with `hasPrf: true`)
+2. Doesn't support discoverable credentials
 
-1. Build frontend: `npm run build-all` (test mode included by default)
-2. Run tests: `cargo test --tests -- --test-threads=1` (test-mode feature enabled by default)
-3. In tests, use `TestContext::enable_test_encryption(user_id)` to:
-   - Enable encryption for the user in the database (no PRF salt)
-   - Generate and inject a test key via `window.__TEST_ENCRYPTION_KEY__`
-4. The frontend checks for this global and imports it directly
-5. Use `AddScriptToEvaluateOnNewDocumentParams` to inject the key before page scripts run
+Test mode injects values to work around these limitations:
 
-Example test usage:
-```rust
-use chromiumoxide::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
+**Window globals (injected via `addInitScript`):**
+- `__TEST_PRF_OUTPUT__` - Base64url-encoded 32-byte PRF output
+- `__TEST_USERNAME__` - Username for passkey authentication (bypasses discoverable credential requirement)
 
-let test_key = ctx.enable_test_encryption(user_id).await;
+**How it works:**
+1. `extractPrfOutput()` in `crypto/operations.ts` checks for `__TEST_PRF_OUTPUT__` first
+2. `createUnlockHandler()` in `unlock/index.ts` checks for `__TEST_USERNAME__` to use non-discoverable auth
+3. `handleTestPrf()` in `setup-encryption.ts` checks for `__TEST_USERNAME__` for the PRF test
 
-// Inject key before navigation so it's available when main.ts initializes
-let script = format!("window.__TEST_ENCRYPTION_KEY__ = '{}';", test_key);
-ctx.page
-    .execute(AddScriptToEvaluateOnNewDocumentParams::new(script))
-    .await
-    .expect("Failed to inject test key");
+**Playwright example:**
+```typescript
+import {
+  addVirtualAuthenticator,
+  generateTestPrfOutput,
+  injectTestPrfOutput,
+  injectTestUsername,
+} from "./fixtures.ts";
 
-ctx.page.goto(&app_url).await.expect("Failed to navigate");
+const page = await context.newPage();
+const client = await page.context().newCDPSession(page);
+await addVirtualAuthenticator(client);
+
+const username = "testuser";
+await injectTestPrfOutput(page, generateTestPrfOutput());
+await injectTestUsername(page, username);
+
+await page.goto(`${baseUrl}/login/register.html`);
+// ... register and test encryption flow
 ```
 
 The test code is stripped from release/production builds:
-- Rust: Use `cargo build --release --no-default-features` to exclude test-mode
 - JS: Use `npm run build-all-release` to build with RELEASE_MODE (strips test code)
 - `__RELEASE_MODE__` constant is replaced at build time and dead code is eliminated
 

@@ -8,6 +8,9 @@
 // Encrypted content format version
 export const ENCRYPTED_FORMAT_VERSION = 1;
 
+// Test mode flag - replaced at build time by Vite
+declare const __RELEASE_MODE__: boolean;
+
 export interface EncryptedData {
   ciphertext: string; // base64url encoded
   iv: string; // base64url encoded
@@ -52,10 +55,25 @@ export async function deriveEncryptionKeyFromPrf(
 /**
  * Extract PRF output from a WebAuthn credential response.
  * Returns null if PRF extension was not used or not supported.
+ *
+ * In test mode, if __TEST_PRF_OUTPUT__ is set on window, it will be
+ * returned instead of the actual PRF output (since Chrome's virtual
+ * authenticator doesn't support PRF output).
  */
 export function extractPrfOutput(
   credential: PublicKeyCredential | { clientExtensionResults?: unknown },
 ): ArrayBuffer | null {
+  // In test mode, check for injected PRF output first
+  // This entire block is tree-shaken in release builds
+  if (!__RELEASE_MODE__) {
+    const testPrfOutput = (
+      window as unknown as { __TEST_PRF_OUTPUT__?: string }
+    ).__TEST_PRF_OUTPUT__;
+    if (testPrfOutput) {
+      return base64UrlToArrayBuffer(testPrfOutput);
+    }
+  }
+
   const extensions = (
     credential as {
       clientExtensionResults?: {
