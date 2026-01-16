@@ -8,15 +8,17 @@ DO always update the appropriate CLAUDE.md after a finished task.
 ## Commands
 
 ```bash
-npm run build-all          # Build frontend with test mode (default for development)
-npm run build-all-release  # Build frontend for production (no test mode)
-npm run lint:fix           # TypeScript type check and fix
+npm run build-all          # Build frontend for production (no test mode)
+npm run build-all-test     # Build frontend with test mode
+npm run lint:fix           # TypeScript type check (tsc) and lint fix (oxlint)
+npm run test:rust          # Build Rust with test-mode and run Rust tests
+npm run test:web           # Build frontend+Rust with test-mode, run Playwright tests
+npm run test:all           # Run both test:rust and test:web
 cargo run -- --port 7291 --database crowchiper.db
 cargo run -- --base /app   # With base path for reverse proxy
 cargo run -- --no-signup   # Disable signups
-cargo test --tests -- --test-threads=1  # Run Rust browser tests (test-mode enabled by default)
-npx playwright test        # Run Playwright e2e tests
-cargo build --release --no-default-features  # Release build without test-mode
+cargo run --features test-mode  # Run with test mode enabled
+cargo build --release      # Release build (test-mode not included by default)
 ```
 
 ## URL Structure
@@ -31,7 +33,10 @@ With `--base /app`, all paths are prefixed.
 ## Development Rules
 
 - Run `cargo build` when finished with new functionality
-- Write tests for new functionality and run all tests before finishing
+- Write tests for new functionality and run tests before finishing:
+  - `npm run test:rust` for backend-only changes
+  - `npm run test:web` for frontend-only changes
+  - `npm run test:all` for features touching both frontend and backend
 - Run `npm run lint:fix` when changing frontend code
 - Never expose internal database IDs - use UUIDs for API responses
 - Use data attributes for JS-controlled visibility (CSS minifier mangles class names)
@@ -65,10 +70,9 @@ Set in `inline.ts`, available via `declare const`:
 
 ## When changing the web folder/frontend ALWAYS
 - Run npm run lint:fix
-- Run npm run check
 - Fix errors
 - Remove unused code
-- Update the relevant CLAUDE.md file if there's something relevate for future development
+- Update the relevant CLAUDE.md file if there's something relevant for future development
 
 ## Testing Encryption (PRF Injection)
 
@@ -108,9 +112,9 @@ await page.goto(`${baseUrl}/login/register.html`);
 // ... register and test encryption flow
 ```
 
-The test code is stripped from release/production builds:
-- JS: Use `npm run build-all-release` to build with RELEASE_MODE (strips test code)
-- `__RELEASE_MODE__` constant is replaced at build time and dead code is eliminated
+The test code is only included when building with test mode:
+- JS: Use `npm run build-all-test` to build with TEST_MODE (includes test code)
+- `__TEST_MODE__` constant is replaced at build time and dead code is eliminated
 
 ## Gallery/Attachment Patterns
 

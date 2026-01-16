@@ -63,9 +63,9 @@ const app = defineConfig({
   root: "web/app/",
   base: `${config.assets}/`,
   define: {
-    // Test mode is enabled by default for development/testing.
-    // Set RELEASE_MODE=1 to disable test mode for production builds.
-    __RELEASE_MODE__: JSON.stringify(!!process.env.RELEASE_MODE),
+    // Test mode is disabled by default.
+    // Set TEST_MODE=1 to enable test features for development/testing.
+    __TEST_MODE__: JSON.stringify(!!process.env.TEST_MODE),
   },
   build: {
     outDir: "../../dist/app",

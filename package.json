@@ -1,15 +1,17 @@
 {
   "scripts": {
     "test:e2e": "playwright test",
+    "test:rust": "cargo build --features test-mode && cargo test --features test-mode --tests -- --test-threads=1",
+    "test:web": "npm run build-all-test && cargo build --features test-mode && playwright test",
+    "test:all": "npm run test:rust && npm run test:web",
     "build-iife": "IIFE=1 vite build",
     "build-login": "BUILD=login vite build",
     "build-app": "BUILD=app vite build",
-    "build-app-release": "BUILD=app RELEASE_MODE=1 vite build",
+    "build-app-test": "BUILD=app TEST_MODE=1 vite build",
     "build-all": "npm run build-iife && npm run build-login && npm run build-app",
-    "build-all-release": "npm run build-iife && npm run build-login && npm run build-app-release",
-    "check": "tsc --noEmit",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "build-all-test": "npm run build-iife && npm run build-login && npm run build-app-test",
+    "lint": "tsc --noEmit && oxlint",
+    "lint:fix": "tsc --noEmit && oxlint --fix"
   },
   "type": "module",
   "devDependencies": {

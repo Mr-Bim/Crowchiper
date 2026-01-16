@@ -23,7 +23,7 @@ import { extractPrfOutput } from "./crypto/operations.ts";
 declare const API_PATH: string;
 declare const APP_PATH: string;
 declare const LOGIN_PATH: string;
-declare const __RELEASE_MODE__: boolean;
+declare const __TEST_MODE__: boolean;
 
 // --- DOM Elements ---
 
@@ -210,7 +210,7 @@ async function handleTestPrf(
     // In test mode, check for injected username (Chrome's virtual authenticator
     // doesn't support discoverable credentials)
     let username: string | undefined;
-    if (!__RELEASE_MODE__) {
+    if (__TEST_MODE__) {
       username =
         (window as unknown as { __TEST_USERNAME__?: string })
           .__TEST_USERNAME__ ?? undefined;

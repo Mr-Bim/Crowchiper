@@ -17,7 +17,7 @@ import {
 import { getPrfSalt, setSessionEncryptionKey } from "../crypto/keystore.ts";
 
 declare const API_PATH: string;
-declare const __RELEASE_MODE__: boolean;
+declare const __TEST_MODE__: boolean;
 
 // --- UI Helpers ---
 
@@ -81,11 +81,11 @@ export function createUnlockHandler(
 
       // In test mode, check for injected username (Chrome's virtual authenticator
       // doesn't support discoverable credentials)
-      let username: string | null = null;
-      if (!__RELEASE_MODE__) {
+      let username: string | undefined;
+      if (__TEST_MODE__) {
         username =
           (window as unknown as { __TEST_USERNAME__?: string })
-            .__TEST_USERNAME__ ?? null;
+            .__TEST_USERNAME__ ?? undefined;
       }
 
       // Get authentication options from server

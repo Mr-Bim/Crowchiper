@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["test-mode"]
+default = []
 # Enable test mode endpoints for injecting encryption keys.
-# Enabled by default for development/testing. Use --release or disable for production.
+# Disabled by default. Enable with --features test-mode for development/testing.
 test-mode = []
 
 [build-dependencies]
@@ -42,9 +42,6 @@ openssl = { version = "0.10", features = ["vendored"] }
 rand = "0.9.2"
 
 [dev-dependencies]
-chromiumoxide = { version = "0.8.0", features = ["tokio-runtime"] }
-futures = "0.3.31"
-libc = "0.2"
 tower = { version = "0.5.2", features = ["util"] }
 
 [profile.release]

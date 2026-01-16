@@ -5,40 +5,25 @@
 ```bash
 cargo test --tests -- --test-threads=1  # All tests
 cargo test --test api_tests             # Specific file
+npx playwright test                     # E2E browser tests
 ```
 
 ## Test Types
 
-**Browser tests** (preferred for user-facing features):
-- Use `chromiumoxide` for browser automation
-- Virtual authenticator handles passkey operations automatically
+**E2E tests** (for user-facing features):
+- Use Playwright in `e2e/` folder
+- See `e2e/CLAUDE.md` for details
 
 **API tests** (for backend logic):
 - Use `tower::ServiceExt::oneshot` directly
-- Faster, good for edge cases
+- Fast, good for edge cases and API validation
+
+**Startup tests** (for CLI validation):
+- Test command-line argument handling
+- Test configuration validation
 
 **Unit tests** (for isolated logic):
 - Place in `#[cfg(test)]` modules within source files
-
-## Test Pattern
-
-Use `#[test]` + `runtime().block_on()` (not `#[tokio::test]`) to share browser:
-
-```rust
-#[test]
-fn test_example() {
-    common::runtime().block_on(async {
-        let ctx = setup().await;
-        ctx.goto("/").await;
-        ctx.wait_for("condition", 5000).await;
-        ctx.teardown().await;
-    });
-}
-```
-
-## Cookie Isolation
-
-Browser tests share cookies on localhost. Use `ctx.new_page()` for fresh page or clear cookies explicitly.
 
 ## Checklist
 

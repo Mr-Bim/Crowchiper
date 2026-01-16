@@ -9,7 +9,7 @@
 export const ENCRYPTED_FORMAT_VERSION = 1;
 
 // Test mode flag - replaced at build time by Vite
-declare const __RELEASE_MODE__: boolean;
+declare const __TEST_MODE__: boolean;
 
 export interface EncryptedData {
   ciphertext: string; // base64url encoded
@@ -64,8 +64,8 @@ export function extractPrfOutput(
   credential: PublicKeyCredential | { clientExtensionResults?: unknown },
 ): ArrayBuffer | null {
   // In test mode, check for injected PRF output first
-  // This entire block is tree-shaken in release builds
-  if (!__RELEASE_MODE__) {
+  // This entire block is tree-shaken when TEST_MODE is not set
+  if (__TEST_MODE__) {
     const testPrfOutput = (
       window as unknown as { __TEST_PRF_OUTPUT__?: string }
     ).__TEST_PRF_OUTPUT__;

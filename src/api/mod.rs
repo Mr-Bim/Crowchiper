@@ -4,6 +4,8 @@ mod encryption;
 mod error;
 mod passkeys;
 mod posts;
+#[cfg(feature = "test-mode")]
+mod test;
 mod users;
 
 use axum::Router;
@@ -45,15 +47,23 @@ pub fn create_api_router(
         jwt: jwt.clone(),
     };
 
+    #[cfg(feature = "test-mode")]
+    let test_state = test::TestState { db: db.clone() };
+
     let users_state = users::UsersState { db, jwt, no_signup };
 
     let config_state = config::ConfigState { no_signup };
 
-    Router::new()
+    let router = Router::new()
         .nest("/users", users::router(users_state))
         .nest("/passkeys", passkeys::router(passkeys_state))
         .nest("/posts", posts::router(posts_state))
         .nest("/encryption", encryption::router(encryption_state))
         .nest("/config", config::router(config_state))
-        .nest("/attachments", attachments::router(attachments_state))
+        .nest("/attachments", attachments::router(attachments_state));
+
+    #[cfg(feature = "test-mode")]
+    let router = router.nest("/test", test::router(test_state));
+
+    router
 }
