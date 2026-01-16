@@ -11,8 +11,8 @@ DO always update the appropriate CLAUDE.md after a finished task.
 npm run build-all          # Build frontend for production (no test mode)
 npm run build-all-test     # Build frontend with test mode
 npm run lint:fix           # TypeScript type check (tsc) and lint fix (oxlint)
-npm run test:rust          # Build Rust with test-mode and run Rust tests
-npm run test:web           # Build frontend+Rust with test-mode, run Playwright tests
+npm run test:rust          # Run Rust tests (requires prior cargo build --features test-mode)
+npm run test:web           # Run Playwright tests (requires prior build-all-test + cargo build)
 npm run test:all           # Run both test:rust and test:web
 cargo run -- --port 7291 --database crowchiper.db
 cargo run -- --base /app   # With base path for reverse proxy
