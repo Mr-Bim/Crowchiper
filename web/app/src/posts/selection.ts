@@ -4,18 +4,16 @@
  * Handles selecting a post for editing and managing the editor instance.
  */
 
-import {
-  getPost,
-  type PostNode,
-} from "../api/posts.ts";
-import {
-  cleanupPendingUploads,
-  parseAttachmentUuids,
-} from "../editor/attachment-widget/index.ts";
+import { getPost, type PostNode } from "../api/posts.ts";
 import {
   decryptPostContent,
   decryptPostTitle,
 } from "../crypto/post-encryption.ts";
+import {
+  cleanupPendingUploads,
+  parseAttachmentUuids,
+} from "../editor/attachment-widget/index.ts";
+import { applySpellcheckToEditor } from "../spellcheck.ts";
 import {
   getEditor,
   getLoadedPost,
@@ -89,6 +87,9 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     }
   });
   setEditor(newEditor);
+
+  // Apply spellcheck setting to the new editor
+  applySpellcheckToEditor();
 
   const deleteBtn = document.getElementById(
     "delete-btn",

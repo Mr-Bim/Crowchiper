@@ -19,6 +19,7 @@ import {
   loadPostsWithoutSelection,
   renderPostList,
 } from "./posts/index.ts";
+import { setupSpellcheck } from "./spellcheck.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
 
 declare const __TEST_MODE__: boolean;
@@ -64,6 +65,9 @@ async function init(): Promise<void> {
   try {
     // Set up sidebar toggle for mobile
     setupSidebarToggle();
+
+    // Set up spellcheck toggle
+    setupSpellcheck();
 
     // Check encryption settings first
     const settings = await getEncryptionSettings();

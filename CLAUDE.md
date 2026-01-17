@@ -72,6 +72,7 @@ Set in `inline.ts`, available via `declare const`:
 - Run npm run lint:fix
 - Fix errors
 - Remove unused code
+- Create Playwright tests for new features or behavior changes (in `e2e/specs/`)
 - Update the relevant CLAUDE.md file if there's something relevant for future development
 
 ## Testing Encryption (PRF Injection)
