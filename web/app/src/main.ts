@@ -13,6 +13,7 @@ import {
 } from "./crypto/keystore.ts";
 import {
   handleDeletePost,
+  handleNewFolder,
   handleNewPost,
   handleSave,
   loadPosts,
@@ -23,6 +24,49 @@ import { setupSpellcheck } from "./spellcheck.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
 
 declare const __TEST_MODE__: boolean;
+
+function setupNewPostDropdown(): void {
+  const btn = document.getElementById("new-post-btn");
+  const menu = document.getElementById("new-post-menu");
+  const newPostOption = document.getElementById("new-post-option");
+  const newFolderOption = document.getElementById("new-folder-option");
+
+  if (!btn || !menu) return;
+
+  const showMenu = () => {
+    menu.hidden = false;
+  };
+
+  const hideMenu = () => {
+    menu.hidden = true;
+  };
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.hidden) {
+      showMenu();
+    } else {
+      hideMenu();
+    }
+  });
+
+  newPostOption?.addEventListener("click", () => {
+    hideMenu();
+    handleNewPost();
+  });
+
+  newFolderOption?.addEventListener("click", () => {
+    hideMenu();
+    handleNewFolder();
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!menu.hidden && !menu.contains(e.target as Node)) {
+      hideMenu();
+    }
+  });
+}
 
 function setupSidebarToggle(): void {
   const sidebar = document.getElementById("sidebar");
@@ -84,9 +128,7 @@ async function init(): Promise<void> {
     }
 
     // Wire up event handlers
-    document
-      .getElementById("new-post-btn")
-      ?.addEventListener("click", () => handleNewPost());
+    setupNewPostDropdown();
     document.getElementById("save-btn")?.addEventListener("click", handleSave);
     document
       .getElementById("delete-btn")

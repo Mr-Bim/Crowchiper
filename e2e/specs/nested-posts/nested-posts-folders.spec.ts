@@ -9,6 +9,7 @@ import { getServer, Server } from "../../utils/server.ts";
 import { BrowserContext } from "@playwright/test";
 import {
   createPostWithTitle,
+  createFolder,
   getPostByTitle,
   dragPostToPost,
 } from "./nested-posts-helpers.ts";
@@ -37,14 +38,48 @@ test.describe("Nested posts - Folders", () => {
     await context?.close();
   });
 
+  test("dropdown menu shows post and folder options", async () => {
+    const { page } = userResult;
+
+    // Click the + button
+    const newPostBtn = page.locator("#new-post-btn");
+    await newPostBtn.click();
+
+    // Verify dropdown menu is visible
+    const menu = page.locator("#new-post-menu");
+    await expect(menu).toBeVisible();
+
+    // Verify both options are present
+    const newPostOption = page.locator("#new-post-option");
+    const newFolderOption = page.locator("#new-folder-option");
+    await expect(newPostOption).toBeVisible();
+    await expect(newFolderOption).toBeVisible();
+    await expect(newPostOption).toContainText("New Post");
+    await expect(newFolderOption).toContainText("New Folder");
+
+    // Click outside to close menu
+    await page.locator("body").click();
+    await expect(menu).toBeHidden();
+  });
+
+  test("creating folder via dropdown shows folder icon", async () => {
+    const { page } = userResult;
+
+    // Create a folder via dropdown
+    await createFolder(page);
+
+    // Verify folder has folder icon
+    const folder = getPostByTitle(page, "New Folder");
+    const folderIcon = folder.locator(".post-icon");
+    await expect(folderIcon).toHaveText("📁");
+
+    // Verify it has data-folder attribute
+    const folderItem = folder.locator(".post-item");
+    await expect(folderItem).toHaveAttribute("data-folder", "true");
+  });
+
   test("folders show folder icon and are not editable", async () => {
     const { page } = userResult;
-    const postList = page.locator("#post-list");
-
-    // Wait for initial post
-    await expect(postList.locator(".post-wrapper")).toHaveCount(1, {
-      timeout: 10000,
-    });
 
     // Create a post and drag it under another to make it a parent
     await createPostWithTitle(page, "Folder Test Parent");
