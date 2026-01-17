@@ -11,7 +11,7 @@ import { attachmentPlugin } from "./attachment-widget/index.ts";
 import { checkboxPlugin } from "./checkbox-widget.ts";
 import { dateShortcuts } from "./date-shortcuts.ts";
 import { slashCommands } from "./slash-commands.ts";
-import "../../editor.css";
+import "../../css/editor.css";
 
 export function createEditor(
   container: HTMLElement,

@@ -1,125 +1,213 @@
 /**
- * Drag and drop functionality for post reordering.
+ * Drag and drop functionality for post reordering and reparenting.
  * Uses @atlaskit/pragmatic-drag-and-drop.
+ *
+ * Supports two drop modes:
+ * - Reorder: Drop on top/bottom edge to reorder siblings
+ * - Reparent: Drop on center to make child of target post
  */
 
 import {
-	draggable,
-	dropTargetForElements,
-	monitorForElements,
+  draggable,
+  dropTargetForElements,
+  monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import {
-	attachClosestEdge,
-	type Edge,
-	extractClosestEdge,
-} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { getSiblings } from "./state.ts";
 
-type ReorderCallback = (fromIndex: number, toIndex: number) => void;
+type ReorderCallback = (
+  parentId: string | null,
+  fromIndex: number,
+  toIndex: number,
+) => void;
+type ReparentCallback = (
+  uuid: string,
+  newParentId: string | null,
+  position: number,
+) => void;
 
 // Track cleanup functions to avoid duplicate listeners
 let cleanupFns: (() => void)[] = [];
 
-export function initDragAndDrop(
-	container: HTMLElement,
-	onReorder: ReorderCallback,
-): void {
-	// Clean up previous drag and drop setup
-	for (const cleanup of cleanupFns) {
-		cleanup();
-	}
-	cleanupFns = [];
+// Threshold for center drop zone (percentage of element height from edges)
+const CENTER_ZONE_THRESHOLD = 0.3;
 
-	const items = Array.from(
-		container.querySelectorAll<HTMLElement>("[data-index]"),
-	);
+type DropMode = "reorder-top" | "reorder-bottom" | "reparent";
 
-	for (const item of items) {
-		// Make each item draggable
-		const dragCleanup = draggable({
-			element: item,
-			getInitialData: () => ({
-				index: Number(item.getAttribute("data-index")),
-				uuid: item.getAttribute("data-uuid"),
-			}),
-			onDragStart: () => {
-				item.setAttribute("data-dragging", "");
-			},
-			onDrop: () => {
-				item.removeAttribute("data-dragging");
-			},
-		});
-		cleanupFns.push(dragCleanup);
+/**
+ * Determine drop mode based on cursor position within element.
+ */
+function getDropMode(element: HTMLElement, clientY: number): DropMode {
+  const rect = element.getBoundingClientRect();
+  const relativeY = clientY - rect.top;
+  const height = rect.height;
 
-		// Make each item a drop target
-		const dropCleanup = dropTargetForElements({
-			element: item,
-			getData: ({ input, element }) => {
-				const data = {
-					index: Number(element.getAttribute("data-index")),
-				};
-				return attachClosestEdge(data, {
-					input,
-					element,
-					allowedEdges: ["top", "bottom"],
-				});
-			},
-			onDragEnter: ({ self }) => {
-				const edge = extractClosestEdge(self.data);
-				updateDropIndicator(item, edge);
-			},
-			onDrag: ({ self }) => {
-				const edge = extractClosestEdge(self.data);
-				updateDropIndicator(item, edge);
-			},
-			onDragLeave: () => {
-				clearDropIndicator(item);
-			},
-			onDrop: () => {
-				clearDropIndicator(item);
-			},
-		});
-		cleanupFns.push(dropCleanup);
-	}
-
-	// Monitor for completed drops
-	const monitorCleanup = monitorForElements({
-		onDrop: ({ source, location }) => {
-			const destination = location.current.dropTargets[0];
-			if (!destination) return;
-
-			const fromIndex = source.data.index as number;
-			const toIndex = destination.data.index as number;
-			const edge = extractClosestEdge(destination.data);
-
-			// Calculate final index based on drop edge
-			let finalIndex = toIndex;
-			if (edge === "bottom") {
-				finalIndex = toIndex + 1;
-			}
-
-			// Adjust if moving down
-			if (fromIndex < finalIndex) {
-				finalIndex -= 1;
-			}
-
-			if (fromIndex !== finalIndex) {
-				onReorder(fromIndex, finalIndex);
-			}
-		},
-	});
-	cleanupFns.push(monitorCleanup);
+  // Top zone
+  if (relativeY < height * CENTER_ZONE_THRESHOLD) {
+    return "reorder-top";
+  }
+  // Bottom zone
+  if (relativeY > height * (1 - CENTER_ZONE_THRESHOLD)) {
+    return "reorder-bottom";
+  }
+  // Center zone - reparent
+  return "reparent";
 }
 
-function updateDropIndicator(element: HTMLElement, edge: Edge | null): void {
-	clearDropIndicator(element);
-	if (edge === "top") {
-		element.setAttribute("data-drop-top", "");
-	} else if (edge === "bottom") {
-		element.setAttribute("data-drop-bottom", "");
-	}
+export function initDragAndDrop(
+  container: HTMLElement,
+  onReorder: ReorderCallback,
+  onReparent: ReparentCallback,
+): void {
+  // Clean up previous drag and drop setup
+  for (const cleanup of cleanupFns) {
+    cleanup();
+  }
+  cleanupFns = [];
+
+  const items = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-uuid]"),
+  );
+
+  for (const item of items) {
+    const uuid = item.getAttribute("data-uuid") ?? "";
+    const parentId = item.getAttribute("data-parent-id") || null;
+
+    // Make each item draggable
+    const dragCleanup = draggable({
+      element: item,
+      getInitialData: () => {
+        // Get index within siblings
+        const siblings = getSiblings(uuid);
+        const index = siblings.findIndex((s) => s.uuid === uuid);
+        return {
+          uuid,
+          parentId,
+          index,
+        };
+      },
+      onDragStart: () => {
+        item.setAttribute("data-dragging", "");
+      },
+      onDrop: () => {
+        item.removeAttribute("data-dragging");
+      },
+    });
+    cleanupFns.push(dragCleanup);
+
+    // Make each item a drop target
+    const dropCleanup = dropTargetForElements({
+      element: item,
+      getData: ({ input, element }) => {
+        const targetUuid = element.getAttribute("data-uuid") ?? "";
+        const targetParentId = element.getAttribute("data-parent-id") || null;
+
+        // Get index within siblings
+        const siblings = getSiblings(targetUuid);
+        const index = siblings.findIndex((s) => s.uuid === targetUuid);
+
+        const data = {
+          uuid: targetUuid,
+          parentId: targetParentId,
+          index,
+        };
+        return attachClosestEdge(data, {
+          input,
+          element,
+          allowedEdges: ["top", "bottom"],
+        });
+      },
+      canDrop: ({ source }) => {
+        // Cannot drop on self
+        return source.data.uuid !== item.getAttribute("data-uuid");
+      },
+      onDragEnter: ({ location }) => {
+        const mode = getDropMode(item, location.current.input.clientY);
+        updateDropIndicator(item, mode);
+      },
+      onDrag: ({ location }) => {
+        const mode = getDropMode(item, location.current.input.clientY);
+        updateDropIndicator(item, mode);
+      },
+      onDragLeave: () => {
+        clearDropIndicator(item);
+      },
+      onDrop: () => {
+        clearDropIndicator(item);
+      },
+    });
+    cleanupFns.push(dropCleanup);
+  }
+
+  // Monitor for completed drops
+  const monitorCleanup = monitorForElements({
+    onDrop: ({ source, location }) => {
+      const destination = location.current.dropTargets[0];
+      if (!destination) return;
+
+      const fromUuid = source.data.uuid as string;
+      const fromParentId = source.data.parentId as string | null;
+      const fromIndex = source.data.index as number;
+
+      const toUuid = destination.data.uuid as string;
+      const toParentId = destination.data.parentId as string | null;
+      const toIndex = destination.data.index as number;
+
+      // Get drop mode based on last input position
+      const targetElement = destination.element as HTMLElement;
+      const clientY = location.current.input.clientY;
+      const mode = getDropMode(targetElement, clientY);
+
+      if (mode === "reparent") {
+        // Make the dragged post a child of the target post
+        onReparent(fromUuid, toUuid, 0);
+      } else {
+        // Reordering
+        const edge = mode === "reorder-top" ? "top" : "bottom";
+
+        // Check if same parent
+        if (fromParentId === toParentId) {
+          // Reorder within same parent
+          let finalIndex = toIndex;
+          if (edge === "bottom") {
+            finalIndex = toIndex + 1;
+          }
+
+          // Adjust if moving down
+          if (fromIndex < finalIndex) {
+            finalIndex -= 1;
+          }
+
+          if (fromIndex !== finalIndex) {
+            onReorder(fromParentId, fromIndex, finalIndex);
+          }
+        } else {
+          // Moving to different parent - use reparent with position
+          let position = toIndex;
+          if (edge === "bottom") {
+            position = toIndex + 1;
+          }
+          onReparent(fromUuid, toParentId, position);
+        }
+      }
+    },
+  });
+  cleanupFns.push(monitorCleanup);
+}
+
+function updateDropIndicator(element: HTMLElement, mode: DropMode): void {
+  clearDropIndicator(element);
+  if (mode === "reorder-top") {
+    element.setAttribute("data-drop-top", "");
+  } else if (mode === "reorder-bottom") {
+    element.setAttribute("data-drop-bottom", "");
+  } else if (mode === "reparent") {
+    element.setAttribute("data-drop-child", "");
+  }
 }
 
 function clearDropIndicator(element: HTMLElement): void {
-	element.removeAttribute("data-drop-top");
-	element.removeAttribute("data-drop-bottom");
+  element.removeAttribute("data-drop-top");
+  element.removeAttribute("data-drop-bottom");
+  element.removeAttribute("data-drop-child");
 }

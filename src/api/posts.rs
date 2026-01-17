@@ -1,10 +1,10 @@
-//! Posts API for post entries.
+//! Posts API for post entries with hierarchical structure support.
 //!
 //! All endpoints require JWT authentication.
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post, put},
@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{ApiAuth, HasAuthState};
-use crate::db::Database;
+use crate::db::{Database, PostNode};
 use crate::jwt::JwtConfig;
 
 /// State for posts endpoints.
@@ -43,10 +43,22 @@ pub fn router(state: PostsState) -> Router {
         // Accept both PUT (normal update) and POST (sendBeacon on page unload)
         .route("/{uuid}", put(update_post).post(update_post))
         .route("/{uuid}", delete(delete_post))
+        .route("/{uuid}/children", get(list_children))
+        .route("/{uuid}/move", post(move_post))
         .with_state(state)
 }
 
 // --- Request/Response types ---
+
+#[derive(Deserialize)]
+struct ListPostsQuery {
+    #[serde(default = "default_depth")]
+    depth: i32,
+}
+
+fn default_depth() -> i32 {
+    3
+}
 
 #[derive(Deserialize)]
 struct CreatePostRequest {
@@ -60,6 +72,9 @@ struct CreatePostRequest {
     content_encrypted: bool,
     iv: Option<String>,
     encryption_version: Option<i32>,
+    parent_id: Option<String>,
+    #[serde(default)]
+    is_folder: bool,
 }
 
 #[derive(Serialize)]
@@ -73,12 +88,14 @@ struct PostResponse {
     iv: Option<String>,
     encryption_version: Option<i32>,
     position: Option<i32>,
+    parent_id: Option<String>,
+    is_folder: bool,
     created_at: String,
     updated_at: String,
 }
 
 #[derive(Serialize)]
-struct PostSummaryResponse {
+struct PostNodeResponse {
     uuid: String,
     title: Option<String>,
     title_encrypted: bool,
@@ -86,12 +103,39 @@ struct PostSummaryResponse {
     content_encrypted: bool,
     encryption_version: Option<i32>,
     position: Option<i32>,
+    parent_id: Option<String>,
+    is_folder: bool,
+    has_children: bool,
+    children: Option<Vec<PostNodeResponse>>,
     created_at: String,
     updated_at: String,
 }
 
+impl From<PostNode> for PostNodeResponse {
+    fn from(node: PostNode) -> Self {
+        Self {
+            uuid: node.uuid,
+            title: node.title,
+            title_encrypted: node.title_encrypted,
+            title_iv: node.title_iv,
+            content_encrypted: node.content_encrypted,
+            encryption_version: node.encryption_version,
+            position: node.position,
+            parent_id: node.parent_id,
+            is_folder: node.is_folder,
+            has_children: node.has_children,
+            children: node
+                .children
+                .map(|c| c.into_iter().map(Into::into).collect()),
+            created_at: node.created_at,
+            updated_at: node.updated_at,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct ReorderRequest {
+    parent_id: Option<String>,
     uuids: Vec<String>,
 }
 
@@ -108,6 +152,18 @@ struct UpdatePostRequest {
     encryption_version: Option<i32>,
     /// Optional attachment UUIDs to update refs (used with sendBeacon on page unload)
     attachment_uuids: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct MovePostRequest {
+    parent_id: Option<String>,
+    position: i32,
+}
+
+#[derive(Serialize)]
+struct DeleteResponse {
+    deleted: bool,
+    children_deleted: i64,
 }
 
 // --- Helpers ---
@@ -153,28 +209,36 @@ async fn validate_encryption(
 async fn list_posts(
     State(state): State<PostsState>,
     ApiAuth(user): ApiAuth,
+    Query(query): Query<ListPostsQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let posts = state
         .db
         .posts()
-        .list_by_user(user.user_id)
+        .list_tree(user.user_id, query.depth)
         .await
         .db_err("Failed to list posts")?;
 
-    let response: Vec<PostSummaryResponse> = posts
-        .into_iter()
-        .map(|p| PostSummaryResponse {
-            uuid: p.uuid,
-            title: p.title,
-            title_encrypted: p.title_encrypted,
-            title_iv: p.title_iv,
-            content_encrypted: p.content_encrypted,
-            encryption_version: p.encryption_version,
-            position: p.position,
-            created_at: p.created_at,
-            updated_at: p.updated_at,
-        })
-        .collect();
+    let response: Vec<PostNodeResponse> = posts.into_iter().map(Into::into).collect();
+
+    Ok(Json(response))
+}
+
+async fn list_children(
+    State(state): State<PostsState>,
+    ApiAuth(user): ApiAuth,
+    Path(uuid): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let children = state
+        .db
+        .posts()
+        .list_children(user.user_id, &uuid)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => ApiError::not_found("Parent post not found"),
+            _ => ApiError::internal("Failed to list children"),
+        })?;
+
+    let response: Vec<PostNodeResponse> = children.into_iter().map(Into::into).collect();
 
     Ok(Json(response))
 }
@@ -205,9 +269,14 @@ async fn create_post(
             payload.content_encrypted,
             payload.iv.as_deref(),
             payload.encryption_version,
+            payload.parent_id.as_deref(),
+            payload.is_folder,
         )
         .await
-        .db_err("Failed to create post")?;
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => ApiError::not_found("Parent post not found"),
+            _ => ApiError::internal("Failed to create post"),
+        })?;
 
     let post = state
         .db
@@ -229,6 +298,8 @@ async fn create_post(
             iv: post.iv,
             encryption_version: post.encryption_version,
             position: post.position,
+            parent_id: post.parent_id,
+            is_folder: post.is_folder,
             created_at: post.created_at,
             updated_at: post.updated_at,
         }),
@@ -258,6 +329,8 @@ async fn get_post(
         iv: post.iv,
         encryption_version: post.encryption_version,
         position: post.position,
+        parent_id: post.parent_id,
+        is_folder: post.is_folder,
         created_at: post.created_at,
         updated_at: post.updated_at,
     }))
@@ -420,14 +493,43 @@ async fn delete_post(
             .await
             .db_err("Failed to get post")?;
 
-    let post_id = post.ok_or_else(|| ApiError::not_found("Post not found"))?.0;
+    // Verify post exists and belongs to user
+    post.ok_or_else(|| ApiError::not_found("Post not found"))?;
 
-    // Remove attachment references (decrements ref counts, deletes if 0)
-    remove_post_attachments_tx(&mut tx, post_id, user.user_id)
+    // Count descendants first (for response)
+    let children_count = state
+        .db
+        .posts()
+        .count_descendants(&uuid, user.user_id)
         .await
-        .db_err("Failed to remove attachment references")?;
+        .db_err("Failed to count descendants")?;
 
-    // Delete the post
+    // Get all descendant post IDs for attachment cleanup
+    let descendant_ids: Vec<(i64,)> = sqlx::query_as(
+        "WITH RECURSIVE descendants AS (
+            SELECT id FROM posts WHERE uuid = ? AND user_id = ?
+            UNION ALL
+            SELECT p.id FROM posts p
+            INNER JOIN descendants d ON p.parent_id = (SELECT uuid FROM posts WHERE id = d.id)
+            WHERE p.user_id = ?
+        )
+        SELECT id FROM descendants",
+    )
+    .bind(&uuid)
+    .bind(user.user_id)
+    .bind(user.user_id)
+    .fetch_all(&mut *tx)
+    .await
+    .db_err("Failed to get descendant IDs")?;
+
+    // Remove attachment references for all posts being deleted
+    for (id,) in descendant_ids {
+        remove_post_attachments_tx(&mut tx, id, user.user_id)
+            .await
+            .db_err("Failed to remove attachment references")?;
+    }
+
+    // Delete the post (children cascade via database constraint)
     sqlx::query("DELETE FROM posts WHERE uuid = ? AND user_id = ?")
         .bind(&uuid)
         .bind(user.user_id)
@@ -437,7 +539,10 @@ async fn delete_post(
 
     tx.commit().await.db_err("Failed to commit transaction")?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(DeleteResponse {
+        deleted: true,
+        children_deleted: children_count,
+    }))
 }
 
 /// Remove all attachment references for a post within a transaction.
@@ -490,9 +595,40 @@ async fn reorder_posts(
     state
         .db
         .posts()
-        .reorder(user.user_id, &payload.uuids)
+        .reorder(user.user_id, payload.parent_id.as_deref(), &payload.uuids)
         .await
         .db_err("Failed to reorder posts")?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn move_post(
+    State(state): State<PostsState>,
+    ApiAuth(user): ApiAuth,
+    Path(uuid): Path<String>,
+    Json(payload): Json<MovePostRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let moved = state
+        .db
+        .posts()
+        .move_post(
+            &uuid,
+            user.user_id,
+            payload.parent_id.as_deref(),
+            payload.position,
+        )
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => ApiError::not_found("Post or parent not found"),
+            sqlx::Error::Protocol(msg) if msg.contains("descendant") => {
+                ApiError::bad_request("Cannot move a post to its own descendant")
+            }
+            _ => ApiError::internal("Failed to move post"),
+        })?;
+
+    if !moved {
+        return Err(ApiError::not_found("Post not found"));
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }

@@ -18,7 +18,7 @@ import {
   loadPosts,
   loadPostsWithoutSelection,
   renderPostList,
-} from "./posts/ui.ts";
+} from "./posts/index.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
 
 function setupSidebarToggle(): void {
@@ -80,7 +80,7 @@ async function init(): Promise<void> {
     // Wire up event handlers
     document
       .getElementById("new-post-btn")
-      ?.addEventListener("click", handleNewPost);
+      ?.addEventListener("click", () => handleNewPost());
     document.getElementById("save-btn")?.addEventListener("click", handleSave);
     document
       .getElementById("delete-btn")

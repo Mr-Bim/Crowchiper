@@ -1,6 +1,7 @@
-//! Post storage for post entries.
+//! Post storage for post entries with hierarchical structure support.
 
 use sqlx::sqlite::SqlitePool;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct PostStore {
@@ -21,6 +22,8 @@ pub struct Post {
     pub iv: Option<String>,
     pub encryption_version: Option<i32>,
     pub position: Option<i32>,
+    pub parent_id: Option<String>,
+    pub is_folder: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -35,8 +38,35 @@ pub struct PostSummary {
     pub content_encrypted: bool,
     pub encryption_version: Option<i32>,
     pub position: Option<i32>,
+    pub parent_id: Option<String>,
+    pub is_folder: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// A post node in the tree structure.
+#[derive(Debug, Clone)]
+pub struct PostNode {
+    pub uuid: String,
+    pub title: Option<String>,
+    pub title_encrypted: bool,
+    pub title_iv: Option<String>,
+    pub content_encrypted: bool,
+    pub encryption_version: Option<i32>,
+    pub position: Option<i32>,
+    pub parent_id: Option<String>,
+    pub is_folder: bool,
+    pub has_children: bool,
+    pub children: Option<Vec<PostNode>>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Result of a delete operation.
+#[derive(Debug, Clone)]
+pub struct DeleteResult {
+    pub deleted: bool,
+    pub children_deleted: i64,
 }
 
 #[derive(sqlx::FromRow)]
@@ -52,6 +82,8 @@ struct PostRow {
     iv: Option<String>,
     encryption_version: Option<i32>,
     position: Option<i32>,
+    parent_id: Option<String>,
+    is_folder: bool,
     created_at: String,
     updated_at: String,
 }
@@ -70,6 +102,8 @@ impl From<PostRow> for Post {
             iv: row.iv,
             encryption_version: row.encryption_version,
             position: row.position,
+            parent_id: row.parent_id,
+            is_folder: row.is_folder,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -85,6 +119,8 @@ struct PostSummaryRow {
     content_encrypted: bool,
     encryption_version: Option<i32>,
     position: Option<i32>,
+    parent_id: Option<String>,
+    is_folder: bool,
     created_at: String,
     updated_at: String,
 }
@@ -99,8 +135,30 @@ impl From<PostSummaryRow> for PostSummary {
             content_encrypted: row.content_encrypted,
             encryption_version: row.encryption_version,
             position: row.position,
+            parent_id: row.parent_id,
+            is_folder: row.is_folder,
             created_at: row.created_at,
             updated_at: row.updated_at,
+        }
+    }
+}
+
+impl From<PostSummary> for PostNode {
+    fn from(summary: PostSummary) -> Self {
+        Self {
+            uuid: summary.uuid,
+            title: summary.title,
+            title_encrypted: summary.title_encrypted,
+            title_iv: summary.title_iv,
+            content_encrypted: summary.content_encrypted,
+            encryption_version: summary.encryption_version,
+            position: summary.position,
+            parent_id: summary.parent_id,
+            is_folder: summary.is_folder,
+            has_children: false,
+            children: Some(Vec::new()),
+            created_at: summary.created_at,
+            updated_at: summary.updated_at,
         }
     }
 }
@@ -111,7 +169,8 @@ impl PostStore {
     }
 
     /// Create a new post. Returns the post UUID.
-    /// New posts are inserted at position 0, shifting all existing posts down.
+    /// New posts are inserted at position 0 under the specified parent,
+    /// shifting all existing siblings down.
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
@@ -123,31 +182,63 @@ impl PostStore {
         content_encrypted: bool,
         iv: Option<&str>,
         encryption_version: Option<i32>,
+        parent_id: Option<&str>,
+        is_folder: bool,
     ) -> Result<String, sqlx::Error> {
         let uuid = uuid::Uuid::new_v4().to_string();
+
+        // Validate parent_id if provided
+        if let Some(pid) = parent_id {
+            let parent_exists: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM posts WHERE uuid = ? AND user_id = ?")
+                    .bind(pid)
+                    .bind(user_id)
+                    .fetch_optional(&self.pool)
+                    .await?;
+            if parent_exists.is_none() {
+                return Err(sqlx::Error::RowNotFound);
+            }
+        }
 
         // Start a transaction to atomically shift positions and insert
         let mut tx = self.pool.begin().await?;
 
-        // Shift all existing posts down by 1
-        sqlx::query("UPDATE posts SET position = COALESCE(position, 0) + 1 WHERE user_id = ?")
+        // Shift all existing siblings down by 1
+        if parent_id.is_some() {
+            sqlx::query(
+                "UPDATE posts SET position = COALESCE(position, 0) + 1 WHERE user_id = ? AND parent_id = ?",
+            )
+            .bind(user_id)
+            .bind(parent_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE posts SET position = COALESCE(position, 0) + 1 WHERE user_id = ? AND parent_id IS NULL",
+            )
             .bind(user_id)
             .execute(&mut *tx)
             .await?;
+        }
 
         // Insert new post at position 0
-        sqlx::query("INSERT INTO posts (uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)")
-            .bind(&uuid)
-            .bind(user_id)
-            .bind(title)
-            .bind(title_encrypted)
-            .bind(title_iv)
-            .bind(content)
-            .bind(content_encrypted)
-            .bind(iv)
-            .bind(encryption_version)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO posts (uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, is_folder)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+        )
+        .bind(&uuid)
+        .bind(user_id)
+        .bind(title)
+        .bind(title_encrypted)
+        .bind(title_iv)
+        .bind(content)
+        .bind(content_encrypted)
+        .bind(iv)
+        .bind(encryption_version)
+        .bind(parent_id)
+        .bind(is_folder)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(uuid)
@@ -156,7 +247,7 @@ impl PostStore {
     /// Get a post by UUID. Only returns the post if it belongs to the given user.
     pub async fn get_by_uuid(&self, uuid: &str, user_id: i64) -> Result<Option<Post>, sqlx::Error> {
         let row: Option<PostRow> = sqlx::query_as(
-            "SELECT id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, created_at, updated_at
+            "SELECT id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, is_folder, created_at, updated_at
              FROM posts WHERE uuid = ? AND user_id = ?",
         )
         .bind(uuid)
@@ -166,11 +257,11 @@ impl PostStore {
         Ok(row.map(Post::from))
     }
 
-    /// List all posts for a user, ordered by position (ascending).
+    /// List all posts for a user as a flat list, ordered by position.
     /// Posts without a position are sorted by updated_at descending after positioned posts.
     pub async fn list_by_user(&self, user_id: i64) -> Result<Vec<PostSummary>, sqlx::Error> {
         let rows: Vec<PostSummaryRow> = sqlx::query_as(
-            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, created_at, updated_at
+            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, is_folder, created_at, updated_at
              FROM posts WHERE user_id = ?
              ORDER BY position IS NULL, position ASC, updated_at DESC",
         )
@@ -178,6 +269,157 @@ impl PostStore {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(PostSummary::from).collect())
+    }
+
+    /// List posts as a tree structure up to the specified depth.
+    /// Returns root-level posts with children nested.
+    pub async fn list_tree(
+        &self,
+        user_id: i64,
+        max_depth: i32,
+    ) -> Result<Vec<PostNode>, sqlx::Error> {
+        // Fetch all posts for the user
+        let all_posts = self.list_by_user(user_id).await?;
+
+        // Build the tree structure
+        Ok(Self::build_tree(all_posts, max_depth))
+    }
+
+    /// Build a tree structure from a flat list of posts.
+    fn build_tree(posts: Vec<PostSummary>, max_depth: i32) -> Vec<PostNode> {
+        // Group posts by parent_id
+        let mut by_parent: HashMap<Option<String>, Vec<PostSummary>> = HashMap::new();
+        for post in posts {
+            by_parent
+                .entry(post.parent_id.clone())
+                .or_default()
+                .push(post);
+        }
+
+        // Sort each group by position
+        for group in by_parent.values_mut() {
+            group.sort_by(|a, b| {
+                match (a.position, b.position) {
+                    (Some(pa), Some(pb)) => pa.cmp(&pb),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => b.updated_at.cmp(&a.updated_at), // newer first
+                }
+            });
+        }
+
+        // Recursively build tree starting from root (parent_id = None)
+        Self::build_subtree(&by_parent, None, 0, max_depth)
+    }
+
+    fn build_subtree(
+        by_parent: &HashMap<Option<String>, Vec<PostSummary>>,
+        parent_id: Option<String>,
+        current_depth: i32,
+        max_depth: i32,
+    ) -> Vec<PostNode> {
+        let Some(children) = by_parent.get(&parent_id) else {
+            return Vec::new();
+        };
+
+        children
+            .iter()
+            .map(|post| {
+                let child_posts = by_parent.get(&Some(post.uuid.clone()));
+                let has_children = child_posts.is_some_and(|c| !c.is_empty());
+
+                let children = if current_depth < max_depth {
+                    Some(Self::build_subtree(
+                        by_parent,
+                        Some(post.uuid.clone()),
+                        current_depth + 1,
+                        max_depth,
+                    ))
+                } else if has_children {
+                    // Beyond max depth but has children - don't load them
+                    None
+                } else {
+                    Some(Vec::new())
+                };
+
+                PostNode {
+                    uuid: post.uuid.clone(),
+                    title: post.title.clone(),
+                    title_encrypted: post.title_encrypted,
+                    title_iv: post.title_iv.clone(),
+                    content_encrypted: post.content_encrypted,
+                    encryption_version: post.encryption_version,
+                    position: post.position,
+                    parent_id: post.parent_id.clone(),
+                    is_folder: post.is_folder,
+                    has_children,
+                    children,
+                    created_at: post.created_at.clone(),
+                    updated_at: post.updated_at.clone(),
+                }
+            })
+            .collect()
+    }
+
+    /// List immediate children of a post.
+    pub async fn list_children(
+        &self,
+        user_id: i64,
+        parent_uuid: &str,
+    ) -> Result<Vec<PostNode>, sqlx::Error> {
+        // Verify parent exists and belongs to user
+        let parent_exists: Option<(i64,)> =
+            sqlx::query_as("SELECT 1 FROM posts WHERE uuid = ? AND user_id = ?")
+                .bind(parent_uuid)
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        if parent_exists.is_none() {
+            return Err(sqlx::Error::RowNotFound);
+        }
+
+        let rows: Vec<PostSummaryRow> = sqlx::query_as(
+            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, is_folder, created_at, updated_at
+             FROM posts WHERE user_id = ? AND parent_id = ?
+             ORDER BY position IS NULL, position ASC, updated_at DESC",
+        )
+        .bind(user_id)
+        .bind(parent_uuid)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Convert to PostNodes and check for grandchildren
+        let mut nodes = Vec::with_capacity(rows.len());
+        for row in rows {
+            let summary = PostSummary::from(row);
+            let has_children: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM posts WHERE parent_id = ? LIMIT 1")
+                    .bind(&summary.uuid)
+                    .fetch_optional(&self.pool)
+                    .await?;
+
+            nodes.push(PostNode {
+                uuid: summary.uuid,
+                title: summary.title,
+                title_encrypted: summary.title_encrypted,
+                title_iv: summary.title_iv,
+                content_encrypted: summary.content_encrypted,
+                encryption_version: summary.encryption_version,
+                position: summary.position,
+                parent_id: summary.parent_id,
+                is_folder: summary.is_folder,
+                has_children: has_children.is_some(),
+                children: if has_children.is_some() {
+                    None
+                } else {
+                    Some(Vec::new())
+                },
+                created_at: summary.created_at,
+                updated_at: summary.updated_at,
+            });
+        }
+
+        Ok(nodes)
     }
 
     /// Update a post by UUID. Only updates if the post belongs to the given user.
@@ -213,39 +455,222 @@ impl PostStore {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Count all descendants of a post (for delete warning).
+    pub async fn count_descendants(&self, uuid: &str, user_id: i64) -> Result<i64, sqlx::Error> {
+        // Use recursive CTE to count all descendants
+        let result: (i64,) = sqlx::query_as(
+            "WITH RECURSIVE descendants AS (
+                SELECT uuid FROM posts WHERE parent_id = ? AND user_id = ?
+                UNION ALL
+                SELECT p.uuid FROM posts p
+                INNER JOIN descendants d ON p.parent_id = d.uuid
+                WHERE p.user_id = ?
+            )
+            SELECT COUNT(*) FROM descendants",
+        )
+        .bind(uuid)
+        .bind(user_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(result.0)
+    }
+
     /// Delete a post by UUID. Only deletes if the post belongs to the given user.
-    /// Returns true if the post was deleted.
-    pub async fn delete(&self, uuid: &str, user_id: i64) -> Result<bool, sqlx::Error> {
+    /// All descendants are also deleted recursively.
+    /// Returns DeleteResult with deleted status and count of children deleted.
+    pub async fn delete(&self, uuid: &str, user_id: i64) -> Result<DeleteResult, sqlx::Error> {
+        // Count descendants first
+        let children_count = self.count_descendants(uuid, user_id).await?;
+
+        // Delete all descendants first using recursive CTE
+        // This handles the case where parent_id doesn't have ON DELETE CASCADE
+        sqlx::query(
+            "WITH RECURSIVE descendants AS (
+                SELECT uuid FROM posts WHERE parent_id = ? AND user_id = ?
+                UNION ALL
+                SELECT p.uuid FROM posts p
+                INNER JOIN descendants d ON p.parent_id = d.uuid
+                WHERE p.user_id = ?
+            )
+            DELETE FROM posts WHERE uuid IN (SELECT uuid FROM descendants)",
+        )
+        .bind(uuid)
+        .bind(user_id)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+
+        // Now delete the parent post itself
         let result = sqlx::query("DELETE FROM posts WHERE uuid = ? AND user_id = ?")
             .bind(uuid)
             .bind(user_id)
             .execute(&self.pool)
             .await?;
+
+        Ok(DeleteResult {
+            deleted: result.rows_affected() > 0,
+            children_deleted: if result.rows_affected() > 0 {
+                children_count
+            } else {
+                0
+            },
+        })
+    }
+
+    /// Move a post to a new parent at the specified position.
+    /// If new_parent_id is None, moves to root level.
+    pub async fn move_post(
+        &self,
+        uuid: &str,
+        user_id: i64,
+        new_parent_id: Option<&str>,
+        position: i32,
+    ) -> Result<bool, sqlx::Error> {
+        // Get current post info
+        let post = self.get_by_uuid(uuid, user_id).await?;
+        let Some(post) = post else {
+            return Ok(false);
+        };
+
+        // Validate new parent exists (if specified) and is not a descendant
+        if let Some(new_pid) = new_parent_id {
+            // Check parent exists
+            let parent_exists: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM posts WHERE uuid = ? AND user_id = ?")
+                    .bind(new_pid)
+                    .bind(user_id)
+                    .fetch_optional(&self.pool)
+                    .await?;
+            if parent_exists.is_none() {
+                return Err(sqlx::Error::RowNotFound);
+            }
+
+            // Check not moving to own descendant (would create a cycle)
+            let is_descendant: Option<(i64,)> = sqlx::query_as(
+                "WITH RECURSIVE descendants AS (
+                    SELECT uuid FROM posts WHERE parent_id = ? AND user_id = ?
+                    UNION ALL
+                    SELECT p.uuid FROM posts p
+                    INNER JOIN descendants d ON p.parent_id = d.uuid
+                    WHERE p.user_id = ?
+                )
+                SELECT 1 FROM descendants WHERE uuid = ?",
+            )
+            .bind(uuid)
+            .bind(user_id)
+            .bind(user_id)
+            .bind(new_pid)
+            .fetch_optional(&self.pool)
+            .await?;
+            if is_descendant.is_some() {
+                // Cannot move a post to its own descendant
+                return Err(sqlx::Error::Protocol(
+                    "Cannot move a post to its own descendant".to_string(),
+                ));
+            }
+        }
+
+        let mut tx = self.pool.begin().await?;
+
+        // Close gap in old parent
+        let old_position = post.position.unwrap_or(0);
+        if post.parent_id.is_some() {
+            sqlx::query(
+                "UPDATE posts SET position = position - 1
+                 WHERE user_id = ? AND parent_id = ? AND position > ?",
+            )
+            .bind(user_id)
+            .bind(&post.parent_id)
+            .bind(old_position)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE posts SET position = position - 1
+                 WHERE user_id = ? AND parent_id IS NULL AND position > ?",
+            )
+            .bind(user_id)
+            .bind(old_position)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // Make room in new parent
+        if new_parent_id.is_some() {
+            sqlx::query(
+                "UPDATE posts SET position = position + 1
+                 WHERE user_id = ? AND parent_id = ? AND position >= ?",
+            )
+            .bind(user_id)
+            .bind(new_parent_id)
+            .bind(position)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE posts SET position = position + 1
+                 WHERE user_id = ? AND parent_id IS NULL AND position >= ?",
+            )
+            .bind(user_id)
+            .bind(position)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // Move the post
+        let result = sqlx::query(
+            "UPDATE posts SET parent_id = ?, position = ? WHERE uuid = ? AND user_id = ?",
+        )
+        .bind(new_parent_id)
+        .bind(position)
+        .bind(uuid)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(result.rows_affected() > 0)
     }
 
-    /// Reorder posts by setting their positions based on the provided UUID order.
+    /// Reorder posts within a parent by setting their positions based on the provided UUID order.
     /// The first UUID in the list gets position 0, second gets 1, etc.
-    /// Only updates posts belonging to the given user.
+    /// Only updates posts belonging to the given user and with the specified parent.
     /// Returns the number of posts updated.
-    pub async fn reorder(&self, user_id: i64, uuids: &[String]) -> Result<usize, sqlx::Error> {
+    pub async fn reorder(
+        &self,
+        user_id: i64,
+        parent_id: Option<&str>,
+        uuids: &[String],
+    ) -> Result<usize, sqlx::Error> {
         if uuids.is_empty() {
             return Ok(0);
         }
 
-        // Use a transaction for atomicity. While this executes multiple statements,
-        // SQLite batches them efficiently within a single transaction.
         let mut tx = self.pool.begin().await?;
         let mut updated = 0;
 
         for (position, uuid) in uuids.iter().enumerate() {
-            let result =
-                sqlx::query("UPDATE posts SET position = ? WHERE uuid = ? AND user_id = ?")
-                    .bind(position as i32)
-                    .bind(uuid)
-                    .bind(user_id)
-                    .execute(&mut *tx)
-                    .await?;
+            let result = if parent_id.is_some() {
+                sqlx::query(
+                    "UPDATE posts SET position = ? WHERE uuid = ? AND user_id = ? AND parent_id = ?",
+                )
+                .bind(position as i32)
+                .bind(uuid)
+                .bind(user_id)
+                .bind(parent_id)
+                .execute(&mut *tx)
+                .await?
+            } else {
+                sqlx::query(
+                    "UPDATE posts SET position = ? WHERE uuid = ? AND user_id = ? AND parent_id IS NULL",
+                )
+                .bind(position as i32)
+                .bind(uuid)
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await?
+            };
             updated += result.rows_affected() as usize;
         }
 
@@ -274,6 +699,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -290,6 +717,427 @@ mod tests {
         assert!(!post.title_encrypted);
         assert_eq!(post.content, "Hello, world!");
         assert!(!post.content_encrypted);
+        assert!(post.parent_id.is_none());
+        assert!(!post.is_folder);
+    }
+
+    #[tokio::test]
+    async fn test_create_nested_post() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        // Create parent post
+        let parent_uuid = db
+            .posts()
+            .create(
+                user_id,
+                Some("Parent Post"),
+                false,
+                None,
+                "Parent content",
+                false,
+                None,
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Create child post
+        let child_uuid = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child Post"),
+                false,
+                None,
+                "Child content",
+                false,
+                None,
+                None,
+                Some(&parent_uuid),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let child = db
+            .posts()
+            .get_by_uuid(&child_uuid, user_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(child.parent_id, Some(parent_uuid.clone()));
+
+        // Verify tree structure
+        let tree = db.posts().list_tree(user_id, 3).await.unwrap();
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].uuid, parent_uuid);
+        assert!(tree[0].has_children);
+        assert_eq!(tree[0].children.as_ref().unwrap().len(), 1);
+        assert_eq!(tree[0].children.as_ref().unwrap()[0].uuid, child_uuid);
+    }
+
+    #[tokio::test]
+    async fn test_create_folder() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        let folder_uuid = db
+            .posts()
+            .create(
+                user_id,
+                Some("My Folder"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                true, // is_folder
+            )
+            .await
+            .unwrap();
+
+        let folder = db
+            .posts()
+            .get_by_uuid(&folder_uuid, user_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(folder.is_folder);
+    }
+
+    #[tokio::test]
+    async fn test_delete_with_children() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        // Create parent
+        let parent_uuid = db
+            .posts()
+            .create(
+                user_id,
+                Some("Parent"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Create children
+        let _child1 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child 1"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent_uuid),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let child2 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child 2"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent_uuid),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Create grandchild
+        let _grandchild = db
+            .posts()
+            .create(
+                user_id,
+                Some("Grandchild"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&child2),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Count descendants
+        let count = db
+            .posts()
+            .count_descendants(&parent_uuid, user_id)
+            .await
+            .unwrap();
+        assert_eq!(count, 3);
+
+        // Delete parent (should cascade)
+        let result = db.posts().delete(&parent_uuid, user_id).await.unwrap();
+        assert!(result.deleted);
+        assert_eq!(result.children_deleted, 3);
+
+        // Verify all deleted
+        let posts = db.posts().list_by_user(user_id).await.unwrap();
+        assert!(posts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_move_post() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        // Create two root posts
+        let folder1 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Folder 1"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                true,
+            )
+            .await
+            .unwrap();
+
+        let folder2 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Folder 2"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                true,
+            )
+            .await
+            .unwrap();
+
+        // Create post in folder1
+        let post = db
+            .posts()
+            .create(
+                user_id,
+                Some("My Post"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&folder1),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Move post to folder2
+        let moved = db
+            .posts()
+            .move_post(&post, user_id, Some(&folder2), 0)
+            .await
+            .unwrap();
+        assert!(moved);
+
+        // Verify new parent
+        let post_data = db
+            .posts()
+            .get_by_uuid(&post, user_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(post_data.parent_id, Some(folder2.clone()));
+    }
+
+    #[tokio::test]
+    async fn test_reorder_siblings() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        // Create parent
+        let parent = db
+            .posts()
+            .create(
+                user_id,
+                Some("Parent"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                true,
+            )
+            .await
+            .unwrap();
+
+        // Create children (created in reverse order due to position 0 insertion)
+        let child1 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child 1"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let child2 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child 2"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let child3 = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child 3"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Reorder: 1, 2, 3
+        let updated = db
+            .posts()
+            .reorder(
+                user_id,
+                Some(&parent),
+                &[child1.clone(), child2.clone(), child3.clone()],
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated, 3);
+
+        // Verify order
+        let children = db.posts().list_children(user_id, &parent).await.unwrap();
+        assert_eq!(children[0].uuid, child1);
+        assert_eq!(children[1].uuid, child2);
+        assert_eq!(children[2].uuid, child3);
+    }
+
+    #[tokio::test]
+    async fn test_list_children() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        // Create parent
+        let parent = db
+            .posts()
+            .create(
+                user_id,
+                Some("Parent"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                true,
+            )
+            .await
+            .unwrap();
+
+        // Create child with grandchild
+        let child = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent),
+                false,
+            )
+            .await
+            .unwrap();
+
+        let _grandchild = db
+            .posts()
+            .create(
+                user_id,
+                Some("Grandchild"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&child),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // List children of parent
+        let children = db.posts().list_children(user_id, &parent).await.unwrap();
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].uuid, child);
+        assert!(children[0].has_children);
+        assert!(children[0].children.is_none()); // Not loaded
     }
 
     #[tokio::test]
@@ -308,6 +1156,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -337,6 +1187,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -350,6 +1202,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -363,6 +1217,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -370,8 +1226,7 @@ mod tests {
         let posts = db.posts().list_by_user(user_id).await.unwrap();
         assert_eq!(posts.len(), 3);
 
-        // Verify all posts are present (order is by updated_at DESC, but with same-second
-        // timestamps the order may vary)
+        // Verify all posts are present
         let titles: Vec<_> = posts.iter().map(|p| p.title.as_deref()).collect();
         assert!(titles.contains(&Some("Post 1")));
         assert!(titles.contains(&Some("Post 2")));
@@ -394,6 +1249,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -441,12 +1298,15 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
 
-        let deleted = db.posts().delete(&post_uuid, user_id).await.unwrap();
-        assert!(deleted);
+        let result = db.posts().delete(&post_uuid, user_id).await.unwrap();
+        assert!(result.deleted);
+        assert_eq!(result.children_deleted, 0);
 
         let post = db.posts().get_by_uuid(&post_uuid, user_id).await.unwrap();
         assert!(post.is_none());
@@ -469,6 +1329,8 @@ mod tests {
                 false,
                 None,
                 None,
+                None,
+                false,
             )
             .await
             .unwrap();
@@ -496,8 +1358,8 @@ mod tests {
         assert!(!updated);
 
         // Bob should not be able to delete Alice's post
-        let deleted = db.posts().delete(&post_uuid, bob_id).await.unwrap();
-        assert!(!deleted);
+        let result = db.posts().delete(&post_uuid, bob_id).await.unwrap();
+        assert!(!result.deleted);
 
         // Alice should still have her post unchanged
         let post = db
@@ -507,5 +1369,54 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(post.title, Some("Alice's Post".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_cannot_move_to_descendant() {
+        let db = Database::open(":memory:").await.unwrap();
+        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
+
+        // Create parent
+        let parent = db
+            .posts()
+            .create(
+                user_id,
+                Some("Parent"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Create child
+        let child = db
+            .posts()
+            .create(
+                user_id,
+                Some("Child"),
+                false,
+                None,
+                "",
+                false,
+                None,
+                None,
+                Some(&parent),
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Try to move parent under child (would create cycle)
+        let result = db
+            .posts()
+            .move_post(&parent, user_id, Some(&child), 0)
+            .await;
+        assert!(result.is_err());
     }
 }

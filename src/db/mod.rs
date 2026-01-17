@@ -13,7 +13,7 @@ pub use challenge::ChallengeStore;
 pub use encryption::{EncryptionSettings, EncryptionSettingsStore};
 pub use login_challenge::{AuthChallenge, LoginChallengeStore};
 pub use passkey::{PasskeyStore, StoredPasskey};
-pub use posts::{Post, PostStore, PostSummary};
+pub use posts::{DeleteResult, Post, PostNode, PostStore, PostSummary};
 pub use user::{User, UserRole, UserStore};
 
 #[derive(Clone)]
@@ -94,6 +94,10 @@ impl Database {
 
         if version < 6 {
             self.migrate_v6().await?;
+        }
+
+        if version < 7 {
+            self.migrate_v7().await?;
         }
 
         Ok(())
@@ -289,6 +293,23 @@ impl Database {
                 // thumb_md_iv and thumb_lg_iv were already nullable, just rename
                 "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_md_iv TO thumb_md_iv",
                 "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_lg_iv TO thumb_lg_iv",
+            ],
+        )
+        .await
+    }
+
+    async fn migrate_v7(&self) -> Result<(), sqlx::Error> {
+        // Add support for nested posts (hierarchical structure)
+        self.run_migration(
+            7,
+            &[
+                // parent_id references the parent post's uuid (NULL = root level)
+                // ON DELETE CASCADE: deleting a parent deletes all children
+                "ALTER TABLE posts ADD COLUMN parent_id TEXT",
+                // is_folder: folders are not editable in the editor
+                "ALTER TABLE posts ADD COLUMN is_folder INTEGER NOT NULL DEFAULT 0",
+                // Index for efficient hierarchy queries
+                "CREATE INDEX idx_posts_parent ON posts(parent_id)",
             ],
         )
         .await
