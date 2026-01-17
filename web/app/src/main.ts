@@ -21,6 +21,8 @@ import {
 } from "./posts/index.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
 
+declare const __TEST_MODE__: boolean;
+
 function setupSidebarToggle(): void {
   const sidebar = document.getElementById("sidebar");
   const toggleBtn = document.getElementById("sidebar-toggle");
@@ -90,15 +92,16 @@ async function init(): Promise<void> {
     if (needsUnlock()) {
       // Create unlock handler that loads posts after unlock
       const handleUnlock = createUnlockHandler(loadPosts);
-      document
-        .getElementById("unlock-btn")
-        ?.addEventListener("click", handleUnlock);
+      const unnlockBtn = document.getElementById("unlock-btn");
+      unnlockBtn?.addEventListener("click", handleUnlock);
 
       showUnlockOverlay();
-
       // Load posts without selecting (they're encrypted)
       await loadPostsWithoutSelection();
       renderPostList();
+      if (!__TEST_MODE__) {
+        unnlockBtn?.click();
+      }
     } else {
       // No encryption or already unlocked - load normally
       await loadPosts();
