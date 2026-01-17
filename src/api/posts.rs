@@ -57,7 +57,7 @@ struct ListPostsQuery {
 }
 
 fn default_depth() -> i32 {
-    3
+    1
 }
 
 #[derive(Deserialize)]
