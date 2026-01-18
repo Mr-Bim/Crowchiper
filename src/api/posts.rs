@@ -23,6 +23,7 @@ use crate::jwt::JwtConfig;
 pub struct PostsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub secure_cookies: bool,
 }
 
 impl HasAuthState for PostsState {
@@ -31,6 +32,9 @@ impl HasAuthState for PostsState {
     }
     fn db(&self) -> &Database {
         &self.db
+    }
+    fn secure_cookies(&self) -> bool {
+        self.secure_cookies
     }
 }
 

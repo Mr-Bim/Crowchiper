@@ -1,3 +1,4 @@
+import { fetchWithAuth } from "./auth.ts";
 import { getErrorMessage } from "./utils.ts";
 
 declare const API_PATH: string;
@@ -74,13 +75,12 @@ export interface DeleteResponse {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_PATH}${path}`, {
+  const res = await fetchWithAuth(`${API_PATH}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...options.headers,
     },
-    credentials: "include",
   });
 
   if (!res.ok) {

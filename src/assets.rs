@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
-use crate::auth::{AUTH_COOKIE_NAME, get_cookie};
+use crate::auth::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
 use crate::jwt::JwtConfig;
 
 /// Login assets (public, no auth required)
@@ -113,17 +113,20 @@ impl FromRequestParts<Arc<AssetsState>> for RequireAuth {
     ) -> Result<Self, Self::Rejection> {
         let login_path = state.login_path;
 
-        // Get auth token from cookie
-        let token = get_cookie(&parts.headers, AUTH_COOKIE_NAME)
-            .ok_or(AuthError::MissingToken { login_path })?;
+        // Try access token first, then refresh token
+        if let Some(token) = get_cookie(&parts.headers, ACCESS_COOKIE_NAME) {
+            if state.jwt.validate_access_token(token).is_ok() {
+                return Ok(RequireAuth);
+            }
+        }
 
-        // Validate token
-        state
-            .jwt
-            .validate_token(token)
-            .map_err(|_| AuthError::InvalidToken { login_path })?;
+        if let Some(token) = get_cookie(&parts.headers, REFRESH_COOKIE_NAME) {
+            if state.jwt.validate_refresh_token(token).is_ok() {
+                return Ok(RequireAuth);
+            }
+        }
 
-        Ok(RequireAuth)
+        Err(AuthError::MissingToken { login_path })
     }
 }
 
@@ -225,9 +228,14 @@ pub async fn login_index_handler(
     axum::extract::State(state): axum::extract::State<Arc<AssetsState>>,
     headers: axum::http::HeaderMap,
 ) -> Response {
-    // Redirect authenticated users to the app
-    if let Some(token) = get_cookie(&headers, AUTH_COOKIE_NAME) {
-        if state.jwt.validate_token(token).is_ok() {
+    // Redirect authenticated users to the app (check access token, then refresh token)
+    if let Some(token) = get_cookie(&headers, ACCESS_COOKIE_NAME) {
+        if state.jwt.validate_access_token(token).is_ok() {
+            return Redirect::temporary(state.app_path).into_response();
+        }
+    }
+    if let Some(token) = get_cookie(&headers, REFRESH_COOKIE_NAME) {
+        if state.jwt.validate_refresh_token(token).is_ok() {
             return Redirect::temporary(state.app_path).into_response();
         }
     }

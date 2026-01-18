@@ -27,6 +27,7 @@ const UNENCRYPTED_VERSION: i32 = 0;
 pub struct AttachmentsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub secure_cookies: bool,
 }
 
 impl HasAuthState for AttachmentsState {
@@ -35,6 +36,9 @@ impl HasAuthState for AttachmentsState {
     }
     fn db(&self) -> &Database {
         &self.db
+    }
+    fn secure_cookies(&self) -> bool {
+        self.secure_cookies
     }
 }
 

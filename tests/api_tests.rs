@@ -309,9 +309,9 @@ async fn test_delete_activated_user_self() {
     let id = db.users().create(uuid, "alice").await.unwrap();
     db.users().activate(id).await.unwrap();
 
-    // Generate JWT for this user
-    let token = jwt
-        .generate_token(uuid, "alice", crowchiper::db::UserRole::User)
+    // Generate access token for this user
+    let access_result = jwt
+        .generate_access_token(uuid, "alice", crowchiper::db::UserRole::User)
         .unwrap();
 
     // Delete own account with auth
@@ -320,7 +320,7 @@ async fn test_delete_activated_user_self() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/api/users/{}", uuid))
-                .header("cookie", format!("auth_token={}", token))
+                .header("cookie", format!("access_token={}", access_result.token))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -358,9 +358,9 @@ async fn test_delete_activated_user_other_forbidden() {
     let bob_id = db.users().create(bob_uuid, "bob").await.unwrap();
     db.users().activate(bob_id).await.unwrap();
 
-    // Generate JWT for bob
-    let bob_token = jwt
-        .generate_token(bob_uuid, "bob", crowchiper::db::UserRole::User)
+    // Generate access token for bob
+    let bob_access_result = jwt
+        .generate_access_token(bob_uuid, "bob", crowchiper::db::UserRole::User)
         .unwrap();
 
     // Bob tries to delete alice's account
@@ -369,7 +369,10 @@ async fn test_delete_activated_user_other_forbidden() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/api/users/{}", alice_uuid))
-                .header("cookie", format!("auth_token={}", bob_token))
+                .header(
+                    "cookie",
+                    format!("access_token={}", bob_access_result.token),
+                )
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -407,9 +410,9 @@ async fn test_delete_activated_user_admin() {
     let admin_id = db.users().create_admin(admin_uuid, "admin").await.unwrap();
     db.users().activate(admin_id).await.unwrap();
 
-    // Generate JWT for admin
-    let admin_token = jwt
-        .generate_token(admin_uuid, "admin", crowchiper::db::UserRole::Admin)
+    // Generate access token for admin
+    let admin_access_result = jwt
+        .generate_access_token(admin_uuid, "admin", crowchiper::db::UserRole::Admin)
         .unwrap();
 
     // Admin deletes alice's account
@@ -418,7 +421,10 @@ async fn test_delete_activated_user_admin() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/api/users/{}", alice_uuid))
-                .header("cookie", format!("auth_token={}", admin_token))
+                .header(
+                    "cookie",
+                    format!("access_token={}", admin_access_result.token),
+                )
                 .body(Body::empty())
                 .unwrap(),
         )

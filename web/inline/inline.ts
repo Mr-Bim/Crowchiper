@@ -56,7 +56,7 @@ const changeTheme = (themeId: string) => {
 // Initialize theme on page load
 const currentTheme = initTheme();
 
-// Create and attach theme dropdown
+// Create and attach theme dropdown and settings menu
 document.addEventListener("DOMContentLoaded", () => {
   const container = document.getElementById("theme-toggle");
   if (container) {
@@ -64,12 +64,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const select = document.createElement("select");
     select.id = "theme-select";
     select.style.cssText = `
-			padding: 0.5rem 1rem;
 			background: var(--surface);
 			border: 1px solid var(--border);
 			border-radius: 4px;
 			cursor: pointer;
-			font-size: 0.9rem;
 			color: var(--text);
 		`;
 
@@ -93,5 +91,65 @@ document.addEventListener("DOMContentLoaded", () => {
     // Replace container content with select
     container.innerHTML = "";
     container.appendChild(select);
+  }
+
+  // Settings menu toggle
+  const settingsBtn = document.getElementById("settings-btn");
+  const settingsMenu = document.getElementById("settings-menu");
+
+  if (settingsBtn && settingsMenu) {
+    settingsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = !settingsMenu.hidden;
+      settingsMenu.hidden = isOpen;
+      settingsBtn.setAttribute("aria-expanded", String(!isOpen));
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener("click", (e) => {
+      if (
+        !settingsMenu.hidden &&
+        !settingsMenu.contains(e.target as Node) &&
+        !settingsBtn.contains(e.target as Node)
+      ) {
+        settingsMenu.hidden = true;
+        settingsBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+
+    // Close menu on Escape
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !settingsMenu.hidden) {
+        settingsMenu.hidden = true;
+        settingsBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // Logout button
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        const apiPath = (window as unknown as Record<string, string>).API_PATH;
+        const loginPath = (window as unknown as Record<string, string>)
+          .LOGIN_PATH;
+        const response = await fetch(`${apiPath}/tokens/logout`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (response.ok) {
+          window.location.href = loginPath;
+        } else {
+          // Even if the request fails, redirect to login (cookie might be cleared)
+          window.location.href = loginPath;
+        }
+      } catch {
+        // Network error - redirect anyway
+        const loginPath = (window as unknown as Record<string, string>)
+          .LOGIN_PATH;
+        window.location.href = loginPath;
+      }
+    });
   }
 });

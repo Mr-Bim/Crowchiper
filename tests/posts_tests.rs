@@ -29,36 +29,57 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
     (create_app(&config), db, jwt_config)
 }
 
-/// Create a user and return (user_id, jwt_token).
+/// Create a user and return (user_id, access_token, refresh_token).
 async fn create_authenticated_user(
     db: &Database,
     jwt: &JwtConfig,
     username: &str,
-) -> (i64, String) {
+) -> (i64, String, String) {
     let uuid = uuid::Uuid::new_v4().to_string();
     let id = db.users().create(&uuid, username).await.unwrap();
     db.users().activate(id).await.unwrap();
-    let token = jwt
-        .generate_token(&uuid, username, crowchiper::db::UserRole::User)
+
+    // Generate access token (stateless, no DB storage)
+    let access_result = jwt
+        .generate_access_token(&uuid, username, crowchiper::db::UserRole::User)
         .unwrap();
-    (id, token)
+
+    // Generate refresh token and store in DB
+    let refresh_result = jwt
+        .generate_refresh_token(&uuid, username, crowchiper::db::UserRole::User)
+        .unwrap();
+    db.tokens()
+        .create(
+            &refresh_result.jti,
+            id,
+            None,
+            refresh_result.issued_at,
+            refresh_result.expires_at,
+        )
+        .await
+        .unwrap();
+
+    (id, access_result.token, refresh_result.token)
 }
 
-fn auth_cookie(token: &str) -> String {
-    format!("auth_token={}", token)
+fn auth_cookies(access_token: &str, refresh_token: &str) -> String {
+    format!(
+        "access_token={}; refresh_token={}",
+        access_token, refresh_token
+    )
 }
 
 #[tokio::test]
 async fn test_list_posts_empty() {
     let (app, db, jwt) = create_test_app().await;
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri("/api/posts")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -78,7 +99,7 @@ async fn test_list_posts_empty() {
 #[tokio::test]
 async fn test_create_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let response = app
         .oneshot(
@@ -86,7 +107,7 @@ async fn test_create_post() {
                 .method("POST")
                 .uri("/api/posts")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(
                     r#"{"title": "My First Post", "content": "Hello, world!"}"#,
                 ))
@@ -108,7 +129,7 @@ async fn test_create_post() {
 #[tokio::test]
 async fn test_create_post_without_title() {
     let (app, db, jwt) = create_test_app().await;
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let response = app
         .oneshot(
@@ -116,7 +137,7 @@ async fn test_create_post_without_title() {
                 .method("POST")
                 .uri("/api/posts")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(r#"{"content": "Just content"}"#))
                 .unwrap(),
         )
@@ -129,7 +150,7 @@ async fn test_create_post_without_title() {
 #[tokio::test]
 async fn test_get_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Create a post directly in the database
     let post_uuid = db
@@ -154,7 +175,7 @@ async fn test_get_post() {
             Request::builder()
                 .method("GET")
                 .uri(format!("/api/posts/{}", post_uuid))
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -176,14 +197,14 @@ async fn test_get_post() {
 #[tokio::test]
 async fn test_get_post_not_found() {
     let (app, db, jwt) = create_test_app().await;
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri("/api/posts/00000000-0000-0000-0000-000000000000")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -196,7 +217,7 @@ async fn test_get_post_not_found() {
 #[tokio::test]
 async fn test_update_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let post_uuid = db
         .posts()
@@ -221,7 +242,7 @@ async fn test_update_post() {
                 .method("PUT")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(
                     r#"{"title": "Updated", "content": "Updated content"}"#,
                 ))
@@ -246,7 +267,7 @@ async fn test_update_post() {
 #[tokio::test]
 async fn test_delete_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let post_uuid = db
         .posts()
@@ -270,7 +291,7 @@ async fn test_delete_post() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/api/posts/{}", post_uuid))
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -294,8 +315,8 @@ async fn test_delete_post() {
 #[tokio::test]
 async fn test_list_posts_returns_user_posts_only() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, alice_token) = create_authenticated_user(&db, &jwt, "alice").await;
-    let (bob_id, _bob_token) = create_authenticated_user(&db, &jwt, "bob").await;
+    let (alice_id, alice_access, alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (bob_id, _bob_access, _bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Create posts for both users
     db.posts()
@@ -349,7 +370,7 @@ async fn test_list_posts_returns_user_posts_only() {
             Request::builder()
                 .method("GET")
                 .uri("/api/posts")
-                .header("cookie", auth_cookie(&alice_token))
+                .header("cookie", auth_cookies(&alice_access, &alice_refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -370,8 +391,8 @@ async fn test_list_posts_returns_user_posts_only() {
 #[tokio::test]
 async fn test_cannot_access_other_users_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_token) = create_authenticated_user(&db, &jwt, "alice").await;
-    let (_, bob_token) = create_authenticated_user(&db, &jwt, "bob").await;
+    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Alice creates a post
     let post_uuid = db
@@ -397,7 +418,7 @@ async fn test_cannot_access_other_users_post() {
             Request::builder()
                 .method("GET")
                 .uri(format!("/api/posts/{}", post_uuid))
-                .header("cookie", auth_cookie(&bob_token))
+                .header("cookie", auth_cookies(&bob_access, &bob_refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -410,8 +431,8 @@ async fn test_cannot_access_other_users_post() {
 #[tokio::test]
 async fn test_cannot_update_other_users_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_token) = create_authenticated_user(&db, &jwt, "alice").await;
-    let (_, bob_token) = create_authenticated_user(&db, &jwt, "bob").await;
+    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     let post_uuid = db
         .posts()
@@ -437,7 +458,7 @@ async fn test_cannot_update_other_users_post() {
                 .method("PUT")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&bob_token))
+                .header("cookie", auth_cookies(&bob_access, &bob_refresh))
                 .body(Body::from(r#"{"title": "Hacked", "content": "Hacked"}"#))
                 .unwrap(),
         )
@@ -459,8 +480,8 @@ async fn test_cannot_update_other_users_post() {
 #[tokio::test]
 async fn test_cannot_delete_other_users_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_token) = create_authenticated_user(&db, &jwt, "alice").await;
-    let (_, bob_token) = create_authenticated_user(&db, &jwt, "bob").await;
+    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     let post_uuid = db
         .posts()
@@ -485,7 +506,7 @@ async fn test_cannot_delete_other_users_post() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/api/posts/{}", post_uuid))
-                .header("cookie", auth_cookie(&bob_token))
+                .header("cookie", auth_cookies(&bob_access, &bob_refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -555,14 +576,14 @@ async fn test_posts_with_base_path() {
     };
     let app = create_app(&config);
 
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri("/app/api/posts")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -575,7 +596,7 @@ async fn test_posts_with_base_path() {
 #[tokio::test]
 async fn test_create_encrypted_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Enable encryption for user (required to submit encrypted posts)
     let prf_salt = vec![0u8; 32];
@@ -595,7 +616,7 @@ async fn test_create_encrypted_post() {
                 .method("POST")
                 .uri("/api/posts")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(format!(
                     r#"{{"title": "{}", "title_encrypted": true, "content": "{}", "content_encrypted": true}}"#,
                     encrypted_title.replace('"', "\\\""),
@@ -621,7 +642,7 @@ async fn test_create_encrypted_post() {
             Request::builder()
                 .method("GET")
                 .uri(format!("/api/posts/{}", post_uuid))
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -644,7 +665,7 @@ async fn test_create_encrypted_post() {
 #[tokio::test]
 async fn test_update_post_encryption_flags() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Enable encryption for user (required to submit encrypted posts)
     let prf_salt = vec![0u8; 32];
@@ -681,7 +702,7 @@ async fn test_update_post_encryption_flags() {
                 .method("PUT")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(format!(
                     r#"{{"title": "Encrypted Title", "title_encrypted": true, "content": "{}", "content_encrypted": true}}"#,
                     encrypted_content.replace('"', "\\\"")
@@ -707,7 +728,7 @@ async fn test_update_post_encryption_flags() {
 #[tokio::test]
 async fn test_list_posts_includes_encrypted_flags() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Create an encrypted post directly in DB
     let encrypted_title = "enc_title_ciphertext";
@@ -732,7 +753,7 @@ async fn test_list_posts_includes_encrypted_flags() {
             Request::builder()
                 .method("GET")
                 .uri("/api/posts")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -759,7 +780,7 @@ async fn test_list_posts_includes_encrypted_flags() {
 #[tokio::test]
 async fn test_reorder_posts() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Create 3 posts - they will be at positions 0, 0, 0 initially
     // (each new post shifts others down and takes position 0)
@@ -821,7 +842,7 @@ async fn test_reorder_posts() {
                 .method("POST")
                 .uri("/api/posts/reorder")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(format!(
                     r#"{{"uuids": ["{}", "{}", "{}"]}}"#,
                     post1, post3, post2
@@ -839,7 +860,7 @@ async fn test_reorder_posts() {
             Request::builder()
                 .method("GET")
                 .uri("/api/posts")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -864,7 +885,7 @@ async fn test_reorder_posts() {
 #[tokio::test]
 async fn test_reorder_posts_empty_list() {
     let (app, db, jwt) = create_test_app().await;
-    let (_, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     let response = app
         .oneshot(
@@ -872,7 +893,7 @@ async fn test_reorder_posts_empty_list() {
                 .method("POST")
                 .uri("/api/posts/reorder")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(r#"{"uuids": []}"#))
                 .unwrap(),
         )
@@ -885,8 +906,8 @@ async fn test_reorder_posts_empty_list() {
 #[tokio::test]
 async fn test_reorder_cannot_affect_other_users_posts() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_token) = create_authenticated_user(&db, &jwt, "alice").await;
-    let (_, bob_token) = create_authenticated_user(&db, &jwt, "bob").await;
+    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Alice creates posts
     let post1 = db
@@ -929,7 +950,7 @@ async fn test_reorder_cannot_affect_other_users_posts() {
                 .method("POST")
                 .uri("/api/posts/reorder")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&bob_token))
+                .header("cookie", auth_cookies(&bob_access, &bob_refresh))
                 .body(Body::from(format!(
                     r#"{{"uuids": ["{}", "{}"]}}"#,
                     post2, post1
@@ -952,7 +973,7 @@ async fn test_reorder_cannot_affect_other_users_posts() {
 #[tokio::test]
 async fn test_new_post_inserted_at_top() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     // Create first post
     let post1 = db
@@ -980,7 +1001,7 @@ async fn test_new_post_inserted_at_top() {
                 .method("POST")
                 .uri("/api/posts")
                 .header("content-type", "application/json")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::from(r#"{"title": "Post 2", "content": "C2"}"#))
                 .unwrap(),
         )
@@ -1001,7 +1022,7 @@ async fn test_new_post_inserted_at_top() {
             Request::builder()
                 .method("GET")
                 .uri("/api/posts")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -1024,7 +1045,7 @@ async fn test_new_post_inserted_at_top() {
 #[tokio::test]
 async fn test_list_posts_includes_position() {
     let (app, db, jwt) = create_test_app().await;
-    let (user_id, token) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (user_id, access, refresh) = create_authenticated_user(&db, &jwt, "alice").await;
 
     db.posts()
         .create(
@@ -1047,7 +1068,7 @@ async fn test_list_posts_includes_position() {
             Request::builder()
                 .method("GET")
                 .uri("/api/posts")
-                .header("cookie", auth_cookie(&token))
+                .header("cookie", auth_cookies(&access, &refresh))
                 .body(Body::empty())
                 .unwrap(),
         )

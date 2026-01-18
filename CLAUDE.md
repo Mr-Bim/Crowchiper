@@ -146,7 +146,7 @@ Posts support unlimited nesting depth, similar to Notion:
 - `ON DELETE CASCADE`: Deleting a parent deletes all children
 
 ### API Endpoints
-- `GET /posts` - Returns tree structure (3 levels deep by default)
+- `GET /posts` - Returns tree structure (1 level deep by default)
 - `GET /posts/{uuid}/children` - Lazy load children beyond initial depth
 - `POST /posts` - Accepts `parent_id` and `is_folder` fields
 - `POST /posts/{uuid}/move` - Move post to new parent: `{ parent_id, position }`
@@ -187,6 +187,75 @@ Two drop modes based on pointer position:
 ### Delete Behavior
 - Deleting a post with children shows warning with count
 - User must confirm before cascade delete
+
+## Dual-Token Authentication
+
+The app uses a dual-token system with access tokens and refresh tokens:
+
+### Token Types
+- **Access tokens**: Short-lived (5 minutes), stateless, no JTI. Used for API authentication.
+- **Refresh tokens**: Long-lived (2 weeks), tracked in database with JTI. Used to obtain new access tokens.
+
+### How It Works
+1. On login, both tokens are issued as HttpOnly cookies (`access_token`, `refresh_token`)
+2. API requests use the access token for authentication
+3. If access token is expired but refresh token is valid, middleware auto-refreshes the access token
+4. If both tokens are invalid/expired, returns 401 and frontend redirects to login
+5. Refresh tokens can be revoked (logged out) which invalidates the session
+
+### Database Schema (v9)
+```sql
+CREATE TABLE active_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jti TEXT UNIQUE NOT NULL,      -- JWT ID (refresh tokens only)
+    user_id INTEGER NOT NULL,      -- References users(id)
+    last_ip TEXT,                  -- Last IP address used
+    issued_at TEXT NOT NULL,       -- When token was issued
+    expires_at TEXT NOT NULL,      -- When token expires
+    token_type TEXT NOT NULL,      -- Always 'refresh'
+    created_at TEXT NOT NULL
+)
+```
+
+### JWT Claims
+Access tokens (`src/jwt.rs`):
+```rust
+struct AccessClaims {
+    sub: String,      // User UUID
+    username: String,
+    role: UserRole,
+    typ: TokenType,   // "access"
+    iat: u64,
+    exp: u64,
+}
+```
+
+Refresh tokens include additional `jti` field for database tracking.
+
+### Cookie Names
+- `access_token` - Short-lived access token
+- `refresh_token` - Long-lived refresh token (tracked in DB)
+
+### API Endpoints
+- `POST /api/tokens/refresh` - Exchange refresh token for new access token
+- `POST /api/tokens/logout` - Revoke refresh token and clear both cookies
+- `GET /api/tokens` - List user's active refresh tokens
+- `GET /api/tokens/verify` - Check if current access token is valid
+- `DELETE /api/tokens/{jti}` - Revoke specific refresh token
+
+### Frontend Behavior
+- On 401 response, frontend redirects to login page (`fetchWithAuth` in `web/app/src/api/auth.ts`)
+- No client-side token refresh logic needed - server handles it automatically
+
+### Frontend Settings Menu
+The sidebar footer has a settings menu (gear icon) with:
+- Theme selector dropdown
+- Logout button (calls `/api/tokens/logout`, redirects to login)
+
+Located in `web/app/index.html`, styled in `web/app/css/app.css`, logic in `web/inline/inline.ts`.
+
+### Token Cleanup
+Expired tokens are deleted on server startup via `db.tokens().delete_expired()`.
 
 ## Playwright E2E Tests
 

@@ -1,3 +1,5 @@
+import { fetchWithAuth } from "./auth.ts";
+
 /**
  * Safely extract an error message from a fetch Response.
  *
@@ -48,6 +50,8 @@ interface RetryOptions {
  *
  * Retries the request up to maxRetries times if the server returns a 5xx error.
  * This is useful for handling transient issues like Cloudflare errors.
+ *
+ * Also handles 401 responses by redirecting to login.
  */
 export async function fetchWithRetry(
   input: RequestInfo | URL,
@@ -57,7 +61,7 @@ export async function fetchWithRetry(
   const { maxRetries = 2, delayMs = 1000, fallbackError } = options;
 
   const attempt = async (retriesLeft: number): Promise<Response> => {
-    const response = await fetch(input, init);
+    const response = await fetchWithAuth(input, init);
 
     if (response.ok) {
       return response;

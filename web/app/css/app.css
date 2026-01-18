@@ -250,7 +250,7 @@
     --marker: 1;
 }
 
-/* Sidebar footer with centered theme toggle */
+/* Sidebar footer with settings dropdown */
 .sidebar-footer {
     padding: 1rem;
     border-top: 1px solid var(--border);
@@ -258,9 +258,108 @@
     justify-content: center;
 }
 
+/* Settings dropdown */
+.gl-minify-disable-settings-dropdown {
+    --marker: 1;
+}
+
+.settings-dropdown {
+    position: relative;
+}
+
+.settings-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        color 0.15s,
+        background 0.15s;
+}
+
+.settings-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.settings-btn[aria-expanded="true"] {
+    background: var(--surface);
+    color: var(--accent);
+}
+
+.settings-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    box-shadow:
+        0 8px 24px oklch(0 0 0 / 0.15),
+        0 2px 8px oklch(0 0 0 / 0.1);
+    z-index: 100;
+    min-width: 12rem;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.settings-menu[hidden] {
+    display: none;
+}
+
+.settings-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.875rem;
+    text-align: left;
+    border-radius: 0.375rem;
+}
+
+.settings-menu-btn {
+    cursor: pointer;
+}
+
+.settings-menu-btn:hover {
+    background: var(--bg);
+}
+
+.settings-label {
+    font-weight: 500;
+}
+
 #theme-toggle {
     display: flex;
-    justify-content: center;
+}
+
+#theme-toggle select {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+:root[data-theme="dark"] .settings-menu {
+    box-shadow:
+        0 8px 24px oklch(0 0 0 / 0.5),
+        0 2px 8px oklch(0 0 0 / 0.3);
+}
+
+.gl-minify-enable-settings-dropdown {
+    --marker: 1;
 }
 
 /* Main content */

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
-use crate::auth::{AUTH_COOKIE_NAME, get_cookie};
+use crate::auth::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
 use crate::db::{Database, UserRole};
 use crate::jwt::JwtConfig;
 
@@ -118,13 +118,29 @@ async fn delete_user(
 
     // For activated users, require authentication
     if user.activated {
-        let token = get_cookie(&headers, AUTH_COOKIE_NAME)
-            .ok_or_else(|| ApiError::unauthorized("Authentication required"))?;
-
-        let claims = state
-            .jwt
-            .validate_token(token)
-            .map_err(|_| ApiError::unauthorized("Invalid or expired token"))?;
+        // Try access token first, then refresh token
+        let claims = if let Some(token) = get_cookie(&headers, ACCESS_COOKIE_NAME) {
+            state
+                .jwt
+                .validate_access_token(token)
+                .map_err(|_| ApiError::unauthorized("Invalid or expired token"))?
+        } else if let Some(token) = get_cookie(&headers, REFRESH_COOKIE_NAME) {
+            let refresh_claims = state
+                .jwt
+                .validate_refresh_token(token)
+                .map_err(|_| ApiError::unauthorized("Invalid or expired token"))?;
+            // Convert refresh claims to have the same fields we need
+            crate::jwt::AccessClaims {
+                sub: refresh_claims.sub,
+                username: refresh_claims.username,
+                role: refresh_claims.role,
+                token_type: crate::jwt::TokenType::Access,
+                iat: refresh_claims.iat,
+                exp: refresh_claims.exp,
+            }
+        } else {
+            return Err(ApiError::unauthorized("Authentication required"));
+        };
 
         // Only allow the user themselves or an admin to delete
         let is_self = claims.sub == uuid;

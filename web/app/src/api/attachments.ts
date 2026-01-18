@@ -3,6 +3,7 @@
  * Uses binary streaming instead of base64 for efficiency.
  */
 
+import { fetchWithAuth } from "./auth.ts";
 import { getErrorMessage } from "./utils.ts";
 
 declare const API_PATH: string;
@@ -58,9 +59,8 @@ export async function uploadAttachment(
   formData.append("thumb_lg_iv", req.thumb_lg_iv);
   formData.append("encryption_version", req.encryption_version.toString());
 
-  const response = await fetch(`${API_PATH}/attachments`, {
+  const response = await fetchWithAuth(`${API_PATH}/attachments`, {
     method: "POST",
-    credentials: "include",
     body: formData,
   });
 
@@ -82,9 +82,7 @@ export async function uploadAttachment(
 export async function getAttachment(
   uuid: string,
 ): Promise<BinaryAttachmentResponse> {
-  const response = await fetch(`${API_PATH}/attachments/${uuid}`, {
-    credentials: "include",
-  });
+  const response = await fetchWithAuth(`${API_PATH}/attachments/${uuid}`);
 
   if (!response.ok) {
     const errorMsg = await getErrorMessage(
@@ -111,11 +109,8 @@ export async function getAttachmentThumbnail(
   uuid: string,
   size: ThumbnailSize,
 ): Promise<BinaryAttachmentResponse> {
-  const response = await fetch(
+  const response = await fetchWithAuth(
     `${API_PATH}/attachments/${uuid}/thumbnail/${size}`,
-    {
-      credentials: "include",
-    },
   );
 
   if (!response.ok) {
@@ -158,9 +153,9 @@ function findBytes(
 export async function getAttachmentThumbnails(
   uuid: string,
 ): Promise<ThumbnailsResponse> {
-  const response = await fetch(`${API_PATH}/attachments/${uuid}/thumbnails`, {
-    credentials: "include",
-  });
+  const response = await fetchWithAuth(
+    `${API_PATH}/attachments/${uuid}/thumbnails`,
+  );
 
   if (!response.ok) {
     const errorMsg = await getErrorMessage(

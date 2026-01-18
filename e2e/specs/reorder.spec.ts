@@ -40,9 +40,10 @@ test.describe("Post reorder functionality", () => {
       timeout: 10000,
     });
 
-    // Create a second post by clicking the new post button
+    // Create a second post by clicking the new post button (click dropdown, then select option)
     const newPostBtn = page.locator("#new-post-btn");
     await newPostBtn.click();
+    await page.locator("#new-post-option").click();
 
     // Wait for second post to appear
     await expect(postList.locator(".post-wrapper")).toHaveCount(2, {
@@ -59,8 +60,9 @@ test.describe("Post reorder functionality", () => {
       postList.locator(".post-item").filter({ hasText: "Second Post" }),
     ).toBeVisible({ timeout: 5000 });
 
-    // Create a third post
+    // Create a third post (click dropdown, then select option)
     await newPostBtn.click();
+    await page.locator("#new-post-option").click();
     await expect(postList.locator(".post-wrapper")).toHaveCount(3, {
       timeout: 5000,
     });

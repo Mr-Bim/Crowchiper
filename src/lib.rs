@@ -11,16 +11,23 @@ use assets::{
     AssetsState, app_handler, app_handler_direct, login_handler, login_handler_direct,
     login_index_handler, process_app_html_files, process_login_html_files,
 };
-use axum::{Router, response::Redirect, routing::get};
+use auth::NewAccessTokenCookie;
+use axum::{
+    Router,
+    http::header::SET_COOKIE,
+    middleware::{self, Next},
+    response::{Redirect, Response},
+    routing::get,
+};
 use db::Database;
 use jwt::JwtConfig;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tracing::info;
 use url::Url;
 use webauthn_rs::prelude::*;
-
-use std::net::SocketAddr;
 
 pub struct ServerConfig {
     /// Base path for the application (e.g., "/app" or "/crow-base")
@@ -42,6 +49,23 @@ pub struct ServerConfig {
 /// Leak a String to get a &'static str. Used for paths that live for the program lifetime.
 fn leak_string(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
+}
+
+/// Middleware to add the new access token cookie to responses when token was refreshed.
+async fn add_access_token_cookie(request: axum::extract::Request, next: Next) -> Response {
+    // Check if a new access token cookie was set by the auth extractor
+    let new_cookie = request.extensions().get::<NewAccessTokenCookie>().cloned();
+
+    let mut response = next.run(request).await;
+
+    // Add the new access token cookie to the response
+    if let Some(NewAccessTokenCookie(cookie)) = new_cookie {
+        if let Ok(value) = cookie.parse() {
+            response.headers_mut().append(SET_COOKIE, value);
+        }
+    }
+
+    response
 }
 
 /// Create the application router with the given configuration.
@@ -99,7 +123,9 @@ pub fn create_app(config: &ServerConfig) -> Router {
         jwt,
         config.secure_cookies,
         config.no_signup,
-    );
+    )
+    // Add middleware to set new access token cookie when refreshed
+    .layer(middleware::from_fn(add_access_token_cookie));
 
     // Login assets (public, no auth)
     // Index routes redirect authenticated users to the app
@@ -135,13 +161,25 @@ pub async fn start_server(
     config: ServerConfig,
     port: u16,
 ) -> (tokio::task::JoinHandle<()>, SocketAddr) {
+    // Clean up expired tokens on startup
+    match config.db.tokens().delete_expired().await {
+        Ok(count) if count > 0 => info!("Cleaned up {} expired tokens", count),
+        Ok(_) => {}
+        Err(e) => tracing::warn!("Failed to clean up expired tokens: {}", e),
+    }
+
     let app = create_app(&config);
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await.expect("Failed to bind");
     let local_addr = listener.local_addr().expect("Failed to get local address");
 
     let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .ok();
     });
 
     (handle, local_addr)

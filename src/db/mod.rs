@@ -4,6 +4,7 @@ mod encryption;
 mod login_challenge;
 mod passkey;
 mod posts;
+mod token;
 mod user;
 
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -14,6 +15,7 @@ pub use encryption::{EncryptionSettings, EncryptionSettingsStore};
 pub use login_challenge::{AuthChallenge, LoginChallengeStore};
 pub use passkey::{PasskeyStore, StoredPasskey};
 pub use posts::{DeleteResult, Post, PostNode, PostStore, PostSummary};
+pub use token::{ActiveToken, TokenStore};
 pub use user::{User, UserRole, UserStore};
 
 #[derive(Clone)]
@@ -98,6 +100,14 @@ impl Database {
 
         if version < 7 {
             self.migrate_v7().await?;
+        }
+
+        if version < 8 {
+            self.migrate_v8().await?;
+        }
+
+        if version < 9 {
+            self.migrate_v9().await?;
         }
 
         Ok(())
@@ -315,6 +325,42 @@ impl Database {
         .await
     }
 
+    async fn migrate_v8(&self) -> Result<(), sqlx::Error> {
+        // Add active tokens table for JWT tracking and revocation
+        self.run_migration(
+            8,
+            &[
+                "CREATE TABLE active_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    jti TEXT UNIQUE NOT NULL,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    last_ip TEXT,
+                    issued_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )",
+                "CREATE INDEX idx_active_tokens_jti ON active_tokens(jti)",
+                "CREATE INDEX idx_active_tokens_user_id ON active_tokens(user_id)",
+                "CREATE INDEX idx_active_tokens_expires_at ON active_tokens(expires_at)",
+            ],
+        )
+        .await
+    }
+
+    async fn migrate_v9(&self) -> Result<(), sqlx::Error> {
+        // Add token_type column for distinguishing access vs refresh tokens
+        // Only refresh tokens are tracked in the database (access tokens are stateless)
+        self.run_migration(
+            9,
+            &[
+                // Add token_type column: 'refresh' for refresh tokens
+                // Existing tokens are converted to refresh tokens
+                "ALTER TABLE active_tokens ADD COLUMN token_type TEXT NOT NULL DEFAULT 'refresh'",
+            ],
+        )
+        .await
+    }
+
     /// Get the user store.
     pub fn users(&self) -> UserStore {
         UserStore::new(self.pool.clone())
@@ -353,6 +399,11 @@ impl Database {
     /// Get the attachments store.
     pub fn attachments(&self) -> AttachmentStore {
         AttachmentStore::new(self.pool.clone())
+    }
+
+    /// Get the tokens store.
+    pub fn tokens(&self) -> TokenStore {
+        TokenStore::new(self.pool.clone())
     }
 
     /// Begin a new transaction.

@@ -17,6 +17,7 @@ pub struct TestState {
 pub fn router(state: TestState) -> Router {
     Router::new()
         .route("/admin", post(create_admin_user))
+        .route("/token", post(store_token))
         .with_state(state)
 }
 
@@ -64,4 +65,68 @@ async fn create_admin_user(
             username: username.to_string(),
         }),
     ))
+}
+
+#[derive(Deserialize)]
+struct StoreTokenRequest {
+    jti: String,
+    user_uuid: String,
+    username: String,
+    issued_at: u64,
+    expires_at: u64,
+}
+
+#[derive(Serialize)]
+struct StoreTokenResponse {
+    success: bool,
+}
+
+/// Store a token in the database for e2e testing.
+/// This allows tests to manually create JWT tokens and register them.
+async fn store_token(
+    State(state): State<TestState>,
+    Json(payload): Json<StoreTokenRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    // First, ensure the user exists and is activated
+    let user = state
+        .db
+        .users()
+        .get_by_uuid(&payload.user_uuid)
+        .await
+        .db_err("Failed to get user")?;
+
+    let user_id = if let Some(user) = user {
+        user.id
+    } else {
+        // Create the user if it doesn't exist
+        let id = state
+            .db
+            .users()
+            .create(&payload.user_uuid, &payload.username)
+            .await
+            .db_err("Failed to create user")?;
+        state
+            .db
+            .users()
+            .activate(id)
+            .await
+            .db_err("Failed to activate user")?;
+        id
+    };
+
+    // Store the token
+    state
+        .db
+        .tokens()
+        .create(
+            &payload.jti,
+            user_id,
+            None,
+            payload.issued_at,
+            payload.expires_at,
+        )
+        .await
+        .db_err("Failed to store token")?;
+
+    Ok((StatusCode::OK, Json(StoreTokenResponse { success: true })))
 }

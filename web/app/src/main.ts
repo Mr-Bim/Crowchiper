@@ -24,6 +24,8 @@ import { setupSpellcheck } from "./spellcheck.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
 
 declare const __TEST_MODE__: boolean;
+declare const API_PATH: string;
+declare const LOGIN_PATH: string;
 
 function setupNewPostDropdown(): void {
   const btn = document.getElementById("new-post-btn");
@@ -68,6 +70,38 @@ function setupNewPostDropdown(): void {
   });
 }
 
+/**
+ * Check if the user is still authenticated.
+ * Used when the page is restored from bfcache after logout.
+ * Server auto-refreshes access token if refresh token is valid.
+ */
+async function verifyAuth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_PATH}/tokens/verify`, {
+      credentials: "include",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Set up handler for bfcache restoration.
+ * When the page is restored from bfcache (e.g., after pressing back),
+ * verify that the user is still authenticated.
+ */
+function setupBfcacheHandler(): void {
+  window.addEventListener("pageshow", async (event) => {
+    if (event.persisted) {
+      const isAuthenticated = await verifyAuth();
+      if (!isAuthenticated) {
+        window.location.href = LOGIN_PATH;
+      }
+    }
+  });
+}
+
 function setupSidebarToggle(): void {
   const sidebar = document.getElementById("sidebar");
   const toggleBtn = document.getElementById("sidebar-toggle");
@@ -107,6 +141,9 @@ function setupSidebarToggle(): void {
 
 async function init(): Promise<void> {
   try {
+    // Set up bfcache handler to verify auth on page restore
+    setupBfcacheHandler();
+
     // Set up sidebar toggle for mobile
     setupSidebarToggle();
 
