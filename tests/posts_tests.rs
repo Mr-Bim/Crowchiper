@@ -41,7 +41,7 @@ async fn create_authenticated_user(
 
     // Generate access token (stateless, no DB storage)
     let access_result = jwt
-        .generate_access_token(&uuid, username, crowchiper::db::UserRole::User)
+        .generate_access_token(&uuid, username, crowchiper::db::UserRole::User, "127.0.0.1")
         .unwrap();
 
     // Generate refresh token and store in DB
@@ -69,6 +69,9 @@ fn auth_cookies(access_token: &str, refresh_token: &str) -> String {
     )
 }
 
+/// Test IP address used for authentication tokens
+const TEST_IP: &str = "127.0.0.1";
+
 #[tokio::test]
 async fn test_list_posts_empty() {
     let (app, db, jwt) = create_test_app().await;
@@ -80,6 +83,7 @@ async fn test_list_posts_empty() {
                 .method("GET")
                 .uri("/api/posts")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -108,6 +112,7 @@ async fn test_create_post() {
                 .uri("/api/posts")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(
                     r#"{"title": "My First Post", "content": "Hello, world!"}"#,
                 ))
@@ -138,6 +143,7 @@ async fn test_create_post_without_title() {
                 .uri("/api/posts")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(r#"{"content": "Just content"}"#))
                 .unwrap(),
         )
@@ -176,6 +182,7 @@ async fn test_get_post() {
                 .method("GET")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -205,6 +212,7 @@ async fn test_get_post_not_found() {
                 .method("GET")
                 .uri("/api/posts/00000000-0000-0000-0000-000000000000")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -243,6 +251,7 @@ async fn test_update_post() {
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(
                     r#"{"title": "Updated", "content": "Updated content"}"#,
                 ))
@@ -292,6 +301,7 @@ async fn test_delete_post() {
                 .method("DELETE")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -315,7 +325,8 @@ async fn test_delete_post() {
 #[tokio::test]
 async fn test_list_posts_returns_user_posts_only() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, alice_access, alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (alice_id, alice_access, alice_refresh) =
+        create_authenticated_user(&db, &jwt, "alice").await;
     let (bob_id, _bob_access, _bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Create posts for both users
@@ -371,6 +382,7 @@ async fn test_list_posts_returns_user_posts_only() {
                 .method("GET")
                 .uri("/api/posts")
                 .header("cookie", auth_cookies(&alice_access, &alice_refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -391,7 +403,8 @@ async fn test_list_posts_returns_user_posts_only() {
 #[tokio::test]
 async fn test_cannot_access_other_users_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (alice_id, _alice_access, _alice_refresh) =
+        create_authenticated_user(&db, &jwt, "alice").await;
     let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Alice creates a post
@@ -419,6 +432,7 @@ async fn test_cannot_access_other_users_post() {
                 .method("GET")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("cookie", auth_cookies(&bob_access, &bob_refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -431,7 +445,8 @@ async fn test_cannot_access_other_users_post() {
 #[tokio::test]
 async fn test_cannot_update_other_users_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (alice_id, _alice_access, _alice_refresh) =
+        create_authenticated_user(&db, &jwt, "alice").await;
     let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     let post_uuid = db
@@ -459,6 +474,7 @@ async fn test_cannot_update_other_users_post() {
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&bob_access, &bob_refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(r#"{"title": "Hacked", "content": "Hacked"}"#))
                 .unwrap(),
         )
@@ -480,7 +496,8 @@ async fn test_cannot_update_other_users_post() {
 #[tokio::test]
 async fn test_cannot_delete_other_users_post() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (alice_id, _alice_access, _alice_refresh) =
+        create_authenticated_user(&db, &jwt, "alice").await;
     let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     let post_uuid = db
@@ -507,6 +524,7 @@ async fn test_cannot_delete_other_users_post() {
                 .method("DELETE")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("cookie", auth_cookies(&bob_access, &bob_refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -584,6 +602,7 @@ async fn test_posts_with_base_path() {
                 .method("GET")
                 .uri("/app/api/posts")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -617,6 +636,7 @@ async fn test_create_encrypted_post() {
                 .uri("/api/posts")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(format!(
                     r#"{{"title": "{}", "title_encrypted": true, "content": "{}", "content_encrypted": true}}"#,
                     encrypted_title.replace('"', "\\\""),
@@ -643,6 +663,7 @@ async fn test_create_encrypted_post() {
                 .method("GET")
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -703,6 +724,7 @@ async fn test_update_post_encryption_flags() {
                 .uri(format!("/api/posts/{}", post_uuid))
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(format!(
                     r#"{{"title": "Encrypted Title", "title_encrypted": true, "content": "{}", "content_encrypted": true}}"#,
                     encrypted_content.replace('"', "\\\"")
@@ -754,6 +776,7 @@ async fn test_list_posts_includes_encrypted_flags() {
                 .method("GET")
                 .uri("/api/posts")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -843,6 +866,7 @@ async fn test_reorder_posts() {
                 .uri("/api/posts/reorder")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(format!(
                     r#"{{"uuids": ["{}", "{}", "{}"]}}"#,
                     post1, post3, post2
@@ -861,6 +885,7 @@ async fn test_reorder_posts() {
                 .method("GET")
                 .uri("/api/posts")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -894,6 +919,7 @@ async fn test_reorder_posts_empty_list() {
                 .uri("/api/posts/reorder")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(r#"{"uuids": []}"#))
                 .unwrap(),
         )
@@ -906,7 +932,8 @@ async fn test_reorder_posts_empty_list() {
 #[tokio::test]
 async fn test_reorder_cannot_affect_other_users_posts() {
     let (app, db, jwt) = create_test_app().await;
-    let (alice_id, _alice_access, _alice_refresh) = create_authenticated_user(&db, &jwt, "alice").await;
+    let (alice_id, _alice_access, _alice_refresh) =
+        create_authenticated_user(&db, &jwt, "alice").await;
     let (_, bob_access, bob_refresh) = create_authenticated_user(&db, &jwt, "bob").await;
 
     // Alice creates posts
@@ -951,6 +978,7 @@ async fn test_reorder_cannot_affect_other_users_posts() {
                 .uri("/api/posts/reorder")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&bob_access, &bob_refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(format!(
                     r#"{{"uuids": ["{}", "{}"]}}"#,
                     post2, post1
@@ -1002,6 +1030,7 @@ async fn test_new_post_inserted_at_top() {
                 .uri("/api/posts")
                 .header("content-type", "application/json")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::from(r#"{"title": "Post 2", "content": "C2"}"#))
                 .unwrap(),
         )
@@ -1023,6 +1052,7 @@ async fn test_new_post_inserted_at_top() {
                 .method("GET")
                 .uri("/api/posts")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -1069,6 +1099,7 @@ async fn test_list_posts_includes_position() {
                 .method("GET")
                 .uri("/api/posts")
                 .header("cookie", auth_cookies(&access, &refresh))
+                .header("x-forwarded-for", TEST_IP)
                 .body(Body::empty())
                 .unwrap(),
         )

@@ -1,6 +1,5 @@
 use axum::{
-    extract::FromRequestParts,
-    http::{StatusCode, header, request::Parts},
+    http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
 use rust_embed::Embed;
@@ -8,7 +7,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
-use crate::auth::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
+use crate::auth::{
+    ACCESS_COOKIE_NAME, AssetAuth, HasAssetAuthState, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
+};
+use crate::db::Database;
 use crate::jwt::JwtConfig;
 
 /// Login assets (public, no auth required)
@@ -31,6 +33,28 @@ pub struct AssetsState {
     pub processed_login_html: HashMap<&'static str, &'static str>,
     pub processed_app_html: HashMap<&'static str, &'static str>,
     pub jwt: Arc<JwtConfig>,
+    pub db: Database,
+    pub secure_cookies: bool,
+}
+
+impl HasAuthState for AssetsState {
+    fn jwt(&self) -> &JwtConfig {
+        &self.jwt
+    }
+
+    fn db(&self) -> &Database {
+        &self.db
+    }
+
+    fn secure_cookies(&self) -> bool {
+        self.secure_cookies
+    }
+}
+
+impl HasAssetAuthState for AssetsState {
+    fn login_path(&self) -> &str {
+        self.login_path
+    }
 }
 
 impl AssetsState {
@@ -43,6 +67,8 @@ impl AssetsState {
         processed_login_html: HashMap<&'static str, &'static str>,
         processed_app_html: HashMap<&'static str, &'static str>,
         jwt: Arc<JwtConfig>,
+        db: Database,
+        secure_cookies: bool,
     ) -> Result<Self, &'static str> {
         // Get login index HTML - use processed version if available, otherwise raw
         let login_index_html = if let Some(&html) = processed_login_html.get("index.html") {
@@ -62,6 +88,8 @@ impl AssetsState {
             processed_login_html,
             processed_app_html,
             jwt,
+            db,
+            secure_cookies,
         })
     }
 
@@ -75,58 +103,6 @@ impl AssetsState {
 
     pub fn make_app_path(base: &str) -> String {
         format!("{}{}", base, env!("CONFIG_APP_ASSETS"))
-    }
-}
-
-// =============================================================================
-// Asset Auth (redirects to login on failure)
-// =============================================================================
-
-/// Extractor that validates JWT from cookie for asset routes.
-/// Returns the claims if valid, or redirects to login if invalid.
-pub struct RequireAuth;
-
-/// Authentication errors for asset routes - redirects to login.
-#[derive(Debug)]
-pub enum AuthError {
-    MissingToken { login_path: &'static str },
-    InvalidToken { login_path: &'static str },
-}
-
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response {
-        let login_path = match self {
-            AuthError::MissingToken { login_path } | AuthError::InvalidToken { login_path } => {
-                login_path
-            }
-        };
-        Redirect::temporary(login_path).into_response()
-    }
-}
-
-impl FromRequestParts<Arc<AssetsState>> for RequireAuth {
-    type Rejection = AuthError;
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &Arc<AssetsState>,
-    ) -> Result<Self, Self::Rejection> {
-        let login_path = state.login_path;
-
-        // Try access token first, then refresh token
-        if let Some(token) = get_cookie(&parts.headers, ACCESS_COOKIE_NAME) {
-            if state.jwt.validate_access_token(token).is_ok() {
-                return Ok(RequireAuth);
-            }
-        }
-
-        if let Some(token) = get_cookie(&parts.headers, REFRESH_COOKIE_NAME) {
-            if state.jwt.validate_refresh_token(token).is_ok() {
-                return Ok(RequireAuth);
-            }
-        }
-
-        Err(AuthError::MissingToken { login_path })
     }
 }
 
@@ -225,7 +201,7 @@ pub async fn login_handler_direct(path: Option<axum::extract::Path<String>>) -> 
 
 /// Serve login index page, redirecting authenticated users to the app.
 pub async fn login_index_handler(
-    axum::extract::State(state): axum::extract::State<Arc<AssetsState>>,
+    axum::extract::State(state): axum::extract::State<AssetsState>,
     headers: axum::http::HeaderMap,
 ) -> Response {
     // Redirect authenticated users to the app (check access token, then refresh token)
@@ -251,7 +227,7 @@ pub async fn login_index_handler(
 
 /// Serve login assets with base path rewriting
 pub async fn login_handler(
-    axum::extract::State(state): axum::extract::State<Arc<AssetsState>>,
+    axum::extract::State(state): axum::extract::State<AssetsState>,
     path: Option<axum::extract::Path<String>>,
 ) -> Response {
     let path = normalize_path(path.as_ref());
@@ -272,25 +248,18 @@ pub async fn login_handler(
 
 /// Serve app assets directly (no base path rewriting) - requires auth
 pub async fn app_handler_direct(
-    auth: Result<RequireAuth, AuthError>,
+    AssetAuth(_): AssetAuth,
     path: Option<axum::extract::Path<String>>,
 ) -> Response {
-    if let Err(e) = auth {
-        return e.into_response();
-    }
     serve_asset::<AppAssets>(normalize_path(path.as_ref()))
 }
 
 /// Serve app assets with base path rewriting - requires auth
 pub async fn app_handler(
-    axum::extract::State(state): axum::extract::State<Arc<AssetsState>>,
-    auth: Result<RequireAuth, AuthError>,
+    axum::extract::State(state): axum::extract::State<AssetsState>,
+    AssetAuth(_): AssetAuth,
     path: Option<axum::extract::Path<String>>,
 ) -> Response {
-    if let Err(e) = auth {
-        return e.into_response();
-    }
-
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(&processed) = state.processed_app_html.get(path) {

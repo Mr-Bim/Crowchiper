@@ -8,16 +8,17 @@
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::{StatusCode, header::SET_COOKIE, request::Parts},
+    http::{StatusCode, header::SET_COOKIE},
     response::IntoResponse,
     routing::{delete, get, post},
 };
 use serde::Serialize;
 use std::sync::Arc;
-use tracing::error;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ACCESS_COOKIE_NAME, ApiAuth, HasAuthState, REFRESH_COOKIE_NAME, get_cookie};
+use crate::auth::{
+    ACCESS_COOKIE_NAME, ActivatedApiAuth, ApiAuth, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
+};
 use crate::db::{Database, UserRole};
 use crate::jwt::JwtConfig;
 
@@ -46,7 +47,6 @@ pub fn router(state: TokensState) -> Router {
     Router::new()
         .route("/", get(list_tokens))
         .route("/verify", get(verify_token))
-        .route("/refresh", post(refresh_token))
         .route("/logout", post(logout))
         .route("/{jti}", delete(revoke_token))
         .with_state(state)
@@ -73,84 +73,10 @@ async fn verify_token(ApiAuth(_auth): ApiAuth) -> impl IntoResponse {
     StatusCode::OK
 }
 
-/// Refresh the access token using a valid refresh token.
-/// The refresh token must be valid and not revoked.
-/// Returns a new access token cookie and optionally rotates the refresh token.
-async fn refresh_token(
-    State(state): State<TokensState>,
-    request: axum::extract::Request,
-) -> Result<impl IntoResponse, ApiError> {
-    let (parts, _body) = request.into_parts();
-
-    // Get refresh token from cookie
-    let refresh_token = get_cookie(&parts.headers, REFRESH_COOKIE_NAME)
-        .ok_or_else(|| ApiError::unauthorized("No refresh token"))?;
-
-    // Validate refresh token
-    let claims = state
-        .jwt
-        .validate_refresh_token(refresh_token)
-        .map_err(|_| ApiError::unauthorized("Invalid or expired refresh token"))?;
-
-    // Check if refresh token is in database (not revoked)
-    let active_token = state
-        .db
-        .tokens()
-        .get_by_jti(&claims.jti)
-        .await
-        .db_err("Failed to check token")?
-        .ok_or_else(|| ApiError::unauthorized("Refresh token has been revoked"))?;
-
-    // Get user info
-    let user = state
-        .db
-        .users()
-        .get_by_uuid(&claims.sub)
-        .await
-        .db_err("Failed to get user")?
-        .ok_or_else(|| ApiError::unauthorized("User not found"))?;
-
-    if !user.activated {
-        return Err(ApiError::forbidden("Account not activated"));
-    }
-
-    // Update IP if changed
-    let client_ip = extract_client_ip(&parts);
-    if let Some(ref ip) = client_ip {
-        let ip_changed = active_token.last_ip.as_ref() != Some(ip);
-        if ip_changed {
-            if let Err(e) = state.db.tokens().update_ip(&claims.jti, ip).await {
-                tracing::warn!("Failed to update token IP: {}", e);
-            }
-        }
-    }
-
-    // Generate new access token
-    let access_result = state
-        .jwt
-        .generate_access_token(&user.uuid, &user.username, user.role)
-        .map_err(|e| {
-            error!("Failed to generate access token: {}", e);
-            ApiError::internal("Failed to generate token")
-        })?;
-
-    let secure = if state.secure_cookies { "; Secure" } else { "" };
-    let access_cookie = format!(
-        "{}={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
-        ACCESS_COOKIE_NAME, access_result.token, access_result.duration, secure
-    );
-
-    Ok((
-        StatusCode::OK,
-        [(SET_COOKIE, access_cookie)],
-        Json(serde_json::json!({ "success": true })),
-    ))
-}
-
 /// List all active refresh tokens for the current user.
 async fn list_tokens(
     State(state): State<TokensState>,
-    ApiAuth(auth): ApiAuth,
+    ActivatedApiAuth(auth): ActivatedApiAuth,
 ) -> Result<impl IntoResponse, ApiError> {
     let tokens = state
         .db
@@ -225,7 +151,7 @@ struct RevokeResponse {
 /// Users can revoke their own tokens, admins can revoke any token.
 async fn revoke_token(
     State(state): State<TokensState>,
-    ApiAuth(auth): ApiAuth,
+    ActivatedApiAuth(auth): ActivatedApiAuth,
     Path(jti): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Check if the token belongs to the current user or if user is admin
@@ -254,27 +180,4 @@ async fn revoke_token(
         // Token not found - already revoked or never existed
         Ok((StatusCode::OK, Json(RevokeResponse { revoked: false })))
     }
-}
-
-/// Extract client IP address from request parts.
-fn extract_client_ip(parts: &Parts) -> Option<String> {
-    use axum::extract::ConnectInfo;
-    use std::net::SocketAddr;
-
-    // Check X-Forwarded-For header first (reverse proxy)
-    if let Some(forwarded_for) = parts.headers.get("x-forwarded-for") {
-        if let Ok(value) = forwarded_for.to_str() {
-            if let Some(first_ip) = value.split(',').next() {
-                let ip = first_ip.trim();
-                if !ip.is_empty() {
-                    return Some(ip.to_string());
-                }
-            }
-        }
-    }
-
-    parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip().to_string())
 }

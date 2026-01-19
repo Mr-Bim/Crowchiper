@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ApiAuth, HasAuthState};
+use crate::auth::{ActivatedApiAuth, HasAuthState};
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
@@ -66,7 +66,7 @@ struct SetupResponse {
 /// Get encryption settings for the current user.
 async fn get_settings(
     State(state): State<EncryptionState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
 ) -> Result<impl IntoResponse, ApiError> {
     let settings = state
         .db
@@ -95,7 +95,7 @@ async fn get_settings(
 /// Generates a random PRF salt server-side and returns it.
 async fn setup_encryption(
     State(state): State<EncryptionState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
 ) -> Result<impl IntoResponse, ApiError> {
     // Check if already set up
     let existing = state
@@ -132,7 +132,7 @@ async fn setup_encryption(
 /// Marks setup as done without enabling encryption.
 async fn skip_encryption(
     State(state): State<EncryptionState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
 ) -> Result<impl IntoResponse, ApiError> {
     // Check if already set up
     let existing = state

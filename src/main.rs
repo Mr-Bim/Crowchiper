@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use clap::Parser;
 use crowchiper::cli::{
     Args, build_config, handle_create_admin, init_logging, load_jwt_secret, open_database,
@@ -57,7 +59,8 @@ async fn main() {
     #[cfg(feature = "test-mode")]
     println!("CROWCHIPER_READY port={}", local_addr.port());
 
-    if let Err(e) = axum::serve(listener, app).await {
+    let make_service = app.into_make_service_with_connect_info::<SocketAddr>();
+    if let Err(e) = axum::serve(listener, make_service).await {
         error!(error = %e, "Server error");
         std::process::exit(1);
     }

@@ -11,7 +11,8 @@ use assets::{
     AssetsState, app_handler, app_handler_direct, login_handler, login_handler_direct,
     login_index_handler, process_app_html_files, process_login_html_files,
 };
-use auth::NewAccessTokenCookie;
+
+use auth::NEW_ACCESS_TOKEN_COOKIE;
 use axum::{
     Router,
     http::header::SET_COOKIE,
@@ -21,6 +22,7 @@ use axum::{
 };
 use db::Database;
 use jwt::JwtConfig;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -53,19 +55,21 @@ fn leak_string(s: String) -> &'static str {
 
 /// Middleware to add the new access token cookie to responses when token was refreshed.
 async fn add_access_token_cookie(request: axum::extract::Request, next: Next) -> Response {
-    // Check if a new access token cookie was set by the auth extractor
-    let new_cookie = request.extensions().get::<NewAccessTokenCookie>().cloned();
+    // Set up task-local scope and run the handler inside it
+    NEW_ACCESS_TOKEN_COOKIE
+        .scope(RefCell::new(None), async {
+            let mut response = next.run(request).await;
 
-    let mut response = next.run(request).await;
+            // Check if a new access token cookie was set by the auth extractor
+            if let Some(cookie) = NEW_ACCESS_TOKEN_COOKIE.with(|cell| cell.borrow_mut().take()) {
+                if let Ok(value) = cookie.parse() {
+                    response.headers_mut().append(SET_COOKIE, value);
+                }
+            }
 
-    // Add the new access token cookie to the response
-    if let Some(NewAccessTokenCookie(cookie)) = new_cookie {
-        if let Ok(value) = cookie.parse() {
-            response.headers_mut().append(SET_COOKIE, value);
-        }
-    }
-
-    response
+            response
+        })
+        .await
 }
 
 /// Create the application router with the given configuration.
@@ -105,17 +109,17 @@ pub fn create_app(config: &ServerConfig) -> Router {
     // Create JWT config
     let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));
 
-    let state = Arc::new(
-        AssetsState::new(
-            api_path,
-            login_path,
-            app_path,
-            login_assets_html,
-            app_assets_html,
-            jwt.clone(),
-        )
-        .expect("Failed to initialize assets"),
-    );
+    let state = AssetsState::new(
+        api_path,
+        login_path,
+        app_path,
+        login_assets_html,
+        app_assets_html,
+        jwt.clone(),
+        config.db.clone(),
+        config.secure_cookies,
+    )
+    .expect("Failed to initialize assets");
 
     let api_router = create_api_router(
         config.db.clone(),
@@ -124,7 +128,6 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.secure_cookies,
         config.no_signup,
     )
-    // Add middleware to set new access token cookie when refreshed
     .layer(middleware::from_fn(add_access_token_cookie));
 
     // Login assets (public, no auth)
@@ -144,7 +147,8 @@ pub fn create_app(config: &ServerConfig) -> Router {
         .route(app_path, app_assets_handler.clone())
         .route(&format!("{}/", app_path), app_assets_handler.clone())
         .route(&format!("{}/{{*path}}", app_path), app_assets_handler)
-        .with_state(state);
+        .with_state(state)
+        .layer(middleware::from_fn(add_access_token_cookie));
 
     let redirect_path: &'static str = if base_path.is_empty() { "/" } else { base_path };
 
@@ -174,12 +178,11 @@ pub async fn start_server(
     let local_addr = listener.local_addr().expect("Failed to get local address");
 
     let handle = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .ok();
+        // Use a custom service that injects ConnectInfo as Extension
+        let make_service = app.into_make_service_with_connect_info::<SocketAddr>();
+
+        // Serve with our custom make_service
+        axum::serve(listener, make_service).await.ok();
     });
 
     (handle, local_addr)

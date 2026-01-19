@@ -15,7 +15,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ApiAuth, HasAuthState};
+use crate::auth::{ActivatedApiAuth, HasAuthState};
 use crate::db::{Database, attachments::CreateAttachmentInput};
 use crate::jwt::JwtConfig;
 
@@ -80,7 +80,7 @@ struct UploadResponse {
 /// If user does not have encryption enabled, encryption_version must be 0.
 async fn upload_attachment(
     State(state): State<AttachmentsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut image_data: Option<Vec<u8>> = None;
@@ -285,7 +285,7 @@ async fn upload_attachment(
 /// IV is returned in the `X-Encryption-IV` header (empty string if unencrypted).
 async fn get_attachment(
     State(state): State<AttachmentsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let attachment = state
@@ -313,7 +313,7 @@ async fn get_attachment(
 /// Size must be "sm", "md", or "lg".
 async fn get_thumbnail(
     State(state): State<AttachmentsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path((uuid, size)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate size parameter
@@ -345,7 +345,7 @@ async fn get_thumbnail(
 /// Each part has `X-Thumbnail-Size` header (sm, md, lg) and `X-Encryption-IV` header (empty if unencrypted).
 async fn get_thumbnails(
     State(state): State<AttachmentsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let thumbnails = state

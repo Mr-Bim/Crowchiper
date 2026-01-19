@@ -60,9 +60,14 @@ pub fn create_api_router(
     #[cfg(feature = "test-mode")]
     let test_state = test::TestState { db: db.clone() };
 
-    let users_state = users::UsersState { db, jwt, no_signup };
+    let config_state = config::ConfigState {
+        no_signup,
+        jwt: jwt.clone(),
+        db: db.clone(),
+        secure_cookies,
+    };
 
-    let config_state = config::ConfigState { no_signup };
+    let users_state = users::UsersState { db, jwt, no_signup };
 
     let router = Router::new()
         .nest("/users", users::router(users_state))

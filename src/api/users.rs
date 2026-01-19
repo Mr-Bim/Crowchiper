@@ -130,6 +130,18 @@ async fn delete_user(
                 .validate_refresh_token(token)
                 .map_err(|_| ApiError::unauthorized("Invalid or expired token"))?;
             // Convert refresh claims to have the same fields we need
+            // Check if refresh token is in database (not revoked)
+            state
+                .db
+                .tokens()
+                .get_by_jti(&refresh_claims.jti)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to check token: {}", e);
+                    ApiError::internal("Unable to check token")
+                })?
+                .ok_or(ApiError::unauthorized("Invalid or expired token"))?;
+
             crate::jwt::AccessClaims {
                 sub: refresh_claims.sub,
                 username: refresh_claims.username,
@@ -137,6 +149,7 @@ async fn delete_user(
                 token_type: crate::jwt::TokenType::Access,
                 iat: refresh_claims.iat,
                 exp: refresh_claims.exp,
+                ipaddr: "_".to_owned(),
             }
         } else {
             return Err(ApiError::unauthorized("Authentication required"));

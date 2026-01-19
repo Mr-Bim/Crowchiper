@@ -7,12 +7,20 @@
 //! When an access token expires, the middleware automatically issues a new one
 //! if the refresh token is still valid (not expired, not revoked).
 
+use std::cell::RefCell;
+use std::net::SocketAddr;
+
 use axum::{
     extract::{ConnectInfo, FromRequestParts},
     http::{header, request::Parts},
     response::{IntoResponse, Response},
 };
-use std::net::SocketAddr;
+
+tokio::task_local! {
+    /// Task-local storage for the new access token cookie.
+    /// Used to pass the cookie from the auth extractor to the response middleware.
+    pub static NEW_ACCESS_TOKEN_COOKIE: RefCell<Option<String>>;
+}
 
 use crate::db::Database;
 use crate::jwt::{AccessClaims, JwtConfig};
@@ -37,27 +45,48 @@ pub fn get_cookie<'a>(headers: &'a axum::http::HeaderMap, name: &str) -> Option<
     None
 }
 
+/// Extract client IP address from headers or connection info.
+/// Checks X-Forwarded-For first (for reverse proxy), then falls back to extensions.
+pub fn extract_client_ip(parts: &Parts) -> Option<String> {
+    // Check X-Forwarded-For header first (reverse proxy)
+    if let Some(forwarded_for) = parts.headers.get("x-forwarded-for") {
+        if let Ok(value) = forwarded_for.to_str() {
+            // X-Forwarded-For can contain multiple IPs, take the first (original client)
+            if let Some(first_ip) = value.split(',').next() {
+                let ip = first_ip.trim();
+                if !ip.is_empty() {
+                    return Some(ip.to_string());
+                }
+            }
+        }
+    }
+    // Fall back to socket address from ConnectInfo extension
+    parts
+        .extensions
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ci| ci.0.ip().to_string())
+}
+
 /// Authenticated user information extracted from JWT.
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
     /// JWT claims from the access token
     pub claims: AccessClaims,
     /// Database user ID
+    pub user_id: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActicatedAuthenticatedUser {
+    /// JWT claims from the access token
+    pub claims: AccessClaims,
+    /// Database user ID
     pub user_id: i64,
-    /// Client IP address (if available)
-    pub client_ip: Option<String>,
 }
 
-/// Result of authentication that may include a new access token cookie.
-pub struct AuthResult {
-    pub user: AuthenticatedUser,
-    /// New access token cookie to set (if token was refreshed)
-    pub new_access_cookie: Option<String>,
-}
-
-/// API authentication errors (returns JSON instead of redirects).
+/// Internal auth error type used by the core authentication logic.
 #[derive(Debug)]
-pub enum ApiAuthError {
+pub enum AuthErrorKind {
     NotAuthenticated,
     InvalidToken,
     TokenRevoked,
@@ -66,27 +95,147 @@ pub enum ApiAuthError {
     DatabaseError,
 }
 
+/// Core authentication logic shared between API and Asset auth extractors.
+/// Returns the authenticated user or an error kind.
+async fn authenticate_request<S>(
+    parts: &Parts,
+    state: &S,
+) -> Result<AuthenticatedUser, AuthErrorKind>
+where
+    S: HasAuthState + Send + Sync,
+{
+    // Extract client IP
+    let client_ip = extract_client_ip(parts).ok_or(AuthErrorKind::NotAuthenticated)?;
+
+    // Try to validate access token first
+    if let Some(access_token) = get_cookie(&parts.headers, ACCESS_COOKIE_NAME) {
+        if let Ok(claims) = state.jwt().validate_access_token(access_token) {
+            if claims.ipaddr == client_ip {
+                return Ok(AuthenticatedUser {
+                    claims,
+                    user_id: None,
+                });
+            }
+        }
+    }
+
+    // Access token missing or invalid - try refresh token
+    let refresh_token =
+        get_cookie(&parts.headers, REFRESH_COOKIE_NAME).ok_or(AuthErrorKind::NotAuthenticated)?;
+
+    // Validate refresh token
+    let refresh_claims = state
+        .jwt()
+        .validate_refresh_token(refresh_token)
+        .map_err(|_| AuthErrorKind::InvalidToken)?;
+
+    // Check if refresh token is in database (not revoked)
+    let active_token = state
+        .db()
+        .tokens()
+        .get_by_jti(&refresh_claims.jti)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to check token: {}", e);
+            AuthErrorKind::DatabaseError
+        })?
+        .ok_or(AuthErrorKind::TokenRevoked)?;
+
+    // Look up user
+    let user = state
+        .db()
+        .users()
+        .get_by_uuid(&refresh_claims.sub)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get user: {}", e);
+            AuthErrorKind::DatabaseError
+        })?
+        .ok_or(AuthErrorKind::UserNotFound)?;
+
+    if !user.activated {
+        return Err(AuthErrorKind::AccountNotActivated);
+    }
+
+    // Update IP if changed
+    let ip_changed = active_token.last_ip.as_ref() != Some(&client_ip);
+    if ip_changed {
+        if let Err(e) = state
+            .db()
+            .tokens()
+            .update_ip(&refresh_claims.jti, &client_ip)
+            .await
+        {
+            tracing::warn!("Failed to update token IP: {}", e);
+        }
+    }
+
+    // Generate new access token
+    let access_result = state
+        .jwt()
+        .generate_access_token(&user.uuid, &user.username, user.role, &client_ip)
+        .map_err(|e| {
+            tracing::error!("Failed to generate access token: {}", e);
+            AuthErrorKind::DatabaseError
+        })?;
+
+    // Store the new access token cookie in task-local for the response middleware
+    let secure = if state.secure_cookies() {
+        "; Secure"
+    } else {
+        ""
+    };
+    let new_cookie = format!(
+        "{}={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
+        ACCESS_COOKIE_NAME, access_result.token, access_result.duration, secure
+    );
+    let _ = NEW_ACCESS_TOKEN_COOKIE.try_with(|cell| {
+        cell.borrow_mut().replace(new_cookie);
+    });
+
+    // Parse the new access token to get claims
+    let claims = state
+        .jwt()
+        .validate_access_token(&access_result.token)
+        .map_err(|_| AuthErrorKind::DatabaseError)?;
+
+    Ok(AuthenticatedUser {
+        claims,
+        user_id: Some(user.id),
+    })
+}
+
+/// API authentication errors (returns JSON and clears cookies).
+#[derive(Debug)]
+pub struct ApiAuthError(AuthErrorKind);
+
+impl From<AuthErrorKind> for ApiAuthError {
+    fn from(kind: AuthErrorKind) -> Self {
+        Self(kind)
+    }
+}
+
 impl ApiAuthError {
     fn status_code(&self) -> axum::http::StatusCode {
         use axum::http::StatusCode;
-        match self {
-            Self::NotAuthenticated | Self::InvalidToken | Self::TokenRevoked => {
-                StatusCode::UNAUTHORIZED
-            }
-            Self::UserNotFound => StatusCode::UNAUTHORIZED,
-            Self::AccountNotActivated => StatusCode::FORBIDDEN,
-            Self::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
+        match self.0 {
+            AuthErrorKind::NotAuthenticated
+            | AuthErrorKind::InvalidToken
+            | AuthErrorKind::TokenRevoked
+            | AuthErrorKind::UserNotFound => StatusCode::UNAUTHORIZED,
+            AuthErrorKind::AccountNotActivated => StatusCode::FORBIDDEN,
+            AuthErrorKind::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn message(&self) -> &'static str {
-        match self {
-            Self::NotAuthenticated => "Not authenticated",
-            Self::InvalidToken => "Invalid or expired token",
-            Self::TokenRevoked => "Token has been revoked",
-            Self::UserNotFound => "User not found",
-            Self::AccountNotActivated => "Account not activated",
-            Self::DatabaseError => "Database error",
+        match self.0 {
+            AuthErrorKind::NotAuthenticated => "Not authenticated",
+            AuthErrorKind::InvalidToken => "Invalid or expired token",
+            AuthErrorKind::TokenRevoked => "Token has been revoked",
+            AuthErrorKind::UserNotFound => "User not found",
+            AuthErrorKind::AccountNotActivated => "Account not activated",
+            AuthErrorKind::DatabaseError => "Database error",
         }
     }
 }
@@ -94,6 +243,7 @@ impl ApiAuthError {
 impl IntoResponse for ApiAuthError {
     fn into_response(self) -> Response {
         use axum::Json;
+        use axum::http::HeaderValue;
         use serde::Serialize;
 
         #[derive(Serialize)]
@@ -101,13 +251,33 @@ impl IntoResponse for ApiAuthError {
             error: &'static str,
         }
 
-        (
+        // Clear both cookies on auth errors
+        let clear_access = format!(
+            "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+            ACCESS_COOKIE_NAME
+        );
+        let clear_refresh = format!(
+            "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+            REFRESH_COOKIE_NAME
+        );
+
+        let mut response = (
             self.status_code(),
             Json(ErrorResponse {
                 error: self.message(),
             }),
         )
-            .into_response()
+            .into_response();
+
+        let headers = response.headers_mut();
+        if let Ok(value) = HeaderValue::from_str(&clear_access) {
+            headers.append(header::SET_COOKIE, value);
+        }
+        if let Ok(value) = HeaderValue::from_str(&clear_refresh) {
+            headers.append(header::SET_COOKIE, value);
+        }
+
+        response
     }
 }
 
@@ -123,6 +293,40 @@ pub trait HasAuthState {
 /// If expired, attempts to refresh using the refresh token.
 /// Returns JSON errors instead of redirects.
 pub struct ApiAuth(pub AuthenticatedUser);
+pub struct ActivatedApiAuth(pub ActicatedAuthenticatedUser);
+
+impl<S> FromRequestParts<S> for ActivatedApiAuth
+where
+    S: HasAuthState + Send + Sync,
+{
+    type Rejection = ApiAuthError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let ApiAuth(user) = ApiAuth::from_request_parts(parts, state).await?;
+
+        let id = match user.user_id {
+            Some(id) => id,
+            None => {
+                let db_user = state
+                    .db()
+                    .users()
+                    .get_by_uuid(&user.claims.sub)
+                    .await
+                    .map_err(|_| ApiAuthError(AuthErrorKind::DatabaseError))?
+                    .ok_or(ApiAuthError(AuthErrorKind::UserNotFound))?;
+
+                if !db_user.activated {
+                    return Err(ApiAuthError(AuthErrorKind::AccountNotActivated));
+                }
+                db_user.id
+            }
+        };
+        Ok(ActivatedApiAuth(ActicatedAuthenticatedUser {
+            claims: user.claims,
+            user_id: id,
+        }))
+    }
+}
 
 impl<S> FromRequestParts<S> for ApiAuth
 where
@@ -131,115 +335,10 @@ where
     type Rejection = ApiAuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let client_ip = extract_client_ip(&parts.headers, parts);
-
-        // Try to validate access token first
-        if let Some(access_token) = get_cookie(&parts.headers, ACCESS_COOKIE_NAME) {
-            if let Ok(claims) = state.jwt().validate_access_token(access_token) {
-                // Access token is valid - look up user
-                let user = state
-                    .db()
-                    .users()
-                    .get_by_uuid(&claims.sub)
-                    .await
-                    .map_err(|e| {
-                        tracing::error!("Failed to get user: {}", e);
-                        ApiAuthError::DatabaseError
-                    })?
-                    .ok_or(ApiAuthError::UserNotFound)?;
-
-                if !user.activated {
-                    return Err(ApiAuthError::AccountNotActivated);
-                }
-
-                return Ok(ApiAuth(AuthenticatedUser {
-                    claims,
-                    user_id: user.id,
-                    client_ip,
-                }));
-            }
-        }
-
-        // Access token missing or invalid - try refresh token
-        let refresh_token = get_cookie(&parts.headers, REFRESH_COOKIE_NAME)
-            .ok_or(ApiAuthError::NotAuthenticated)?;
-
-        // Validate refresh token
-        let refresh_claims = state
-            .jwt()
-            .validate_refresh_token(refresh_token)
-            .map_err(|_| ApiAuthError::InvalidToken)?;
-
-        // Check if refresh token is in database (not revoked)
-        let active_token = state
-            .db()
-            .tokens()
-            .get_by_jti(&refresh_claims.jti)
+        authenticate_request(parts, state)
             .await
-            .map_err(|e| {
-                tracing::error!("Failed to check token: {}", e);
-                ApiAuthError::DatabaseError
-            })?
-            .ok_or(ApiAuthError::TokenRevoked)?;
-
-        // Look up user
-        let user = state
-            .db()
-            .users()
-            .get_by_uuid(&refresh_claims.sub)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to get user: {}", e);
-                ApiAuthError::DatabaseError
-            })?
-            .ok_or(ApiAuthError::UserNotFound)?;
-
-        if !user.activated {
-            return Err(ApiAuthError::AccountNotActivated);
-        }
-
-        // Update IP if changed
-        if let Some(ref ip) = client_ip {
-            let ip_changed = active_token.last_ip.as_ref() != Some(ip);
-            if ip_changed {
-                if let Err(e) = state.db().tokens().update_ip(&refresh_claims.jti, ip).await {
-                    tracing::warn!("Failed to update token IP: {}", e);
-                }
-            }
-        }
-
-        // Generate new access token
-        let access_result = state
-            .jwt()
-            .generate_access_token(&user.uuid, &user.username, user.role)
-            .map_err(|e| {
-                tracing::error!("Failed to generate access token: {}", e);
-                ApiAuthError::DatabaseError
-            })?;
-
-        // Store the new access token cookie in extensions for the response layer
-        let secure = if state.secure_cookies() {
-            "; Secure"
-        } else {
-            ""
-        };
-        let new_cookie = format!(
-            "{}={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
-            ACCESS_COOKIE_NAME, access_result.token, access_result.duration, secure
-        );
-        parts.extensions.insert(NewAccessTokenCookie(new_cookie));
-
-        // Parse the new access token to get claims
-        let claims = state
-            .jwt()
-            .validate_access_token(&access_result.token)
-            .map_err(|_| ApiAuthError::DatabaseError)?;
-
-        Ok(ApiAuth(AuthenticatedUser {
-            claims,
-            user_id: user.id,
-            client_ip,
-        }))
+            .map(ApiAuth)
+            .map_err(ApiAuthError::from)
     }
 }
 
@@ -247,27 +346,62 @@ where
 #[derive(Clone)]
 pub struct NewAccessTokenCookie(pub String);
 
-/// Extract client IP address from headers or connection info.
-/// Checks X-Forwarded-For first (for reverse proxy), then falls back to extensions.
-fn extract_client_ip(headers: &axum::http::HeaderMap, parts: &Parts) -> Option<String> {
-    // Check X-Forwarded-For header first (reverse proxy)
-    if let Some(forwarded_for) = headers.get("x-forwarded-for") {
-        if let Ok(value) = forwarded_for.to_str() {
-            // X-Forwarded-For can contain multiple IPs, take the first (original client)
-            if let Some(first_ip) = value.split(',').next() {
-                let ip = first_ip.trim();
-                if !ip.is_empty() {
-                    return Some(ip.to_string());
-                }
-            }
-        }
-    }
+/// Optional authentication extractor - never fails, returns Option<AuthenticatedUser>.
+/// Useful for endpoints that work both authenticated and unauthenticated.
+pub struct MaybeAuth(pub Option<AuthenticatedUser>);
 
-    // Try to get from ConnectInfo extension
-    parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip().to_string())
+impl<S> FromRequestParts<S> for MaybeAuth
+where
+    S: HasAuthState + Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        Ok(MaybeAuth(authenticate_request(parts, state).await.ok()))
+    }
+}
+
+// =============================================================================
+// Asset Authentication (redirects to login, doesn't clear cookies)
+// =============================================================================
+
+/// Asset authentication error - redirects to login without clearing cookies.
+/// Used for protected asset routes where we want to preserve refresh tokens.
+#[derive(Debug)]
+pub struct AssetAuthError {
+    pub login_path: String,
+}
+
+impl IntoResponse for AssetAuthError {
+    fn into_response(self) -> Response {
+        axum::response::Redirect::temporary(&self.login_path).into_response()
+    }
+}
+
+/// Trait for state types that support asset authentication.
+pub trait HasAssetAuthState: HasAuthState {
+    fn login_path(&self) -> &str;
+}
+
+/// Extractor for asset endpoints that require authentication.
+/// On failure, redirects to login WITHOUT clearing cookies.
+/// This allows the refresh token to work on subsequent API calls.
+pub struct AssetAuth(pub AuthenticatedUser);
+
+impl<S> FromRequestParts<S> for AssetAuth
+where
+    S: HasAssetAuthState + Send + Sync,
+{
+    type Rejection = AssetAuthError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        authenticate_request(parts, state)
+            .await
+            .map(AssetAuth)
+            .map_err(|_| AssetAuthError {
+                login_path: state.login_path().to_string(),
+            })
+    }
 }
 
 #[cfg(test)]

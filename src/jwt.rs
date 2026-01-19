@@ -1,8 +1,12 @@
 //! JWT token generation and validation.
 
+use axum::{extract::ConnectInfo, http::request::Parts};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    net::SocketAddr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::db::UserRole;
 
@@ -32,6 +36,8 @@ pub struct AccessClaims {
     pub iat: u64,
     /// Expiration time (Unix timestamp)
     pub exp: u64,
+    /// Ip address
+    pub ipaddr: String,
 }
 
 /// JWT claims for refresh tokens (tracked with JTI).
@@ -107,6 +113,7 @@ impl JwtConfig {
         user_uuid: &str,
         username: &str,
         role: UserRole,
+        ip_addr: &str,
     ) -> Result<AccessTokenResult, JwtError> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -122,6 +129,7 @@ impl JwtConfig {
             token_type: TokenType::Access,
             iat: now,
             exp,
+            ipaddr: ip_addr.to_string(),
         };
 
         let token = jsonwebtoken::encode(&Header::default(), &claims, &self.encoding_key)
@@ -202,6 +210,28 @@ impl JwtConfig {
 
         Ok(token_data.claims)
     }
+
+    /// Extract client IP address from headers or connection info.
+    /// Checks X-Forwarded-For first (for reverse proxy), then falls back to extensions.
+    pub fn extract_client_ip(&self, parts: &Parts) -> Option<String> {
+        // Check X-Forwarded-For header first (reverse proxy)
+        if let Some(forwarded_for) = parts.headers.get("x-forwarded-for") {
+            if let Ok(value) = forwarded_for.to_str() {
+                // X-Forwarded-For can contain multiple IPs, take the first (original client)
+                if let Some(first_ip) = value.split(',').next() {
+                    let ip = first_ip.trim();
+                    if !ip.is_empty() {
+                        return Some(ip.to_string());
+                    }
+                }
+            }
+        }
+        // Fall back to socket address from ConnectInfo extension
+        parts
+            .extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ci| ci.0.ip().to_string())
+    }
 }
 
 /// Errors that can occur during JWT operations.
@@ -239,7 +269,7 @@ mod tests {
         let config = JwtConfig::new(b"test-secret-key-for-testing");
 
         let result = config
-            .generate_access_token("uuid-123", "alice", UserRole::User)
+            .generate_access_token("uuid-123", "alice", UserRole::User, "ip")
             .unwrap();
 
         assert_eq!(result.duration, ACCESS_TOKEN_DURATION_SECS);
@@ -249,6 +279,7 @@ mod tests {
         assert_eq!(claims.username, "alice");
         assert_eq!(claims.role, UserRole::User);
         assert_eq!(claims.token_type, TokenType::Access);
+        assert_eq!(claims.ipaddr, "ip")
     }
 
     #[test]
@@ -275,7 +306,7 @@ mod tests {
         let config = JwtConfig::new(b"test-secret-key-for-testing");
 
         let access = config
-            .generate_access_token("uuid-123", "alice", UserRole::User)
+            .generate_access_token("uuid-123", "alice", UserRole::User, "ip")
             .unwrap();
 
         let refresh = config
@@ -294,7 +325,7 @@ mod tests {
         let config = JwtConfig::new(b"test-secret-key-for-testing");
 
         let result = config
-            .generate_access_token("uuid-456", "admin_user", UserRole::Admin)
+            .generate_access_token("uuid-456", "admin_user", UserRole::Admin, "ip")
             .unwrap();
 
         let claims = config.validate_access_token(&result.token).unwrap();
@@ -315,7 +346,7 @@ mod tests {
         let config2 = JwtConfig::new(b"secret-2");
 
         let result = config1
-            .generate_access_token("uuid-123", "alice", UserRole::User)
+            .generate_access_token("uuid-123", "alice", UserRole::User, "ip")
             .unwrap();
 
         let validation = config2.validate_access_token(&result.token);
@@ -342,6 +373,7 @@ mod tests {
             token_type: TokenType::Access,
             iat: now - 100,
             exp: now - 50, // Expired 50 seconds ago
+            ipaddr: "ip".to_string(),
         };
 
         let token = jsonwebtoken::encode(&Header::default(), &claims, &encoding_key).unwrap();

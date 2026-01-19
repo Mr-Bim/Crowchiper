@@ -1,6 +1,6 @@
 // vite.config.js
 import { globSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { inlineIIFEPlugin } from "./inline-plugin.js";
 
@@ -47,7 +47,9 @@ const login = defineConfig({
       },
     },
   },
-  plugins: [inlineIIFEPlugin({ assetsPath: "/login" })],
+  plugins: [
+    inlineIIFEPlugin({ assetsPath: "/login", sourceDir: "web/public" }),
+  ],
 });
 
 // App build: web/app/ -> dist/app/ with base from config.assets
@@ -84,7 +86,9 @@ const app = defineConfig({
       },
     },
   },
-  plugins: [inlineIIFEPlugin({ assetsPath: config.assets })],
+  plugins: [
+    inlineIIFEPlugin({ assetsPath: config.assets, sourceDir: "web/app" }),
+  ],
   experimental: {
     renderBuiltUrl(filename, { hostType }) {
       if (hostType === "js") {
@@ -98,27 +102,9 @@ const app = defineConfig({
   },
 });
 
-// IIFE build: shared inline script
-const iife = defineConfig({
-  root: "web/iife",
-  build: {
-    outDir: "../../dist/iife",
-    emptyOutDir: true,
-    lib: {
-      formats: ["iife"],
-      name: "inline",
-      entry: [join(import.meta.dirname, "web", "inline", "inline.ts")],
-      fileName: () => "inline.js",
-    },
-    minify: true,
-  },
-});
-
 // Select build based on environment variable
 let out;
-if (process.env.IIFE) {
-  out = iife;
-} else if (process.env.BUILD === "login") {
+if (process.env.BUILD === "login") {
   out = login;
 } else if (process.env.BUILD === "app") {
   out = app;

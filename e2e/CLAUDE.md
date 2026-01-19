@@ -155,3 +155,46 @@ Defined in `Server` enum:
 1. Add to `Server` enum in `server.ts`
 2. Add config to `SERVER_CONFIGS` object
 3. It will be auto-started in global setup
+
+## Test Files
+
+- **`register.spec.ts`** - User registration flow tests
+- **`login.spec.ts`** - Login flow and navigation tests
+- **`encryption.spec.ts`** - Encryption setup and usage tests
+- **`app-auth.spec.ts`** - Authentication, JWT, and authorization tests
+- **`tokens.spec.ts`** - Comprehensive token system tests (see below)
+- **`nested-posts/*.spec.ts`** - Hierarchical post structure tests
+
+### Token Tests (`tokens.spec.ts`)
+
+Comprehensive E2E tests for the dual-token authentication system:
+
+**Token Issuance:**
+- Registration issues refresh token cookie
+- Login issues new refresh token when none exists
+- Login reuses existing valid refresh token (redirects to app)
+
+**Token Refresh Flow:**
+- Expired access token triggers automatic refresh via refresh token
+- Missing refresh token returns 401
+- Revoked refresh token returns 401
+
+**Multiple Sessions:**
+- User can have multiple active sessions
+- Logging out one session doesn't affect others
+
+**Logout:**
+- Logout clears both cookies
+- Logout revokes refresh token in database
+- Logout succeeds even without valid token
+
+**Token List API:**
+- Users can only see their own tokens
+
+**User Isolation:**
+- Users cannot access each other's data
+- Users cannot revoke each other's tokens
+
+**Token Type Security:**
+- Refresh token cannot be used as access token
+- Access token cannot be used as refresh token

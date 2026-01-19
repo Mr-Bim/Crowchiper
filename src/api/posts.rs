@@ -14,7 +14,7 @@ use sqlx;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ApiAuth, HasAuthState};
+use crate::auth::{ActivatedApiAuth, HasAuthState};
 use crate::db::{Database, PostNode};
 use crate::jwt::JwtConfig;
 
@@ -212,7 +212,7 @@ async fn validate_encryption(
 
 async fn list_posts(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Query(query): Query<ListPostsQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let posts = state
@@ -229,7 +229,7 @@ async fn list_posts(
 
 async fn list_children(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let children = state
@@ -249,7 +249,7 @@ async fn list_children(
 
 async fn create_post(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Json(payload): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate encryption matches user settings
@@ -312,7 +312,7 @@ async fn create_post(
 
 async fn get_post(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let post = state
@@ -342,7 +342,7 @@ async fn get_post(
 
 async fn update_post(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
     Json(payload): Json<UpdatePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -478,7 +478,7 @@ async fn update_post_attachments_tx(
 
 async fn delete_post(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Use a transaction to ensure atomicity when deleting post and cleaning up attachments
@@ -593,7 +593,7 @@ async fn remove_post_attachments_tx(
 
 async fn reorder_posts(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Json(payload): Json<ReorderRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     state
@@ -608,7 +608,7 @@ async fn reorder_posts(
 
 async fn move_post(
     State(state): State<PostsState>,
-    ApiAuth(user): ApiAuth,
+    ActivatedApiAuth(user): ActivatedApiAuth,
     Path(uuid): Path<String>,
     Json(payload): Json<MovePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {

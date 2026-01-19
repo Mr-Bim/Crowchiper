@@ -14,10 +14,10 @@
     base = path.substring(0, appIndex);
   }
 
+  const appPath = `${base}/__APP_ASSETS__`;
   (window as unknown as Record<string, string>).API_PATH = `${base}/api`;
   (window as unknown as Record<string, string>).LOGIN_PATH = `${base}/login`;
-  (window as unknown as Record<string, string>).APP_PATH =
-    `${base}/__APP_ASSETS__`;
+  (window as unknown as Record<string, string>).APP_PATH = appPath;
 
   // Provide __assetsPath for Vite's renderBuiltUrl runtime resolution
   // This allows dynamic imports to resolve correctly with runtime base path
@@ -26,6 +26,37 @@
   ).__assetsPath = (filename: string) => {
     return `${base}/__APP_ASSETS__/${filename}`;
   };
+
+  // Conditionally fetch config at startup (for login/register pages)
+  // Redirect immediately if already authenticated
+  if (import.meta.env.INLINE_CONFIG) {
+    interface ServerConfig {
+      no_signup: boolean;
+      authenticated: boolean;
+    }
+
+    const configPromise: Promise<ServerConfig> = fetch(`${base}/api/config`)
+      .then((response) => {
+        if (response.ok) {
+          return response.json();
+        }
+        return { no_signup: false, authenticated: false };
+      })
+      .then((config: ServerConfig) => {
+        // Redirect immediately if authenticated
+        if (config.authenticated) {
+          window.location.href = appPath;
+        }
+        return config;
+      })
+      .catch(() => {
+        return { no_signup: false, authenticated: false };
+      });
+
+    (
+      window as unknown as Record<string, Promise<ServerConfig>>
+    ).__CONFIG_PROMISE__ = configPromise;
+  }
 })();
 
 // Theme switching logic
@@ -134,22 +165,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const apiPath = (window as unknown as Record<string, string>).API_PATH;
         const loginPath = (window as unknown as Record<string, string>)
           .LOGIN_PATH;
-        const response = await fetch(`${apiPath}/tokens/logout`, {
+        await fetch(`${apiPath}/tokens/logout`, {
           method: "POST",
           credentials: "include",
         });
-        if (response.ok) {
-          window.location.href = loginPath;
-        } else {
-          // Even if the request fails, redirect to login (cookie might be cleared)
-          window.location.href = loginPath;
-        }
-      } catch {
-        // Network error - redirect anyway
-        const loginPath = (window as unknown as Record<string, string>)
-          .LOGIN_PATH;
         window.location.href = loginPath;
-      }
+        window.location.href = loginPath;
+      } catch {}
     });
   }
 });

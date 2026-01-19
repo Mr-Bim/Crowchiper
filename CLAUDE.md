@@ -197,11 +197,12 @@ The app uses a dual-token system with access tokens and refresh tokens:
 - **Refresh tokens**: Long-lived (2 weeks), tracked in database with JTI. Used to obtain new access tokens.
 
 ### How It Works
-1. On login, both tokens are issued as HttpOnly cookies (`access_token`, `refresh_token`)
+1. On login, a refresh token is issued only if the user doesn't already have a valid one
 2. API requests use the access token for authentication
 3. If access token is expired but refresh token is valid, middleware auto-refreshes the access token
 4. If both tokens are invalid/expired, returns 401 and frontend redirects to login
 5. Refresh tokens can be revoked (logged out) which invalidates the session
+6. IP address is validated on access tokens; if IP changes, refresh token is used to issue new access token
 
 ### Database Schema (v9)
 ```sql
@@ -256,6 +257,26 @@ Located in `web/app/index.html`, styled in `web/app/css/app.css`, logic in `web/
 
 ### Token Cleanup
 Expired tokens are deleted on server startup via `db.tokens().delete_expired()`.
+
+## Rust Tests
+
+Test files located in `tests/` folder:
+
+- **`api_tests.rs`**: User and passkey registration API tests
+- **`posts_tests.rs`**: Posts CRUD, reordering, and user isolation tests
+- **`token_tests.rs`**: Dual-token authentication system tests
+- **`startup_tests.rs`**: Binary startup validation (JWT secret, HTTPS, base path)
+
+### Token Tests (`tests/token_tests.rs`)
+Comprehensive tests for the dual-token authentication system:
+- Access token authentication and IP validation
+- Refresh token flow and automatic access token renewal
+- Multiple devices/sessions per user
+- User isolation (can't use/revoke other users' tokens)
+- Token revocation and logout
+- Login flow refresh token reuse (doesn't issue new token if valid one exists)
+- Token type confusion prevention (refresh can't be used as access and vice versa)
+- Deactivated/deleted user handling
 
 ## Playwright E2E Tests
 

@@ -311,7 +311,7 @@ async fn test_delete_activated_user_self() {
 
     // Generate access token for this user
     let access_result = jwt
-        .generate_access_token(uuid, "alice", crowchiper::db::UserRole::User)
+        .generate_access_token(uuid, "alice", crowchiper::db::UserRole::User, "127.0.0.1")
         .unwrap();
 
     // Delete own account with auth
@@ -360,7 +360,7 @@ async fn test_delete_activated_user_other_forbidden() {
 
     // Generate access token for bob
     let bob_access_result = jwt
-        .generate_access_token(bob_uuid, "bob", crowchiper::db::UserRole::User)
+        .generate_access_token(bob_uuid, "bob", crowchiper::db::UserRole::User, "127.0.0.1")
         .unwrap();
 
     // Bob tries to delete alice's account
@@ -412,7 +412,12 @@ async fn test_delete_activated_user_admin() {
 
     // Generate access token for admin
     let admin_access_result = jwt
-        .generate_access_token(admin_uuid, "admin", crowchiper::db::UserRole::Admin)
+        .generate_access_token(
+            admin_uuid,
+            "admin",
+            crowchiper::db::UserRole::Admin,
+            "127.0.0.1",
+        )
         .unwrap();
 
     // Admin deletes alice's account

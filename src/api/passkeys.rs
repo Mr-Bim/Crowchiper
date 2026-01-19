@@ -5,19 +5,18 @@
 
 use axum::{
     Json, Router,
-    extract::{ConnectInfo, Path, State},
-    http::{StatusCode, header::SET_COOKIE, request::Parts},
+    extract::{Path, State},
+    http::{StatusCode, header::SET_COOKIE},
     response::IntoResponse,
     routing::{delete, post},
 };
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{error, warn};
 use webauthn_rs::prelude::*;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
-use crate::auth::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME};
+use crate::auth::{REFRESH_COOKIE_NAME, extract_client_ip, get_cookie};
 use crate::db::{AuthChallenge, Database, User};
 use crate::jwt::JwtConfig;
 
@@ -31,7 +30,6 @@ pub struct PasskeysState {
 
 /// Result of generating auth cookies, includes info needed for token tracking.
 struct AuthCookiesResult {
-    access_cookie: String,
     refresh_cookie: String,
     refresh_jti: String,
     refresh_issued_at: u64,
@@ -41,16 +39,7 @@ struct AuthCookiesResult {
 impl PasskeysState {
     /// Generate JWT cookies (access + refresh) for the given user.
     /// Returns the cookie strings and refresh token tracking info.
-    fn make_auth_cookies(&self, user: &User) -> Result<AuthCookiesResult, ApiError> {
-        // Generate short-lived access token (5 minutes)
-        let access_result = self
-            .jwt
-            .generate_access_token(&user.uuid, &user.username, user.role)
-            .map_err(|e| {
-                error!("Failed to generate access token: {}", e);
-                ApiError::internal("Failed to generate token")
-            })?;
-
+    fn make_refresh_token(&self, user: &User) -> Result<AuthCookiesResult, ApiError> {
         // Generate long-lived refresh token (2 weeks)
         let refresh_result = self
             .jwt
@@ -62,18 +51,12 @@ impl PasskeysState {
 
         let secure = if self.secure_cookies { "; Secure" } else { "" };
 
-        let access_cookie = format!(
-            "{}={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
-            ACCESS_COOKIE_NAME, access_result.token, access_result.duration, secure
-        );
-
         let refresh_cookie = format!(
             "{}={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
             REFRESH_COOKIE_NAME, refresh_result.token, refresh_result.duration, secure
         );
 
         Ok(AuthCookiesResult {
-            access_cookie,
             refresh_cookie,
             refresh_jti: refresh_result.jti,
             refresh_issued_at: refresh_result.issued_at,
@@ -100,29 +83,6 @@ impl PasskeysState {
             })?;
         Ok(())
     }
-}
-
-/// Extract client IP address from request parts.
-/// Checks X-Forwarded-For first (for reverse proxy), then falls back to socket address.
-fn extract_client_ip(parts: &Parts) -> Option<String> {
-    // Check X-Forwarded-For header first (reverse proxy)
-    if let Some(forwarded_for) = parts.headers.get("x-forwarded-for") {
-        if let Ok(value) = forwarded_for.to_str() {
-            // X-Forwarded-For can contain multiple IPs, take the first (original client)
-            if let Some(first_ip) = value.split(',').next() {
-                let ip = first_ip.trim();
-                if !ip.is_empty() {
-                    return Some(ip.to_string());
-                }
-            }
-        }
-    }
-
-    // Fall back to socket address from ConnectInfo extension
-    parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip().to_string())
 }
 
 pub fn router(state: PasskeysState) -> Router {
@@ -296,26 +256,23 @@ async fn register_finish(
         .await
         .db_err("Failed to activate user")?;
 
-    let auth_result = state.make_auth_cookies(&user)?;
+    let refresh_token = state.make_refresh_token(&user)?;
 
     // Store refresh token for tracking
     let ip = extract_client_ip(&parts);
     state
         .store_refresh_token(
-            &auth_result.refresh_jti,
+            &refresh_token.refresh_jti,
             user.id,
             ip.as_deref(),
-            auth_result.refresh_issued_at,
-            auth_result.refresh_expires_at,
+            refresh_token.refresh_issued_at,
+            refresh_token.refresh_expires_at,
         )
         .await?;
 
     Ok((
         StatusCode::OK,
-        [
-            (SET_COOKIE, auth_result.access_cookie),
-            (SET_COOKIE, auth_result.refresh_cookie),
-        ],
+        [(SET_COOKIE, refresh_token.refresh_cookie)],
         Json(RegisterFinishResponse { passkey_id }),
     ))
 }
@@ -410,47 +367,44 @@ async fn login_finish(
         .db_err("Failed to get encryption settings")?
         .is_some();
 
-    // Only generate JWT if user is activated
-    let auth_cookies = if result.user.activated {
-        let auth_result = state.make_auth_cookies(&result.user)?;
-
-        // Store refresh token for tracking
-        let ip = extract_client_ip(&parts);
-        state
-            .store_refresh_token(
-                &auth_result.refresh_jti,
-                result.user.id,
-                ip.as_deref(),
-                auth_result.refresh_issued_at,
-                auth_result.refresh_expires_at,
-            )
-            .await?;
-
-        Some(auth_result)
-    } else {
-        None
-    };
-
-    let mut response = (
-        StatusCode::OK,
-        Json(LoginFinishResponse {
-            passkey_id: result.passkey_id,
-            activated: result.user.activated,
-            encryption_setup_finished,
-        }),
-    )
-        .into_response();
-
-    if let Some(cookies) = auth_cookies {
-        response
-            .headers_mut()
-            .insert(SET_COOKIE, cookies.access_cookie.parse().unwrap());
-        response
-            .headers_mut()
-            .append(SET_COOKIE, cookies.refresh_cookie.parse().unwrap());
+    let response = Json(LoginFinishResponse {
+        passkey_id: result.passkey_id,
+        activated: result.user.activated,
+        encryption_setup_finished,
+    });
+    if !result.user.activated {
+        return Ok((StatusCode::OK, response).into_response());
     }
 
-    Ok(response)
+    // Only generate JWT if user is activated
+    // Check if there's already a valid refresh token for this user
+    let ip = extract_client_ip(&parts);
+    let existing_refresh_valid =
+        check_existing_refresh_token(&state, &parts.headers, result.user.id).await;
+
+    if existing_refresh_valid {
+        // User already has a valid refresh token, don't issue a new one
+        // The access token will be refreshed automatically by the auth middleware
+        Ok((StatusCode::OK, response).into_response())
+    } else {
+        // Issue a new refresh token
+        let refresh_token = state.make_refresh_token(&result.user)?;
+        state
+            .store_refresh_token(
+                &refresh_token.refresh_jti,
+                result.user.id,
+                ip.as_deref(),
+                refresh_token.refresh_issued_at,
+                refresh_token.refresh_expires_at,
+            )
+            .await?;
+        Ok((
+            StatusCode::OK,
+            [(SET_COOKIE, refresh_token.refresh_cookie)],
+            response,
+        )
+            .into_response())
+    }
 }
 
 async fn delete_login_challenge(
@@ -459,6 +413,32 @@ async fn delete_login_challenge(
 ) -> impl IntoResponse {
     let _ = state.db.login_challenges().delete(&session_id).await;
     StatusCode::NO_CONTENT
+}
+
+/// Check if there's an existing valid refresh token in the request cookies for the given user.
+/// Returns true if a valid refresh token exists that belongs to the user.
+async fn check_existing_refresh_token(
+    state: &PasskeysState,
+    headers: &axum::http::HeaderMap,
+    user_id: i64,
+) -> bool {
+    // Try to get refresh token from cookie
+    let refresh_token = match get_cookie(headers, REFRESH_COOKIE_NAME) {
+        Some(token) => token,
+        None => return false,
+    };
+
+    // Validate the refresh token JWT
+    let claims = match state.jwt.validate_refresh_token(refresh_token) {
+        Ok(claims) => claims,
+        Err(_) => return false,
+    };
+
+    // Check if the token exists in the database (not revoked) and belongs to this user
+    match state.db.tokens().get_by_jti(&claims.jti).await {
+        Ok(Some(token)) => token.user_id == user_id,
+        _ => false,
+    }
 }
 
 /// Start the claim flow for users who have a passkey but aren't activated.
@@ -543,26 +523,23 @@ async fn claim_finish(
         .map(|s| s.setup_done)
         .unwrap_or(false);
 
-    let auth_result = state.make_auth_cookies(&result.user)?;
+    let refresh_token = state.make_refresh_token(&result.user)?;
 
     // Store refresh token for tracking
     let ip = extract_client_ip(&parts);
     state
         .store_refresh_token(
-            &auth_result.refresh_jti,
+            &refresh_token.refresh_jti,
             result.user.id,
             ip.as_deref(),
-            auth_result.refresh_issued_at,
-            auth_result.refresh_expires_at,
+            refresh_token.refresh_issued_at,
+            refresh_token.refresh_expires_at,
         )
         .await?;
 
     Ok((
         StatusCode::OK,
-        [
-            (SET_COOKIE, auth_result.access_cookie),
-            (SET_COOKIE, auth_result.refresh_cookie),
-        ],
+        [(SET_COOKIE, refresh_token.refresh_cookie)],
         Json(LoginFinishResponse {
             passkey_id: result.passkey_id,
             activated: true, // claim_finish always activates the user

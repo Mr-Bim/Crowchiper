@@ -150,9 +150,10 @@ test.describe("Register page", () => {
     await page2.close();
   });
 
-  test("multiple users can register", async ({ context, baseUrl, testId }) => {
-    // First user
-    const page1 = await context.newPage();
+  test("multiple users can register", async ({ browser, baseUrl, testId }) => {
+    // First user in separate context
+    const context1 = await browser.newContext();
+    const page1 = await context1.newPage();
     const client1 = await page1.context().newCDPSession(page1);
     await addVirtualAuthenticator(client1);
 
@@ -167,8 +168,9 @@ test.describe("Register page", () => {
       timeout: 10000,
     });
 
-    // Second user in new page
-    const page2 = await context.newPage();
+    // Second user in separate context (to avoid shared cookies)
+    const context2 = await browser.newContext();
+    const page2 = await context2.newPage();
     const client2 = await page2.context().newCDPSession(page2);
     await addVirtualAuthenticator(client2);
 
@@ -183,8 +185,8 @@ test.describe("Register page", () => {
       timeout: 10000,
     });
 
-    await page1.close();
-    await page2.close();
+    await context1.close();
+    await context2.close();
   });
 });
 
