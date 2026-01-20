@@ -301,6 +301,8 @@ async fn get_attachment(
         header::CONTENT_TYPE,
         "application/octet-stream".parse().unwrap(),
     );
+    headers.insert(header::CONTENT_DISPOSITION, "attachment".parse().unwrap());
+
     // Empty string for unencrypted attachments
     let iv = attachment.image_iv.unwrap_or_default();
     headers.insert("X-Encryption-IV", iv.parse().unwrap());
@@ -334,6 +336,8 @@ async fn get_thumbnail(
         header::CONTENT_TYPE,
         "application/octet-stream".parse().unwrap(),
     );
+    headers.insert(header::CONTENT_DISPOSITION, "attachment".parse().unwrap());
+
     // Empty string for unencrypted attachments
     let iv = thumbnail.iv.unwrap_or_default();
     headers.insert("X-Encryption-IV", iv.parse().unwrap());

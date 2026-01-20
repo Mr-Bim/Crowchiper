@@ -51,9 +51,10 @@ pub fn extract_client_ip(parts: &Parts) -> Option<String> {
     // Check X-Forwarded-For header first (reverse proxy)
     if let Some(forwarded_for) = parts.headers.get("x-forwarded-for") {
         if let Ok(value) = forwarded_for.to_str() {
-            // X-Forwarded-For can contain multiple IPs, take the first (original client)
-            if let Some(first_ip) = value.split(',').next() {
-                let ip = first_ip.trim();
+            // X-Forwarded-For can contain multiple IPs. The last IP is the most reliable
+            // as it's added by the proxy closest to the application.
+            if let Some(last_ip) = value.split(',').last() {
+                let ip = last_ip.trim();
                 if !ip.is_empty() {
                     return Some(ip.to_string());
                 }

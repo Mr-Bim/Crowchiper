@@ -253,7 +253,8 @@ impl PostStore {
         let rows: Vec<PostSummaryRow> = sqlx::query_as(
             "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, created_at, updated_at
              FROM posts WHERE user_id = ?
-             ORDER BY position IS NULL, position ASC, updated_at DESC",
+             ORDER BY position IS NULL, position ASC, updated_at DESC
+             LIMIT 10000",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
