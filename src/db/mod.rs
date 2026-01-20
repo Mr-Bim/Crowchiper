@@ -77,43 +77,6 @@ impl Database {
         if version < 1 {
             self.migrate_v1().await?;
         }
-
-        if version < 2 {
-            self.migrate_v2().await?;
-        }
-
-        if version < 3 {
-            self.migrate_v3().await?;
-        }
-
-        if version < 4 {
-            self.migrate_v4().await?;
-        }
-
-        if version < 5 {
-            self.migrate_v5().await?;
-        }
-
-        if version < 6 {
-            self.migrate_v6().await?;
-        }
-
-        if version < 7 {
-            self.migrate_v7().await?;
-        }
-
-        if version < 8 {
-            self.migrate_v8().await?;
-        }
-
-        if version < 9 {
-            self.migrate_v9().await?;
-        }
-
-        if version < 10 {
-            self.migrate_v10().await?;
-        }
-
         Ok(())
     }
 
@@ -176,21 +139,28 @@ impl Database {
                 )",
                 "CREATE INDEX idx_login_challenges_session_id ON login_challenges(session_id)",
                 "CREATE INDEX idx_login_challenges_created_at ON login_challenges(created_at)",
-                // Posts table
+                // Posts table (final schema after all migrations)
                 "CREATE TABLE posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     uuid TEXT UNIQUE NOT NULL,
                     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     title TEXT,
                     title_encrypted INTEGER NOT NULL DEFAULT 0,
+                    title_iv TEXT,
                     content TEXT NOT NULL DEFAULT '',
                     content_encrypted INTEGER NOT NULL DEFAULT 0,
+                    iv TEXT,
+                    encryption_version INTEGER,
+                    position INTEGER,
+                    parent_id TEXT,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )",
                 "CREATE INDEX idx_posts_uuid ON posts(uuid)",
                 "CREATE INDEX idx_posts_user_id ON posts(user_id)",
                 "CREATE INDEX idx_posts_updated_at ON posts(updated_at)",
+                "CREATE INDEX idx_posts_position ON posts(user_id, position)",
+                "CREATE INDEX idx_posts_parent ON posts(parent_id)",
                 // User encryption settings table
                 "CREATE TABLE user_encryption_settings (
                     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -199,53 +169,19 @@ impl Database {
                     prf_salt BLOB,
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v2(&self) -> Result<(), sqlx::Error> {
-        self.run_migration(
-            2,
-            &[
-                // Add encryption_version column (nullable, only set when content_encrypted=true)
-                "ALTER TABLE posts ADD COLUMN encryption_version INTEGER",
-                // Add iv column for the initialization vector (nullable, base64url encoded)
-                "ALTER TABLE posts ADD COLUMN iv TEXT",
-                // Add title_iv column for the title initialization vector
-                "ALTER TABLE posts ADD COLUMN title_iv TEXT",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v3(&self) -> Result<(), sqlx::Error> {
-        self.run_migration(
-            3,
-            &[
-                // Add position column for drag-and-drop ordering
-                // Lower values appear first. NULL means use updated_at order (legacy).
-                "ALTER TABLE posts ADD COLUMN position INTEGER",
-                // Index for efficient ordering queries
-                "CREATE INDEX idx_posts_position ON posts(user_id, position)",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v4(&self) -> Result<(), sqlx::Error> {
-        self.run_migration(
-            4,
-            &[
-                // Attachments table for encrypted images
+                // Attachments table (final schema after all migrations)
                 "CREATE TABLE attachments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     uuid TEXT UNIQUE NOT NULL,
                     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    encrypted_image BLOB NOT NULL,
-                    encrypted_image_iv TEXT NOT NULL,
-                    encrypted_thumbnail BLOB NOT NULL,
-                    encrypted_thumbnail_iv TEXT NOT NULL,
+                    image_data BLOB NOT NULL,
+                    image_iv TEXT,
+                    thumb_sm BLOB NOT NULL,
+                    thumb_sm_iv TEXT,
+                    thumb_md BLOB,
+                    thumb_md_iv TEXT,
+                    thumb_lg BLOB,
+                    thumb_lg_iv TEXT,
                     encryption_version INTEGER NOT NULL,
                     reference_count INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -253,87 +189,14 @@ impl Database {
                 "CREATE INDEX idx_attachments_uuid ON attachments(uuid)",
                 "CREATE INDEX idx_attachments_user_id ON attachments(user_id)",
                 "CREATE INDEX idx_attachments_ref_count ON attachments(reference_count)",
-                // Post attachment references (for tracking which attachments belong to which post)
+                // Post attachment references
                 "CREATE TABLE post_attachments (
                     post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
                     attachment_uuid TEXT NOT NULL,
                     PRIMARY KEY (post_id, attachment_uuid)
                 )",
                 "CREATE INDEX idx_post_attachments_attachment ON post_attachments(attachment_uuid)",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v5(&self) -> Result<(), sqlx::Error> {
-        self.run_migration(
-            5,
-            &[
-                // Rename old thumbnail columns and add new responsive sizes
-                // Small (200px), Medium (400px), Large (800px)
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumbnail TO encrypted_thumb_sm",
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumbnail_iv TO encrypted_thumb_sm_iv",
-                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_md BLOB",
-                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_md_iv TEXT",
-                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_lg BLOB",
-                "ALTER TABLE attachments ADD COLUMN encrypted_thumb_lg_iv TEXT",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v6(&self) -> Result<(), sqlx::Error> {
-        // Rename columns to remove "encrypted_" prefix since data can now be unencrypted.
-        // Also make image_iv and thumb_sm_iv nullable (they were NOT NULL before).
-        // When encryption_version = 0, data is unencrypted and IVs are NULL.
-        // When encryption_version > 0, data is encrypted and IVs are set.
-        self.run_migration(
-            6,
-            &[
-                // Rename data columns (these keep their NOT NULL constraint which is fine)
-                "ALTER TABLE attachments RENAME COLUMN encrypted_image TO image_data",
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_sm TO thumb_sm",
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_md TO thumb_md",
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_lg TO thumb_lg",
-                // For IV columns that were NOT NULL, we need to: add new nullable column, copy data, drop old
-                // image_iv (was encrypted_image_iv NOT NULL)
-                "ALTER TABLE attachments ADD COLUMN image_iv TEXT",
-                "UPDATE attachments SET image_iv = encrypted_image_iv",
-                "ALTER TABLE attachments DROP COLUMN encrypted_image_iv",
-                // thumb_sm_iv (was encrypted_thumb_sm_iv NOT NULL)
-                "ALTER TABLE attachments ADD COLUMN thumb_sm_iv TEXT",
-                "UPDATE attachments SET thumb_sm_iv = encrypted_thumb_sm_iv",
-                "ALTER TABLE attachments DROP COLUMN encrypted_thumb_sm_iv",
-                // thumb_md_iv and thumb_lg_iv were already nullable, just rename
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_md_iv TO thumb_md_iv",
-                "ALTER TABLE attachments RENAME COLUMN encrypted_thumb_lg_iv TO thumb_lg_iv",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v7(&self) -> Result<(), sqlx::Error> {
-        // Add support for nested posts (hierarchical structure)
-        self.run_migration(
-            7,
-            &[
-                // parent_id references the parent post's uuid (NULL = root level)
-                // ON DELETE CASCADE: deleting a parent deletes all children
-                "ALTER TABLE posts ADD COLUMN parent_id TEXT",
-                // is_folder: folders are not editable in the editor
-                "ALTER TABLE posts ADD COLUMN is_folder INTEGER NOT NULL DEFAULT 0",
-                // Index for efficient hierarchy queries
-                "CREATE INDEX idx_posts_parent ON posts(parent_id)",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v8(&self) -> Result<(), sqlx::Error> {
-        // Add active tokens table for JWT tracking and revocation
-        self.run_migration(
-            8,
-            &[
+                // Active tokens table for JWT tracking and revocation
                 "CREATE TABLE active_tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     jti TEXT UNIQUE NOT NULL,
@@ -341,6 +204,7 @@ impl Database {
                     last_ip TEXT,
                     issued_at TEXT NOT NULL,
                     expires_at TEXT NOT NULL,
+                    token_type TEXT NOT NULL DEFAULT 'refresh',
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )",
                 "CREATE INDEX idx_active_tokens_jti ON active_tokens(jti)",
@@ -349,120 +213,6 @@ impl Database {
             ],
         )
         .await
-    }
-
-    async fn migrate_v9(&self) -> Result<(), sqlx::Error> {
-        // Add token_type column for distinguishing access vs refresh tokens
-        // Only refresh tokens are tracked in the database (access tokens are stateless)
-        self.run_migration(
-            9,
-            &[
-                // Add token_type column: 'refresh' for refresh tokens
-                // Existing tokens are converted to refresh tokens
-                "ALTER TABLE active_tokens ADD COLUMN token_type TEXT NOT NULL DEFAULT 'refresh'",
-            ],
-        )
-        .await
-    }
-
-    async fn migrate_v10(&self) -> Result<(), sqlx::Error> {
-        // Remove folder concept - all items are now posts that can have children.
-        // Migration strategy:
-        // 1. Move children of folders up to the folder's parent
-        // 2. Delete all folders
-        // 3. Drop is_folder column (via table recreation since SQLite doesn't support DROP COLUMN easily)
-        let mut tx = self.pool.begin().await?;
-
-        // Step 1: Move children of folders to the folder's parent
-        // We need to do this iteratively since folders can be nested
-        // Use a loop until no more folders with children exist
-        loop {
-            // Find folders that have children
-            let folder_with_children: Option<(String, Option<String>)> = sqlx::query_as(
-                "SELECT f.uuid, f.parent_id FROM posts f
-                 WHERE f.is_folder = 1
-                 AND EXISTS (SELECT 1 FROM posts c WHERE c.parent_id = f.uuid)
-                 LIMIT 1",
-            )
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            match folder_with_children {
-                Some((folder_uuid, folder_parent_id)) => {
-                    // Move all children of this folder to the folder's parent
-                    sqlx::query("UPDATE posts SET parent_id = ? WHERE parent_id = ?")
-                        .bind(&folder_parent_id)
-                        .bind(&folder_uuid)
-                        .execute(&mut *tx)
-                        .await?;
-                }
-                None => break, // No more folders with children
-            }
-        }
-
-        // Step 2: Delete all folders (they should now have no children)
-        sqlx::query("DELETE FROM posts WHERE is_folder = 1")
-            .execute(&mut *tx)
-            .await?;
-
-        // Step 3: Recreate posts table without is_folder column
-        // SQLite doesn't support DROP COLUMN well, so we recreate the table
-        sqlx::query(
-            "CREATE TABLE posts_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uuid TEXT UNIQUE NOT NULL,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                title TEXT,
-                title_encrypted INTEGER NOT NULL DEFAULT 0,
-                title_iv TEXT,
-                content TEXT NOT NULL DEFAULT '',
-                content_encrypted INTEGER NOT NULL DEFAULT 0,
-                iv TEXT,
-                encryption_version INTEGER,
-                position INTEGER,
-                parent_id TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        // Copy data (excluding is_folder)
-        sqlx::query(
-            "INSERT INTO posts_new (id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, created_at, updated_at)
-             SELECT id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, created_at, updated_at
-             FROM posts",
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        // Drop old table and rename new one
-        sqlx::query("DROP TABLE posts").execute(&mut *tx).await?;
-        sqlx::query("ALTER TABLE posts_new RENAME TO posts")
-            .execute(&mut *tx)
-            .await?;
-
-        // Recreate indexes
-        sqlx::query("CREATE INDEX idx_posts_uuid ON posts(uuid)")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("CREATE INDEX idx_posts_user_id ON posts(user_id)")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("CREATE INDEX idx_posts_updated_at ON posts(updated_at)")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("CREATE INDEX idx_posts_position ON posts(user_id, position)")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("CREATE INDEX idx_posts_parent ON posts(parent_id)")
-            .execute(&mut *tx)
-            .await?;
-
-        Self::set_version(&mut tx, 10).await?;
-        tx.commit().await?;
-        Ok(())
     }
 
     /// Get the user store.
