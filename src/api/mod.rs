@@ -58,7 +58,10 @@ pub fn create_api_router(
     };
 
     #[cfg(feature = "test-mode")]
-    let test_state = test::TestState { db: db.clone() };
+    let test_state = test::TestState {
+        db: db.clone(),
+        jwt: jwt.clone(),
+    };
 
     let config_state = config::ConfigState {
         no_signup,

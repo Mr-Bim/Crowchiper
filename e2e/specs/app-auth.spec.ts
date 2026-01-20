@@ -1,130 +1,41 @@
-import * as jose from "jose";
 import { test, expect, appUrl, APP_PATH, Server } from "../utils/fixtures.ts";
 
-// JWT helper utilities
-const JWT_SECRET = new TextEncoder().encode(
-  "test-jwt-secret-for-playwright-testing-minimum-32-chars",
-);
-const ACCESS_TOKEN_DURATION_SECS = 5 * 60; // 5 minutes
-const REFRESH_TOKEN_DURATION_SECS = 14 * 24 * 60 * 60; // 2 weeks
-
-enum UserRole {
-  User = "user",
-  Admin = "admin",
+interface GenerateTokensResponse {
+  access_token: string;
+  refresh_token: string;
+  refresh_jti: string;
+  issued_at: number;
+  expires_at: number;
 }
 
-enum TokenType {
-  Access = "access",
-  Refresh = "refresh",
-}
-
-interface AccessTokenResult {
-  token: string;
-  iat: number;
-  exp: number;
-}
-
-interface RefreshTokenResult {
-  token: string;
-  jti: string;
-  iat: number;
-  exp: number;
-}
-
-async function generateAccessToken(
-  userUuid: string,
-  username: string,
-  role: UserRole,
-): Promise<AccessTokenResult> {
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + ACCESS_TOKEN_DURATION_SECS;
-
-  const claims = {
-    sub: userUuid,
-    username: username,
-    role: role,
-    typ: TokenType.Access,
-    iat: now,
-    exp: exp,
-  };
-
-  const token = await new jose.SignJWT(claims as unknown as jose.JWTPayload)
-    .setProtectedHeader({ alg: "HS256" })
-    .sign(JWT_SECRET);
-
-  return { token, iat: now, exp };
-}
-
-async function generateRefreshToken(
-  userUuid: string,
-  username: string,
-  role: UserRole,
-): Promise<RefreshTokenResult> {
-  const now = Math.floor(Date.now() / 1000);
-  const jti = crypto.randomUUID();
-  const exp = now + REFRESH_TOKEN_DURATION_SECS;
-
-  const claims = {
-    jti: jti,
-    sub: userUuid,
-    username: username,
-    role: role,
-    typ: TokenType.Refresh,
-    iat: now,
-    exp: exp,
-  };
-
-  const token = await new jose.SignJWT(claims as unknown as jose.JWTPayload)
-    .setProtectedHeader({ alg: "HS256" })
-    .sign(JWT_SECRET);
-
-  return { token, jti, iat: now, exp };
-}
-
-async function generateExpiredAccessToken(
-  userUuid: string,
-  username: string,
-  role: UserRole,
-): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-
-  const claims = {
-    sub: userUuid,
-    username: username,
-    role: role,
-    typ: TokenType.Access,
-    iat: now - 100,
-    exp: now - 50, // Expired 50 seconds ago
-  };
-
-  return await new jose.SignJWT(claims as unknown as jose.JWTPayload)
-    .setProtectedHeader({ alg: "HS256" })
-    .sign(JWT_SECRET);
-}
-
-/** Store refresh token in backend via test API */
-async function storeRefreshToken(
+/** Generate tokens via the test API endpoint */
+async function generateTokens(
   baseUrl: string,
-  jti: string,
   userUuid: string,
   username: string,
-  iat: number,
-  exp: number,
-): Promise<void> {
-  const response = await fetch(`${baseUrl}/api/test/token`, {
+  options: {
+    role?: "user" | "admin";
+    ip_addr?: string;
+    expired_access?: boolean;
+    store_refresh?: boolean;
+  } = {},
+): Promise<GenerateTokensResponse> {
+  const response = await fetch(`${baseUrl}/api/test/generate-tokens`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      jti,
       user_uuid: userUuid,
       username,
-      issued_at: iat,
-      expires_at: exp,
+      role: options.role,
+      ip_addr: options.ip_addr,
+      expired_access: options.expired_access ?? false,
+      store_refresh: options.store_refresh ?? false,
     }),
   });
   if (!response.ok) {
-    throw new Error(`Failed to store token: ${response.status}`);
+    throw new Error(`Failed to generate tokens: ${response.status}`);
   }
+  return response.json();
 }
 
 test.describe("App authentication", () => {
@@ -149,27 +60,10 @@ test.describe("App authentication", () => {
     const userUuid = crypto.randomUUID();
     const username = "testuser";
 
-    // Generate both access and refresh tokens
-    const accessResult = await generateAccessToken(
-      userUuid,
-      username,
-      UserRole.User,
-    );
-    const refreshResult = await generateRefreshToken(
-      userUuid,
-      username,
-      UserRole.User,
-    );
-
-    // Store the refresh token in the backend (access tokens are stateless)
-    await storeRefreshToken(
-      baseUrl,
-      refreshResult.jti,
-      userUuid,
-      username,
-      refreshResult.iat,
-      refreshResult.exp,
-    );
+    // Generate both access and refresh tokens via test API
+    const tokens = await generateTokens(baseUrl, userUuid, username, {
+      store_refresh: true,
+    });
 
     // First navigate to login page so we can set cookies on the domain
     await page.goto(`${baseUrl}/login/index.html`);
@@ -180,7 +74,7 @@ test.describe("App authentication", () => {
         document.cookie = `access_token=${access}; path=/`;
         document.cookie = `refresh_token=${refresh}; path=/`;
       },
-      { access: accessResult.token, refresh: refreshResult.token },
+      { access: tokens.access_token, refresh: tokens.refresh_token },
     );
 
     // Now navigate to app
@@ -219,12 +113,11 @@ test.describe("App authentication", () => {
     // Use a fresh page to avoid cookie contamination
     const page = await context.newPage();
 
-    // Create an expired access token
-    const token = await generateExpiredAccessToken(
-      "test-uuid",
-      "testuser",
-      UserRole.User,
-    );
+    // Create an expired access token via test API
+    const tokens = await generateTokens(baseUrl, "test-uuid", "testuser", {
+      expired_access: true,
+      store_refresh: false,
+    });
 
     // First navigate to login page so we can set cookies on the domain
     await page.goto(`${baseUrl}/login/index.html`);
@@ -235,7 +128,7 @@ test.describe("App authentication", () => {
       // Clear any refresh token
       document.cookie =
         "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    }, token);
+    }, tokens.access_token);
 
     // Navigate to app
     await page.goto(`${appUrl(baseUrl)}/index.html`);
@@ -277,27 +170,11 @@ test.describe("App authentication", () => {
     const userUuid = crypto.randomUUID();
     const username = "admin";
 
-    // Generate both access and refresh tokens for admin
-    const accessResult = await generateAccessToken(
-      userUuid,
-      username,
-      UserRole.Admin,
-    );
-    const refreshResult = await generateRefreshToken(
-      userUuid,
-      username,
-      UserRole.Admin,
-    );
-
-    // Store the refresh token in the backend
-    await storeRefreshToken(
-      baseUrl,
-      refreshResult.jti,
-      userUuid,
-      username,
-      refreshResult.iat,
-      refreshResult.exp,
-    );
+    // Generate both access and refresh tokens for admin via test API
+    const tokens = await generateTokens(baseUrl, userUuid, username, {
+      role: "admin",
+      store_refresh: true,
+    });
 
     // First navigate to login page so we can set cookies
     await page.goto(`${baseUrl}/login/index.html`);
@@ -308,7 +185,7 @@ test.describe("App authentication", () => {
         document.cookie = `access_token=${access}; path=/`;
         document.cookie = `refresh_token=${refresh}; path=/`;
       },
-      { access: accessResult.token, refresh: refreshResult.token },
+      { access: tokens.access_token, refresh: tokens.refresh_token },
     );
 
     // Navigate to app
@@ -350,27 +227,10 @@ test.describe("App authentication with base path", () => {
     const userUuid = crypto.randomUUID();
     const username = "testuser";
 
-    // Generate both access and refresh tokens
-    const accessResult = await generateAccessToken(
-      userUuid,
-      username,
-      UserRole.User,
-    );
-    const refreshResult = await generateRefreshToken(
-      userUuid,
-      username,
-      UserRole.User,
-    );
-
-    // Store the refresh token in the backend
-    await storeRefreshToken(
-      baseUrl,
-      refreshResult.jti,
-      userUuid,
-      username,
-      refreshResult.iat,
-      refreshResult.exp,
-    );
+    // Generate both access and refresh tokens via test API
+    const tokens = await generateTokens(baseUrl, userUuid, username, {
+      store_refresh: true,
+    });
 
     // Navigate to login first to set cookie
     await page.goto(`${baseUrl}/login/index.html`);
@@ -381,7 +241,7 @@ test.describe("App authentication with base path", () => {
         document.cookie = `access_token=${access}; path=/`;
         document.cookie = `refresh_token=${refresh}; path=/`;
       },
-      { access: accessResult.token, refresh: refreshResult.token },
+      { access: tokens.access_token, refresh: tokens.refresh_token },
     );
 
     // Navigate to app

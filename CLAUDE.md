@@ -117,6 +117,53 @@ The test code is only included when building with test mode:
 - JS: Use `npm run build-all-test` to build with TEST_MODE (includes test code)
 - `__TEST_MODE__` constant is replaced at build time and dead code is eliminated
 
+## Test Token Generation API
+
+For e2e tests that need to create JWT tokens (e.g., testing token refresh flows), use the test API endpoint instead of client-side JWT libraries:
+
+**Endpoint:** `POST /api/test/generate-tokens` (test-mode only)
+
+**Request:**
+```json
+{
+  "user_uuid": "uuid-string",
+  "username": "testuser",
+  "role": "user" | "admin",      // optional, defaults to "user"
+  "ip_addr": "127.0.0.1",        // optional
+  "expired_access": false,       // optional, generates expired access token
+  "store_refresh": false         // optional, stores refresh token in DB
+}
+```
+
+**Response:**
+```json
+{
+  "access_token": "jwt...",
+  "refresh_token": "jwt...",
+  "refresh_jti": "uuid",
+  "issued_at": 1234567890,
+  "expires_at": 1234567890
+}
+```
+
+**Usage in tests:**
+```typescript
+async function generateTokens(baseUrl: string, userUuid: string, username: string, options = {}) {
+  const response = await fetch(`${baseUrl}/api/test/generate-tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_uuid: userUuid, username, ...options }),
+  });
+  return response.json();
+}
+
+// Generate tokens with expired access (for testing refresh flow)
+const tokens = await generateTokens(baseUrl, userUuid, username, {
+  expired_access: true,
+  store_refresh: true,
+});
+```
+
 ## Gallery/Attachment Patterns
 
 Shared regex patterns for gallery parsing are in `web/app/src/editor/attachment-widget/patterns.ts`:
