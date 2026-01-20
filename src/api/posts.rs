@@ -77,8 +77,6 @@ struct CreatePostRequest {
     iv: Option<String>,
     encryption_version: Option<i32>,
     parent_id: Option<String>,
-    #[serde(default)]
-    is_folder: bool,
 }
 
 #[derive(Serialize)]
@@ -93,7 +91,6 @@ struct PostResponse {
     encryption_version: Option<i32>,
     position: Option<i32>,
     parent_id: Option<String>,
-    is_folder: bool,
     created_at: String,
     updated_at: String,
 }
@@ -108,7 +105,6 @@ struct PostNodeResponse {
     encryption_version: Option<i32>,
     position: Option<i32>,
     parent_id: Option<String>,
-    is_folder: bool,
     has_children: bool,
     children: Option<Vec<PostNodeResponse>>,
     created_at: String,
@@ -126,7 +122,6 @@ impl From<PostNode> for PostNodeResponse {
             encryption_version: node.encryption_version,
             position: node.position,
             parent_id: node.parent_id,
-            is_folder: node.is_folder,
             has_children: node.has_children,
             children: node
                 .children
@@ -274,7 +269,6 @@ async fn create_post(
             payload.iv.as_deref(),
             payload.encryption_version,
             payload.parent_id.as_deref(),
-            payload.is_folder,
         )
         .await
         .map_err(|e| match e {
@@ -303,7 +297,6 @@ async fn create_post(
             encryption_version: post.encryption_version,
             position: post.position,
             parent_id: post.parent_id,
-            is_folder: post.is_folder,
             created_at: post.created_at,
             updated_at: post.updated_at,
         }),
@@ -334,7 +327,6 @@ async fn get_post(
         encryption_version: post.encryption_version,
         position: post.position,
         parent_id: post.parent_id,
-        is_folder: post.is_folder,
         created_at: post.created_at,
         updated_at: post.updated_at,
     }))

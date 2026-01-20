@@ -11,10 +11,6 @@ export async function createPostWithTitle(
   const newPostBtn = page.locator("#new-post-btn");
   await newPostBtn.click();
 
-  // Click "New Post" in dropdown menu
-  const newPostOption = page.locator("#new-post-option");
-  await newPostOption.click();
-
   // Wait for new post to be created and editor to be ready
   const editor = page.locator("#editor .cm-content");
   await editor.click();
@@ -24,25 +20,6 @@ export async function createPostWithTitle(
   const postList = page.locator("#post-list");
   await expect(
     postList.locator(".post-item").filter({ hasText: title }),
-  ).toBeVisible({ timeout: 5000 });
-}
-
-/**
- * Helper to create a folder.
- * Note: Folders are not editable, so they keep the default "New Folder" title.
- */
-export async function createFolder(page: Page): Promise<void> {
-  const newPostBtn = page.locator("#new-post-btn");
-  await newPostBtn.click();
-
-  // Click "New Folder" in dropdown menu
-  const newFolderOption = page.locator("#new-folder-option");
-  await newFolderOption.click();
-
-  // Wait for new folder to appear in sidebar with default title
-  const postList = page.locator("#post-list");
-  await expect(
-    postList.locator(".post-item").filter({ hasText: "New Folder" }),
   ).toBeVisible({ timeout: 5000 });
 }
 

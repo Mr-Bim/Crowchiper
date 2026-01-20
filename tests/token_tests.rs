@@ -529,7 +529,6 @@ async fn test_users_cannot_use_each_others_tokens() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();

@@ -11,9 +11,7 @@ import {
   type PostNode,
   reorderPosts,
 } from "../api/posts.ts";
-import {
-  encryptPostData,
-} from "../crypto/post-encryption.ts";
+import { encryptPostData } from "../crypto/post-encryption.ts";
 import {
   addPost,
   clearSaveTimeout,
@@ -45,11 +43,10 @@ import { selectPost } from "./selection.ts";
 const editorPromise = import("../editor/setup.ts");
 
 /**
- * Create a new post or folder.
+ * Create a new post.
  */
 export async function handleNewPost(
   parentId: string | null = null,
-  isFolder = false,
 ): Promise<void> {
   // Save current post before creating new one (includes attachment refs)
   stopServerSaveInterval();
@@ -60,7 +57,7 @@ export async function handleNewPost(
   setIsDirty(false);
 
   try {
-    const defaultTitle = isFolder ? "New Folder" : "Untitled";
+    const defaultTitle = "Untitled";
     const encrypted = await encryptPostData(defaultTitle, "");
 
     const post = await createPost({
@@ -72,7 +69,6 @@ export async function handleNewPost(
       iv: encrypted.contentIv,
       encryption_version: encrypted.encryptionVersion,
       parent_id: parentId ?? undefined,
-      is_folder: isFolder,
     });
 
     // For local display, use plaintext
@@ -88,7 +84,6 @@ export async function handleNewPost(
       encryption_version: encrypted.encryptionVersion ?? null,
       position: post.position,
       parent_id: post.parent_id,
-      is_folder: post.is_folder,
       has_children: false,
       children: [],
       created_at: post.created_at,
@@ -104,39 +99,37 @@ export async function handleNewPost(
     // Set decrypted title
     setDecryptedTitle(post.uuid, displayTitle);
 
-    // Only load into editor if it's not a folder
-    if (!isFolder) {
-      setLoadedPost({
-        ...post,
-        title: displayTitle,
-        content: displayContent,
-      });
-      setLoadedDecryptedContent(displayContent);
+    // Load into editor
+    setLoadedPost({
+      ...post,
+      title: displayTitle,
+      content: displayContent,
+    });
+    setLoadedDecryptedContent(displayContent);
 
-      const container = document.getElementById("editor");
-      if (container) {
-        // Destroy existing editor
-        const oldEditor = getEditor();
-        if (oldEditor) {
-          oldEditor.destroy();
+    const container = document.getElementById("editor");
+    if (container) {
+      // Destroy existing editor
+      const oldEditor = getEditor();
+      if (oldEditor) {
+        oldEditor.destroy();
+      }
+
+      // Create new editor
+      const { createEditor } = await editorPromise;
+      const newEditor = createEditor(container, displayContent, () => {
+        if (getLoadedPost()) {
+          scheduleEncrypt();
         }
+      });
+      setEditor(newEditor);
+    }
 
-        // Create new editor
-        const { createEditor } = await editorPromise;
-        const newEditor = createEditor(container, displayContent, () => {
-          if (getLoadedPost()) {
-            scheduleEncrypt();
-          }
-        });
-        setEditor(newEditor);
-      }
-
-      const deleteBtn = document.getElementById(
-        "delete-btn",
-      ) as HTMLButtonElement | null;
-      if (deleteBtn) {
-        deleteBtn.disabled = false;
-      }
+    const deleteBtn = document.getElementById(
+      "delete-btn",
+    ) as HTMLButtonElement | null;
+    if (deleteBtn) {
+      deleteBtn.disabled = false;
     }
 
     renderPostList();
@@ -146,24 +139,25 @@ export async function handleNewPost(
 }
 
 /**
- * Create a new folder.
- */
-export async function handleNewFolder(
-  parentId: string | null = null,
-): Promise<void> {
-  return handleNewPost(parentId, true);
-}
-
-/**
  * Delete the currently selected post.
  */
 export async function handleDeletePost(): Promise<void> {
   const loadedPost = getLoadedPost();
   if (!loadedPost) return;
 
+  await handleDeletePostByNode(findPost(loadedPost.uuid));
+}
+
+/**
+ * Delete a post by its node (can be any post, not just the loaded one).
+ */
+export async function handleDeletePostByNode(
+  postNode: PostNode | null,
+): Promise<void> {
+  if (!postNode) return;
+
   // Check for children and show appropriate warning
-  const postNode = findPost(loadedPost.uuid);
-  const hasChildren = postNode?.has_children ?? false;
+  const hasChildren = postNode.has_children ?? false;
 
   const message = hasChildren
     ? "This post has nested posts that will also be deleted. Delete anyway?"
@@ -171,38 +165,49 @@ export async function handleDeletePost(): Promise<void> {
 
   if (!confirm(message)) return;
 
-  // Stop any pending saves
-  stopServerSaveInterval();
-  clearSaveTimeout();
-  setPendingEncryptedData(null);
-  setIsDirty(false);
+  const loadedPost = getLoadedPost();
+  const isDeletingLoadedPost = loadedPost?.uuid === postNode.uuid;
+
+  // If deleting the currently loaded post, stop saves
+  if (isDeletingLoadedPost) {
+    stopServerSaveInterval();
+    clearSaveTimeout();
+    setPendingEncryptedData(null);
+    setIsDirty(false);
+  }
 
   try {
-    const result = await deletePost(loadedPost.uuid);
+    const result = await deletePost(postNode.uuid);
 
     if (result.children_deleted > 0) {
       console.log(`Deleted ${result.children_deleted} child posts`);
     }
 
-    removePost(loadedPost.uuid);
-    setLoadedPost(null);
-    setLoadedDecryptedContent(null);
+    removePost(postNode.uuid);
 
-    const editor = getEditor();
-    if (editor) {
-      editor.destroy();
-      setEditor(null);
+    // If we deleted the loaded post, clear the editor
+    if (isDeletingLoadedPost) {
+      setLoadedPost(null);
+      setLoadedDecryptedContent(null);
+
+      const editor = getEditor();
+      if (editor) {
+        editor.destroy();
+        setEditor(null);
+      }
     }
 
     renderPostList();
 
-    // Select the first available non-folder post
-    const nextPost = getFirstSelectablePost();
-    if (nextPost) {
-      await selectPost(nextPost);
-    } else {
-      // Auto-create a new post instead of showing empty state
-      await handleNewPost();
+    // If we deleted the loaded post, select another one
+    if (isDeletingLoadedPost) {
+      const nextPost = getFirstSelectablePost();
+      if (nextPost) {
+        await selectPost(nextPost);
+      } else {
+        // Auto-create a new post instead of showing empty state
+        await handleNewPost();
+      }
     }
   } catch (err) {
     console.error("Failed to delete post:", err);

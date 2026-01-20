@@ -241,9 +241,29 @@
     font-weight: 500;
 }
 
-.post-item[data-folder="true"] {
-    font-weight: 500;
+.post-delete-btn {
+    width: 1.25rem;
+    height: 1.25rem;
+    min-width: 1.25rem;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
     cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.post-item-container:hover .post-delete-btn {
+    opacity: 1;
+}
+
+.post-delete-btn:hover {
+    background: var(--hover-bg);
+    color: oklch(0.55 0.2 25);
 }
 
 .gl-minify-enable-post-items {

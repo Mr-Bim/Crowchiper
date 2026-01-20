@@ -184,18 +184,17 @@ The app header includes a Save button that:
 
 ## Nested Posts (Hierarchical Structure)
 
-Posts support unlimited nesting depth, similar to Notion:
+Posts support unlimited nesting depth, similar to Notion. Any post can have child posts.
 
 ### Database Schema
 - `parent_id`: References parent post's UUID (NULL = root level)
-- `is_folder`: Boolean flag (folders are not editable in editor)
 - Positions are scoped per-parent (siblings ordered 0, 1, 2...)
 - `ON DELETE CASCADE`: Deleting a parent deletes all children
 
 ### API Endpoints
 - `GET /posts` - Returns tree structure (1 level deep by default)
 - `GET /posts/{uuid}/children` - Lazy load children beyond initial depth
-- `POST /posts` - Accepts `parent_id` and `is_folder` fields
+- `POST /posts` - Accepts `parent_id` field
 - `POST /posts/{uuid}/move` - Move post to new parent: `{ parent_id, position }`
 - `POST /posts/reorder` - Reorder siblings: `{ parent_id, uuids }`
 - `DELETE /posts/{uuid}` - Returns `{ deleted, children_deleted }` count
@@ -206,7 +205,6 @@ interface PostNode {
   uuid: string;
   title: string | null;
   parent_id: string | null;
-  is_folder: boolean;
   has_children: boolean;
   children: PostNode[] | null;  // null = not yet loaded
   // ... other fields
@@ -221,10 +219,9 @@ interface PostNode {
 ### UI Behavior (`web/app/src/posts/ui.ts`)
 - Tree rendered with indentation (16px per level)
 - Expand/collapse chevrons for posts with children
-- Folder icons for `is_folder = true`
-- Click folder to expand/collapse (not edit)
 - Click post to select for editing
 - First 3 levels expanded by default
+- Delete button appears on hover
 
 ### Drag-and-Drop (`web/app/src/posts/drag-and-drop.ts`)
 Two drop modes based on pointer position:

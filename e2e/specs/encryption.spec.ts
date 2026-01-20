@@ -147,10 +147,9 @@ test.describe("Encryption usage", () => {
   test("can create and save encrypted post", async () => {
     const { page } = userResult;
 
-    // Create a new post (click dropdown, then select option)
+    // Create a new post
     const newPostBtn = page.locator("#new-post-btn");
     await newPostBtn.click();
-    await page.locator("#new-post-option").click();
 
     // Type content in the editor
     const editorContent = page.locator(".cm-content");

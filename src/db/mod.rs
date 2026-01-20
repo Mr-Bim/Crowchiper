@@ -110,6 +110,10 @@ impl Database {
             self.migrate_v9().await?;
         }
 
+        if version < 10 {
+            self.migrate_v10().await?;
+        }
+
         Ok(())
     }
 
@@ -359,6 +363,106 @@ impl Database {
             ],
         )
         .await
+    }
+
+    async fn migrate_v10(&self) -> Result<(), sqlx::Error> {
+        // Remove folder concept - all items are now posts that can have children.
+        // Migration strategy:
+        // 1. Move children of folders up to the folder's parent
+        // 2. Delete all folders
+        // 3. Drop is_folder column (via table recreation since SQLite doesn't support DROP COLUMN easily)
+        let mut tx = self.pool.begin().await?;
+
+        // Step 1: Move children of folders to the folder's parent
+        // We need to do this iteratively since folders can be nested
+        // Use a loop until no more folders with children exist
+        loop {
+            // Find folders that have children
+            let folder_with_children: Option<(String, Option<String>)> = sqlx::query_as(
+                "SELECT f.uuid, f.parent_id FROM posts f
+                 WHERE f.is_folder = 1
+                 AND EXISTS (SELECT 1 FROM posts c WHERE c.parent_id = f.uuid)
+                 LIMIT 1",
+            )
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            match folder_with_children {
+                Some((folder_uuid, folder_parent_id)) => {
+                    // Move all children of this folder to the folder's parent
+                    sqlx::query("UPDATE posts SET parent_id = ? WHERE parent_id = ?")
+                        .bind(&folder_parent_id)
+                        .bind(&folder_uuid)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+                None => break, // No more folders with children
+            }
+        }
+
+        // Step 2: Delete all folders (they should now have no children)
+        sqlx::query("DELETE FROM posts WHERE is_folder = 1")
+            .execute(&mut *tx)
+            .await?;
+
+        // Step 3: Recreate posts table without is_folder column
+        // SQLite doesn't support DROP COLUMN well, so we recreate the table
+        sqlx::query(
+            "CREATE TABLE posts_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT UNIQUE NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title TEXT,
+                title_encrypted INTEGER NOT NULL DEFAULT 0,
+                title_iv TEXT,
+                content TEXT NOT NULL DEFAULT '',
+                content_encrypted INTEGER NOT NULL DEFAULT 0,
+                iv TEXT,
+                encryption_version INTEGER,
+                position INTEGER,
+                parent_id TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // Copy data (excluding is_folder)
+        sqlx::query(
+            "INSERT INTO posts_new (id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, created_at, updated_at)
+             SELECT id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, created_at, updated_at
+             FROM posts",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // Drop old table and rename new one
+        sqlx::query("DROP TABLE posts").execute(&mut *tx).await?;
+        sqlx::query("ALTER TABLE posts_new RENAME TO posts")
+            .execute(&mut *tx)
+            .await?;
+
+        // Recreate indexes
+        sqlx::query("CREATE INDEX idx_posts_uuid ON posts(uuid)")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("CREATE INDEX idx_posts_user_id ON posts(user_id)")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("CREATE INDEX idx_posts_updated_at ON posts(updated_at)")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("CREATE INDEX idx_posts_position ON posts(user_id, position)")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("CREATE INDEX idx_posts_parent ON posts(parent_id)")
+            .execute(&mut *tx)
+            .await?;
+
+        Self::set_version(&mut tx, 10).await?;
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Get the user store.

@@ -13,7 +13,6 @@ import {
 } from "./crypto/keystore.ts";
 import {
   handleDeletePost,
-  handleNewFolder,
   handleNewPost,
   handleSave,
   loadPosts,
@@ -27,46 +26,12 @@ declare const __TEST_MODE__: boolean;
 declare const API_PATH: string;
 declare const LOGIN_PATH: string;
 
-function setupNewPostDropdown(): void {
+function setupNewPostButton(): void {
   const btn = document.getElementById("new-post-btn");
-  const menu = document.getElementById("new-post-menu");
-  const newPostOption = document.getElementById("new-post-option");
-  const newFolderOption = document.getElementById("new-folder-option");
+  if (!btn) return;
 
-  if (!btn || !menu) return;
-
-  const showMenu = () => {
-    menu.hidden = false;
-  };
-
-  const hideMenu = () => {
-    menu.hidden = true;
-  };
-
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (menu.hidden) {
-      showMenu();
-    } else {
-      hideMenu();
-    }
-  });
-
-  newPostOption?.addEventListener("click", () => {
-    hideMenu();
+  btn.addEventListener("click", () => {
     handleNewPost();
-  });
-
-  newFolderOption?.addEventListener("click", () => {
-    hideMenu();
-    handleNewFolder();
-  });
-
-  // Close menu when clicking outside
-  document.addEventListener("click", (e) => {
-    if (!menu.hidden && !menu.contains(e.target as Node)) {
-      hideMenu();
-    }
   });
 }
 
@@ -165,7 +130,7 @@ async function init(): Promise<void> {
     }
 
     // Wire up event handlers
-    setupNewPostDropdown();
+    setupNewPostButton();
     document.getElementById("save-btn")?.addEventListener("click", handleSave);
     document
       .getElementById("delete-btn")

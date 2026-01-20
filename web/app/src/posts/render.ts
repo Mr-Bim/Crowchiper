@@ -4,13 +4,8 @@
  * Handles rendering the post tree and expand/collapse functionality.
  */
 
-import {
-  listPostChildren,
-  type PostNode,
-} from "../api/posts.ts";
-import {
-  decryptPostTitles,
-} from "../crypto/post-encryption.ts";
+import { listPostChildren, type PostNode } from "../api/posts.ts";
+import { decryptPostTitles } from "../crypto/post-encryption.ts";
 import { initDragAndDrop } from "./drag-and-drop.ts";
 import {
   flattenPosts,
@@ -25,19 +20,48 @@ import {
 
 // Handlers set by other modules to avoid circular imports
 let selectPostHandler: ((post: PostNode) => void) | null = null;
-let reorderHandler: ((parentId: string | null, fromIndex: number, toIndex: number) => Promise<void>) | null = null;
-let reparentHandler: ((uuid: string, newParentId: string | null, position: number) => Promise<void>) | null = null;
+let reorderHandler:
+  | ((
+      parentId: string | null,
+      fromIndex: number,
+      toIndex: number,
+    ) => Promise<void>)
+  | null = null;
+let reparentHandler:
+  | ((
+      uuid: string,
+      newParentId: string | null,
+      position: number,
+    ) => Promise<void>)
+  | null = null;
+let deletePostHandler: ((post: PostNode) => void) | null = null;
 
 export function setSelectPostHandler(handler: (post: PostNode) => void): void {
   selectPostHandler = handler;
 }
 
-export function setReorderHandler(handler: (parentId: string | null, fromIndex: number, toIndex: number) => Promise<void>): void {
+export function setReorderHandler(
+  handler: (
+    parentId: string | null,
+    fromIndex: number,
+    toIndex: number,
+  ) => Promise<void>,
+): void {
   reorderHandler = handler;
 }
 
-export function setReparentHandler(handler: (uuid: string, newParentId: string | null, position: number) => Promise<void>): void {
+export function setReparentHandler(
+  handler: (
+    uuid: string,
+    newParentId: string | null,
+    position: number,
+  ) => Promise<void>,
+): void {
   reparentHandler = handler;
+}
+
+export function setDeletePostHandler(handler: (post: PostNode) => void): void {
+  deletePostHandler = handler;
 }
 
 /**
@@ -83,10 +107,10 @@ function renderPostNode(
     itemContainer.appendChild(spacer);
   }
 
-  // Folder/post icon
+  // Post icon
   const icon = document.createElement("span");
   icon.className = "post-icon";
-  icon.textContent = post.is_folder ? "\uD83D\uDCC1" : "\uD83D\uDCC4";
+  icon.textContent = "\uD83D\uDCC4"; // 📄
   itemContainer.appendChild(icon);
 
   // Button for selection
@@ -95,25 +119,30 @@ function renderPostNode(
   if (loadedPost?.uuid === post.uuid) {
     item.classList.add("active");
   }
-  if (post.is_folder) {
-    item.setAttribute("data-folder", "true");
-  }
 
   // Use decrypted title from map, fallback to post.title, then "Untitled"
   const title = decryptedTitles.get(post.uuid) ?? post.title ?? "Untitled";
   item.textContent = title;
   item.title = title; // Show full title on hover
 
-  // Folders expand/collapse on click, posts select for editing
-  if (post.is_folder) {
-    item.addEventListener("click", () => handleToggleExpand(post));
-  } else {
-    item.addEventListener("click", () => {
-      selectPostHandler?.(post);
-    });
-  }
+  // Click to select for editing
+  item.addEventListener("click", () => {
+    selectPostHandler?.(post);
+  });
 
   itemContainer.appendChild(item);
+
+  // Delete button (appears on hover)
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "ghost post-delete-btn";
+  deleteBtn.innerHTML = "&#215;"; // × symbol
+  deleteBtn.title = "Delete";
+  deleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deletePostHandler?.(post);
+  });
+  itemContainer.appendChild(deleteBtn);
+
   wrapper.appendChild(itemContainer);
 
   return wrapper;

@@ -23,7 +23,6 @@ pub struct Post {
     pub encryption_version: Option<i32>,
     pub position: Option<i32>,
     pub parent_id: Option<String>,
-    pub is_folder: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -39,7 +38,6 @@ pub struct PostSummary {
     pub encryption_version: Option<i32>,
     pub position: Option<i32>,
     pub parent_id: Option<String>,
-    pub is_folder: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -55,7 +53,6 @@ pub struct PostNode {
     pub encryption_version: Option<i32>,
     pub position: Option<i32>,
     pub parent_id: Option<String>,
-    pub is_folder: bool,
     pub has_children: bool,
     pub children: Option<Vec<PostNode>>,
     pub created_at: String,
@@ -83,7 +80,6 @@ struct PostRow {
     encryption_version: Option<i32>,
     position: Option<i32>,
     parent_id: Option<String>,
-    is_folder: bool,
     created_at: String,
     updated_at: String,
 }
@@ -103,7 +99,6 @@ impl From<PostRow> for Post {
             encryption_version: row.encryption_version,
             position: row.position,
             parent_id: row.parent_id,
-            is_folder: row.is_folder,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -120,7 +115,6 @@ struct PostSummaryRow {
     encryption_version: Option<i32>,
     position: Option<i32>,
     parent_id: Option<String>,
-    is_folder: bool,
     created_at: String,
     updated_at: String,
 }
@@ -136,7 +130,6 @@ impl From<PostSummaryRow> for PostSummary {
             encryption_version: row.encryption_version,
             position: row.position,
             parent_id: row.parent_id,
-            is_folder: row.is_folder,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -154,7 +147,6 @@ impl From<PostSummary> for PostNode {
             encryption_version: summary.encryption_version,
             position: summary.position,
             parent_id: summary.parent_id,
-            is_folder: summary.is_folder,
             has_children: false,
             children: Some(Vec::new()),
             created_at: summary.created_at,
@@ -183,7 +175,6 @@ impl PostStore {
         iv: Option<&str>,
         encryption_version: Option<i32>,
         parent_id: Option<&str>,
-        is_folder: bool,
     ) -> Result<String, sqlx::Error> {
         let uuid = uuid::Uuid::new_v4().to_string();
 
@@ -223,8 +214,8 @@ impl PostStore {
 
         // Insert new post at position 0
         sqlx::query(
-            "INSERT INTO posts (uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, is_folder)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+            "INSERT INTO posts (uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
         )
         .bind(&uuid)
         .bind(user_id)
@@ -236,7 +227,6 @@ impl PostStore {
         .bind(iv)
         .bind(encryption_version)
         .bind(parent_id)
-        .bind(is_folder)
         .execute(&mut *tx)
         .await?;
 
@@ -247,7 +237,7 @@ impl PostStore {
     /// Get a post by UUID. Only returns the post if it belongs to the given user.
     pub async fn get_by_uuid(&self, uuid: &str, user_id: i64) -> Result<Option<Post>, sqlx::Error> {
         let row: Option<PostRow> = sqlx::query_as(
-            "SELECT id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, is_folder, created_at, updated_at
+            "SELECT id, uuid, user_id, title, title_encrypted, title_iv, content, content_encrypted, iv, encryption_version, position, parent_id, created_at, updated_at
              FROM posts WHERE uuid = ? AND user_id = ?",
         )
         .bind(uuid)
@@ -261,7 +251,7 @@ impl PostStore {
     /// Posts without a position are sorted by updated_at descending after positioned posts.
     pub async fn list_by_user(&self, user_id: i64) -> Result<Vec<PostSummary>, sqlx::Error> {
         let rows: Vec<PostSummaryRow> = sqlx::query_as(
-            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, is_folder, created_at, updated_at
+            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, created_at, updated_at
              FROM posts WHERE user_id = ?
              ORDER BY position IS NULL, position ASC, updated_at DESC",
         )
@@ -351,7 +341,6 @@ impl PostStore {
                     encryption_version: post.encryption_version,
                     position: post.position,
                     parent_id: post.parent_id.clone(),
-                    is_folder: post.is_folder,
                     has_children,
                     children,
                     created_at: post.created_at.clone(),
@@ -379,7 +368,7 @@ impl PostStore {
         }
 
         let rows: Vec<PostSummaryRow> = sqlx::query_as(
-            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, is_folder, created_at, updated_at
+            "SELECT uuid, title, title_encrypted, title_iv, content_encrypted, encryption_version, position, parent_id, created_at, updated_at
              FROM posts WHERE user_id = ? AND parent_id = ?
              ORDER BY position IS NULL, position ASC, updated_at DESC",
         )
@@ -407,7 +396,6 @@ impl PostStore {
                 encryption_version: summary.encryption_version,
                 position: summary.position,
                 parent_id: summary.parent_id,
-                is_folder: summary.is_folder,
                 has_children: has_children.is_some(),
                 children: if has_children.is_some() {
                     None
@@ -700,7 +688,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -718,7 +705,6 @@ mod tests {
         assert_eq!(post.content, "Hello, world!");
         assert!(!post.content_encrypted);
         assert!(post.parent_id.is_none());
-        assert!(!post.is_folder);
     }
 
     #[tokio::test]
@@ -739,7 +725,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -757,7 +742,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent_uuid),
-                false,
             )
             .await
             .unwrap();
@@ -780,37 +764,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_folder() {
-        let db = Database::open(":memory:").await.unwrap();
-        let user_id = db.users().create("uuid-1", "alice").await.unwrap();
-
-        let folder_uuid = db
-            .posts()
-            .create(
-                user_id,
-                Some("My Folder"),
-                false,
-                None,
-                "",
-                false,
-                None,
-                None,
-                None,
-                true, // is_folder
-            )
-            .await
-            .unwrap();
-
-        let folder = db
-            .posts()
-            .get_by_uuid(&folder_uuid, user_id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(folder.is_folder);
-    }
-
-    #[tokio::test]
     async fn test_delete_with_children() {
         let db = Database::open(":memory:").await.unwrap();
         let user_id = db.users().create("uuid-1", "alice").await.unwrap();
@@ -828,7 +781,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -846,7 +798,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent_uuid),
-                false,
             )
             .await
             .unwrap();
@@ -863,7 +814,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent_uuid),
-                false,
             )
             .await
             .unwrap();
@@ -881,7 +831,6 @@ mod tests {
                 None,
                 None,
                 Some(&child2),
-                false,
             )
             .await
             .unwrap();
@@ -909,12 +858,12 @@ mod tests {
         let db = Database::open(":memory:").await.unwrap();
         let user_id = db.users().create("uuid-1", "alice").await.unwrap();
 
-        // Create two root posts
-        let folder1 = db
+        // Create two root posts (parents)
+        let parent1 = db
             .posts()
             .create(
                 user_id,
-                Some("Folder 1"),
+                Some("Parent 1"),
                 false,
                 None,
                 "",
@@ -922,16 +871,15 @@ mod tests {
                 None,
                 None,
                 None,
-                true,
             )
             .await
             .unwrap();
 
-        let folder2 = db
+        let parent2 = db
             .posts()
             .create(
                 user_id,
-                Some("Folder 2"),
+                Some("Parent 2"),
                 false,
                 None,
                 "",
@@ -939,12 +887,11 @@ mod tests {
                 None,
                 None,
                 None,
-                true,
             )
             .await
             .unwrap();
 
-        // Create post in folder1
+        // Create post under parent1
         let post = db
             .posts()
             .create(
@@ -956,16 +903,15 @@ mod tests {
                 false,
                 None,
                 None,
-                Some(&folder1),
-                false,
+                Some(&parent1),
             )
             .await
             .unwrap();
 
-        // Move post to folder2
+        // Move post to parent2
         let moved = db
             .posts()
-            .move_post(&post, user_id, Some(&folder2), 0)
+            .move_post(&post, user_id, Some(&parent2), 0)
             .await
             .unwrap();
         assert!(moved);
@@ -977,7 +923,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(post_data.parent_id, Some(folder2.clone()));
+        assert_eq!(post_data.parent_id, Some(parent2.clone()));
     }
 
     #[tokio::test]
@@ -998,7 +944,6 @@ mod tests {
                 None,
                 None,
                 None,
-                true,
             )
             .await
             .unwrap();
@@ -1016,7 +961,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent),
-                false,
             )
             .await
             .unwrap();
@@ -1033,7 +977,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent),
-                false,
             )
             .await
             .unwrap();
@@ -1050,7 +993,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent),
-                false,
             )
             .await
             .unwrap();
@@ -1092,7 +1034,6 @@ mod tests {
                 None,
                 None,
                 None,
-                true,
             )
             .await
             .unwrap();
@@ -1110,7 +1051,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent),
-                false,
             )
             .await
             .unwrap();
@@ -1127,7 +1067,6 @@ mod tests {
                 None,
                 None,
                 Some(&child),
-                false,
             )
             .await
             .unwrap();
@@ -1157,7 +1096,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1188,7 +1126,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1203,7 +1140,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1218,7 +1154,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1250,7 +1185,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1299,7 +1233,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1330,7 +1263,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1389,7 +1321,6 @@ mod tests {
                 None,
                 None,
                 None,
-                false,
             )
             .await
             .unwrap();
@@ -1407,7 +1338,6 @@ mod tests {
                 None,
                 None,
                 Some(&parent),
-                false,
             )
             .await
             .unwrap();

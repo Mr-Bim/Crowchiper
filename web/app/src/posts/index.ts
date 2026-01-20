@@ -15,7 +15,11 @@ export { renderPostList } from "./render.ts";
 export { selectPost } from "./selection.ts";
 
 // Actions
-export { handleNewPost, handleNewFolder, handleDeletePost } from "./actions.ts";
+export {
+  handleNewPost,
+  handleDeletePost,
+  handleDeletePostByNode,
+} from "./actions.ts";
 
 // Loading
 export { loadPosts, loadPostsWithoutSelection } from "./load.ts";

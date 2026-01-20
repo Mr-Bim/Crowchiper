@@ -171,7 +171,6 @@ async fn test_get_post() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -239,7 +238,6 @@ async fn test_update_post() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -290,7 +288,6 @@ async fn test_delete_post() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -341,7 +338,6 @@ async fn test_list_posts_returns_user_posts_only() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -356,7 +352,6 @@ async fn test_list_posts_returns_user_posts_only() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -371,7 +366,6 @@ async fn test_list_posts_returns_user_posts_only() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -420,7 +414,6 @@ async fn test_cannot_access_other_users_post() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -461,7 +454,6 @@ async fn test_cannot_update_other_users_post() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -512,7 +504,6 @@ async fn test_cannot_delete_other_users_post() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -708,7 +699,6 @@ async fn test_update_post_encryption_flags() {
             Some("content_iv"),
             Some(1),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -765,7 +755,6 @@ async fn test_list_posts_includes_encrypted_flags() {
             Some("content_iv"),
             Some(1),
             None,
-            false,
         )
         .await
         .unwrap();
@@ -819,7 +808,6 @@ async fn test_reorder_posts() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -835,7 +823,6 @@ async fn test_reorder_posts() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -851,7 +838,6 @@ async fn test_reorder_posts() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -949,7 +935,6 @@ async fn test_reorder_cannot_affect_other_users_posts() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -965,7 +950,6 @@ async fn test_reorder_cannot_affect_other_users_posts() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1016,7 +1000,6 @@ async fn test_new_post_inserted_at_top() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();
@@ -1088,7 +1071,6 @@ async fn test_list_posts_includes_position() {
             None,
             None,
             None,
-            false,
         )
         .await
         .unwrap();

@@ -40,9 +40,6 @@ const editorPromise = import("../editor/setup.ts");
  * Select a post for editing.
  */
 export async function selectPost(postNode: PostNode): Promise<void> {
-  // Don't select folders
-  if (postNode.is_folder) return;
-
   // Save current post to server before switching (includes attachment refs)
   stopServerSaveInterval();
   await saveToServerNow();

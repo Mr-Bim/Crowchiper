@@ -271,16 +271,12 @@ export function flattenPosts(): PostNode[] {
 }
 
 /**
- * Get the first non-folder post in the tree (for initial selection).
+ * Get the first post in the tree (for initial selection).
  */
 export function getFirstSelectablePost(): PostNode | null {
   function find(nodes: PostNode[]): PostNode | null {
     for (const node of nodes) {
-      if (!node.is_folder) return node;
-      if (node.children) {
-        const found = find(node.children);
-        if (found) return found;
-      }
+      return node;
     }
     return null;
   }

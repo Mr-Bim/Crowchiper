@@ -14,7 +14,6 @@ export interface Post {
   encryption_version: number | null;
   position: number | null;
   parent_id: string | null;
-  is_folder: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -28,7 +27,6 @@ export interface PostNode {
   encryption_version: number | null;
   position: number | null;
   parent_id: string | null;
-  is_folder: boolean;
   has_children: boolean;
   children: PostNode[] | null;
   created_at: string;
@@ -44,7 +42,6 @@ export interface CreatePostRequest {
   iv?: string;
   encryption_version?: number;
   parent_id?: string;
-  is_folder?: boolean;
 }
 
 export interface UpdatePostRequest {
