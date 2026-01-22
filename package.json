@@ -5,6 +5,7 @@
     "build-app-test": "BUILD=app TEST_MODE=1 vite build",
     "build-all": "npm run build-login && npm run build-app",
     "build-all-test": "npm run build-login && npm run build-app-test",
+    "prepare-test": "npm run build-all-test && cargo build --features test-mode",
     "lint": "tsc --noEmit && oxlint",
     "lint:fix": "tsc --noEmit && oxlint --fix",
     "test:rust": "cargo test --features test-mode --tests -- --test-threads=1",
