@@ -44,9 +44,12 @@ test.describe("Nested posts - Persistence", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial post
-    await expect(postList.locator(".post-wrapper")).toHaveCount(1, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      1,
+      {
+        timeout: 10000,
+      },
+    );
 
     // Create hierarchy
     await createPostWithTitle(page, "Persist Parent");
@@ -64,9 +67,12 @@ test.describe("Nested posts - Persistence", () => {
     await reloadAndUnlock(page);
 
     // Wait for posts to load
-    await expect(postList.locator(".post-wrapper")).toHaveCount(3, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      3,
+      {
+        timeout: 10000,
+      },
+    );
 
     // Verify hierarchy persisted
     const persistChild = getPostByTitle(page, "Persist Child");
@@ -77,7 +83,7 @@ test.describe("Nested posts - Persistence", () => {
     await expect(persistChild).toHaveAttribute("data-parent-id", parentUuid!);
 
     // Parent should have expand button
-    const expandBtn = persistParent.locator(".post-expand-btn");
+    const expandBtn = persistParent.locator('[data-testid="test-post-expand-btn"]');
     await expect(expandBtn).toBeVisible();
   });
 
@@ -87,7 +93,7 @@ test.describe("Nested posts - Persistence", () => {
 
     // Get parent and collapse it
     const parent = getPostByTitle(page, "Persist Parent");
-    const expandBtn = parent.locator(".post-expand-btn");
+    const expandBtn = parent.locator('[data-testid="test-post-expand-btn"]');
 
     // Collapse
     await expect(expandBtn).toHaveAttribute("data-expanded", "true");
@@ -103,13 +109,18 @@ test.describe("Nested posts - Persistence", () => {
     await reloadAndUnlock(page);
 
     // Wait for posts
-    await expect(postList.locator(".post-wrapper")).toHaveCount(3, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      3,
+      {
+        timeout: 10000,
+      },
+    );
 
     // After reload, posts should be expanded to 3 levels by default
     const parentAfterReload = getPostByTitle(page, "Persist Parent");
-    const expandBtnAfterReload = parentAfterReload.locator(".post-expand-btn");
+    const expandBtnAfterReload = parentAfterReload.locator(
+      '[data-testid="test-post-expand-btn"]',
+    );
     await expect(expandBtnAfterReload).toHaveAttribute("data-expanded", "true");
 
     // Child should be visible

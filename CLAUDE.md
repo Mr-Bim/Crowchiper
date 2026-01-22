@@ -67,6 +67,30 @@ When overlap is detected, the build will:
 
 **To fix:** Rename either the HTML ID or the CSS class so they don't share names.
 
+### data-testid Handling
+
+The build system handles `data-testid` attributes differently based on test mode:
+
+**Production build (`npm run build-all`):**
+- All `data-testid` attributes are stripped from HTML
+
+**Test build (`npm run build-all-test`):**
+- `data-testid` attributes are preserved
+- Build fails if any `data-testid` value in HTML overlaps with a CSS class name
+
+**IMPORTANT: Naming Convention**
+
+Always prefix `data-testid` values with `test-` to avoid conflicts with CSS class names:
+```typescript
+// GOOD - uses test- prefix, won't conflict with .post-wrapper class
+element.setAttribute("data-testid", "test-post-wrapper");
+
+// BAD - same name as CSS class .post-wrapper, will get mangled by minifier
+element.setAttribute("data-testid", "post-wrapper");
+```
+
+The CSS minifier replaces class name strings in JS files. If a `data-testid` value matches a CSS class name, it will be incorrectly replaced with the minified class name.
+
 ## Configuration
 
 `config.json` defines shared settings for Vite and Rust:

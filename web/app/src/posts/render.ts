@@ -8,6 +8,11 @@ import { listPostChildren, type PostNode } from "../api/posts.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
 import { initDragAndDrop } from "./drag-and-drop.ts";
 import {
+  getReorderHandler,
+  getReparentHandler,
+  getSelectPostHandler,
+} from "./handlers.ts";
+import {
   flattenPosts,
   getDecryptedTitles,
   getLoadedPost,
@@ -18,46 +23,7 @@ import {
   toggleExpanded,
 } from "./state.ts";
 
-// Handlers set by other modules to avoid circular imports
-let selectPostHandler: ((post: PostNode) => void) | null = null;
-let reorderHandler:
-  | ((
-      parentId: string | null,
-      fromIndex: number,
-      toIndex: number,
-    ) => Promise<void>)
-  | null = null;
-let reparentHandler:
-  | ((
-      uuid: string,
-      newParentId: string | null,
-      position: number,
-    ) => Promise<void>)
-  | null = null;
-
-export function setSelectPostHandler(handler: (post: PostNode) => void): void {
-  selectPostHandler = handler;
-}
-
-export function setReorderHandler(
-  handler: (
-    parentId: string | null,
-    fromIndex: number,
-    toIndex: number,
-  ) => Promise<void>,
-): void {
-  reorderHandler = handler;
-}
-
-export function setReparentHandler(
-  handler: (
-    uuid: string,
-    newParentId: string | null,
-    position: number,
-  ) => Promise<void>,
-): void {
-  reparentHandler = handler;
-}
+declare const __TEST_MODE__: boolean;
 
 /**
  * Render a single post node and its children recursively.
@@ -74,7 +40,9 @@ function renderPostNode(
   // Wrapper div for drag and drop
   const wrapper = document.createElement("div");
   wrapper.className = "post-wrapper";
-  wrapper.setAttribute("data-testid", "post-wrapper");
+  if (__TEST_MODE__) {
+    wrapper.setAttribute("data-testid", "test-post-wrapper");
+  }
   wrapper.setAttribute("data-uuid", post.uuid);
   wrapper.setAttribute("data-index", String(index));
   wrapper.setAttribute("data-depth", String(depth));
@@ -83,17 +51,21 @@ function renderPostNode(
   // Container for the post item (expand button + title button)
   const itemContainer = document.createElement("div");
   itemContainer.className = "post-item-container";
-  itemContainer.setAttribute("data-testid", "post-item-container");
+  if (__TEST_MODE__) {
+    itemContainer.setAttribute("data-testid", "test-post-item-container");
+  }
   itemContainer.style.paddingLeft = `${depth * 16}px`;
 
   // Expand/collapse button (only if has children)
   if (post.has_children) {
     const expandBtn = document.createElement("button");
     expandBtn.className = "ghost post-expand-btn";
-    expandBtn.setAttribute("data-testid", "post-expand-btn");
+    if (__TEST_MODE__) {
+      expandBtn.setAttribute("data-testid", "test-post-expand-btn");
+    }
     expandBtn.setAttribute("data-expanded", String(expanded));
     expandBtn.innerHTML =
-      '<span class="chevron" data-testid="chevron">&#9654;</span>';
+      '<span class="chevron" data-testid="test-chevron">&#9654;</span>';
     expandBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       handleToggleExpand(post);
@@ -116,7 +88,9 @@ function renderPostNode(
   const item = document.createElement("button");
   item.className = "cl-post-item";
   item.classList = item.classList + " ghost";
-  item.setAttribute("data-testid", "post-item");
+  if (__TEST_MODE__) {
+    item.setAttribute("data-testid", "test-post-item");
+  }
   if (loadedPost?.uuid === post.uuid) {
     item.classList.add("active");
   }
@@ -128,7 +102,7 @@ function renderPostNode(
 
   // Click to select for editing
   item.addEventListener("click", () => {
-    selectPostHandler?.(post);
+    getSelectPostHandler()(post);
   });
 
   itemContainer.appendChild(item);
@@ -165,9 +139,7 @@ export function renderPostList(): void {
   renderLevel(posts, 0);
 
   // Initialize drag and drop on the list
-  if (reorderHandler && reparentHandler) {
-    initDragAndDrop(list, reorderHandler, reparentHandler);
-  }
+  initDragAndDrop(list, getReorderHandler(), getReparentHandler());
 }
 
 /**

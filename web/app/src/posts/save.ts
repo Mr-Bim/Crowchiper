@@ -9,9 +9,8 @@ import {
   clearImageCacheExcept,
   parseAttachmentUuids,
 } from "../editor/attachment-widget/index.ts";
-import {
-  encryptPostData,
-} from "../crypto/post-encryption.ts";
+import { encryptPostData } from "../crypto/post-encryption.ts";
+import { callRenderPostList } from "./handlers.ts";
 import {
   clearSaveTimeout,
   clearServerSaveInterval,
@@ -21,21 +20,12 @@ import {
   getLoadedPost,
   getPendingEncryptedData,
   getServerSaveInterval,
-  setCurrentDecryptedTitle,
   setDecryptedTitle,
   setIsDirty,
   setPendingEncryptedData,
-  setPreviousAttachmentUuids,
   setSaveTimeout,
   setServerSaveInterval,
 } from "./state.ts";
-
-// Lazy import to avoid circular dependency
-let renderPostListFn: (() => void) | null = null;
-
-export function setRenderPostList(fn: () => void): void {
-  renderPostListFn = fn;
-}
 
 // --- Title Extraction ---
 
@@ -90,14 +80,13 @@ export async function encryptCurrentPost(): Promise<void> {
     });
 
     // Update decrypted title for display
-    setCurrentDecryptedTitle(title);
     setDecryptedTitle(loadedPost.uuid, title);
 
     // Mark as dirty (needs server save)
     setIsDirty(true);
     updateSaveButton(true);
 
-    renderPostListFn?.();
+    callRenderPostList();
 
     // Start server save interval if not already running
     startServerSaveInterval();
@@ -195,7 +184,6 @@ export async function saveToServerNow(): Promise<void> {
 
     // Clear cache for deleted images
     clearImageCacheExcept(attachmentUuids);
-    setPreviousAttachmentUuids([]);
   } catch (err) {
     console.error("Failed to save to server:", err);
   }
@@ -231,6 +219,10 @@ export function saveBeacon(): void {
 
 // --- Save Button ---
 
+/**
+ * Update the save button's visual state.
+ * @param dirty - Whether there are unsaved changes
+ */
 export function updateSaveButton(dirty: boolean): void {
   const btn = document.getElementById("save-btn") as HTMLButtonElement | null;
   if (!btn) return;
@@ -240,6 +232,10 @@ export function updateSaveButton(dirty: boolean): void {
   btn.disabled = !dirty;
 }
 
+/**
+ * Handle manual save button click.
+ * Encrypts and saves the current post immediately.
+ */
 export async function handleSave(): Promise<void> {
   const loadedPost = getLoadedPost();
   const editor = getEditor();
@@ -275,7 +271,6 @@ export async function handleSave(): Promise<void> {
 
     // Clear cache for deleted images
     clearImageCacheExcept(attachmentUuids);
-    setPreviousAttachmentUuids([]);
   } catch (err) {
     console.error("Failed to save:", err);
   }

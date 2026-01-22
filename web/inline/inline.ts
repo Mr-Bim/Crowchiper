@@ -60,29 +60,25 @@
   }
 })();
 
+import { getStorage, setStorage } from "../shared/storage.ts";
+
 // Theme switching logic
 const themes = [
   { id: "warm-light", label: "🔥 Ember" },
   { id: "scandi-dark", label: "🪨 Slate" },
   { id: "paper-light", label: "🌲 Birch" },
   { id: "paper-dark", label: "🪵 Oak" },
-];
+] as const;
 
 const initTheme = () => {
-  const savedTheme = localStorage.getItem("theme");
-  const themeIds = themes.map((t) => t.id);
-  if (savedTheme && themeIds.includes(savedTheme)) {
-    document.documentElement.setAttribute("data-theme", savedTheme);
-    return savedTheme;
-  } else {
-    document.documentElement.setAttribute("data-theme", "warm-light");
-    return "warm-light";
-  }
+  const savedTheme = getStorage("theme");
+  document.documentElement.setAttribute("data-theme", savedTheme);
+  return savedTheme;
 };
 
-const changeTheme = (themeId: string) => {
+const changeTheme = (themeId: (typeof themes)[number]["id"]) => {
   document.documentElement.setAttribute("data-theme", themeId);
-  localStorage.setItem("theme", themeId);
+  setStorage("theme", themeId);
 };
 
 // Initialize theme on page load
@@ -117,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Add change listener
     select.addEventListener("change", (e) => {
       const target = e.target as HTMLSelectElement;
-      changeTheme(target.value);
+      changeTheme(target.value as (typeof themes)[number]["id"]);
     });
 
     // Replace container content with select

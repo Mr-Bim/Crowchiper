@@ -5,6 +5,9 @@
 export * from "./state.ts";
 export { initDragAndDrop } from "./drag-and-drop.ts";
 
+// Handler registry
+export { registerHandlers } from "./handlers.ts";
+
 // Save and encryption
 export { handleSave, saveBeacon } from "./save.ts";
 

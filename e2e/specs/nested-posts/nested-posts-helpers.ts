@@ -19,7 +19,7 @@ export async function createPostWithTitle(
   // Wait for title to appear in sidebar
   const postList = page.locator("#post-list");
   await expect(
-    postList.locator('[data-testid="post-item"]').filter({ hasText: title }),
+    postList.locator('[data-testid="test-post-item"]').filter({ hasText: title }),
   ).toBeVisible({ timeout: 5000 });
 }
 
@@ -43,8 +43,8 @@ export async function savePost(page: Page): Promise<void> {
  */
 export function getPostByTitle(page: Page, title: string) {
   const postList = page.locator("#post-list");
-  return postList.locator('[data-testid="post-wrapper"]').filter({
-    has: page.locator('[data-testid="post-item"]', { hasText: title }),
+  return postList.locator('[data-testid="test-post-wrapper"]').filter({
+    has: page.locator('[data-testid="test-post-item"]', { hasText: title }),
   });
 }
 

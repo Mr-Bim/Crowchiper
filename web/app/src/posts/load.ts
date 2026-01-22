@@ -7,6 +7,7 @@
 import { listPosts } from "../api/posts.ts";
 import { setOnAttachmentChange } from "../editor/attachment-widget/index.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
+import { registerHandlers } from "./handlers.ts";
 import {
   expandToDepth,
   flattenPosts,
@@ -14,27 +15,22 @@ import {
   setDecryptedTitles,
   setPosts,
 } from "./state.ts";
-import { handleSave, saveBeacon, setRenderPostList } from "./save.ts";
-import {
-  renderPostList,
-  setReorderHandler,
-  setReparentHandler,
-  setSelectPostHandler,
-} from "./render.ts";
+import { handleSave, saveBeacon } from "./save.ts";
+import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
 import { handleNewPost, handleReorder, handleReparent } from "./actions.ts";
 
 /**
- * Initialize module connections to avoid circular dependencies.
+ * Initialize the handler registry.
+ * Called once during app initialization to connect modules.
  */
-function initModuleConnections(): void {
-  // Connect save.ts to render.ts
-  setRenderPostList(renderPostList);
-
-  // Connect render.ts to selection.ts and actions.ts
-  setSelectPostHandler(selectPost);
-  setReorderHandler(handleReorder);
-  setReparentHandler(handleReparent);
+function initHandlers(): void {
+  registerHandlers({
+    selectPost,
+    reorder: handleReorder,
+    reparent: handleReparent,
+    renderPostList,
+  });
 }
 
 /**
@@ -42,8 +38,8 @@ function initModuleConnections(): void {
  */
 export async function loadPosts(): Promise<void> {
   try {
-    // Initialize module connections
-    initModuleConnections();
+    // Initialize handler registry
+    initHandlers();
 
     // Save post and refs via beacon when page is unloading
     window.addEventListener("pagehide", saveBeacon);
@@ -84,8 +80,8 @@ export async function loadPosts(): Promise<void> {
  */
 export async function loadPostsWithoutSelection(): Promise<void> {
   try {
-    // Initialize module connections
-    initModuleConnections();
+    // Initialize handler registry
+    initHandlers();
 
     const posts = await listPosts();
     setPosts(posts);

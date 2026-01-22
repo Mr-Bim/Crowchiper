@@ -9,22 +9,17 @@ import {
   decryptPostContent,
   decryptPostTitle,
 } from "../crypto/post-encryption.ts";
-import {
-  cleanupPendingUploads,
-  parseAttachmentUuids,
-} from "../editor/attachment-widget/index.ts";
+import { cleanupPendingUploads } from "../editor/attachment-widget/index.ts";
 import { applySpellcheckToEditor } from "../spellcheck.ts";
 import {
   getEditor,
   getLoadedPost,
   setDecryptedTitle,
-  setCurrentDecryptedTitle,
   setEditor,
   setIsDirty,
   setLoadedDecryptedContent,
   setLoadedPost,
   setPendingEncryptedData,
-  setPreviousAttachmentUuids,
 } from "./state.ts";
 import {
   scheduleEncrypt,
@@ -60,12 +55,8 @@ export async function selectPost(postNode: PostNode): Promise<void> {
   const displayContent = cleanupPendingUploads(decryptedContent);
   setLoadedDecryptedContent(displayContent);
 
-  // Track initial attachment UUIDs for this post
-  setPreviousAttachmentUuids(parseAttachmentUuids(displayContent));
-
   // Decrypt title for display (stored separately, post.title stays encrypted)
   const displayTitle = await decryptPostTitle(post);
-  setCurrentDecryptedTitle(displayTitle);
   setDecryptedTitle(post.uuid, displayTitle);
 
   renderPostList();

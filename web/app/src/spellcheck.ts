@@ -4,7 +4,7 @@
  * Manages OS spellcheck state for the editor, persisted to localStorage.
  */
 
-const STORAGE_KEY = "spellcheck-enabled";
+import { getStorage, setStorage } from "../../shared/storage.ts";
 
 let spellcheckEnabled = false;
 
@@ -19,15 +19,14 @@ export function isSpellcheckEnabled(): boolean {
  * Load spellcheck preference from localStorage.
  */
 export function loadSpellcheckPreference(): void {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  spellcheckEnabled = stored === "true";
+  spellcheckEnabled = getStorage("spellcheck-enabled");
 }
 
 /**
  * Save spellcheck preference to localStorage.
  */
 function saveSpellcheckPreference(): void {
-  localStorage.setItem(STORAGE_KEY, spellcheckEnabled ? "true" : "false");
+  setStorage("spellcheck-enabled", spellcheckEnabled);
 }
 
 /**

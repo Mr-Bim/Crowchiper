@@ -175,6 +175,9 @@ function base64UrlToArrayBuffer(base64url: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/**
+ * Convert base64url string to Uint8Array.
+ */
 export function base64UrlToUint8Array(base64url: string): Uint8Array {
   return new Uint8Array(base64UrlToArrayBuffer(base64url));
 }

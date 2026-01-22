@@ -42,7 +42,7 @@ test.describe("Nested posts - Delete operations", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial post
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       1,
       {
         timeout: 10000,
@@ -54,7 +54,7 @@ test.describe("Nested posts - Delete operations", () => {
     await createPostWithTitle(page, "Delete Child");
 
     const initialCount = await postList
-      .locator('[data-testid="post-wrapper"]')
+      .locator('[data-testid="test-post-wrapper"]')
       .count();
 
     // Drag child under parent
@@ -64,7 +64,7 @@ test.describe("Nested posts - Delete operations", () => {
 
     // Select the child post by clicking on it
     const childUpdated = getPostByTitle(page, "Delete Child");
-    await childUpdated.locator('[data-testid="post-item"]').click();
+    await childUpdated.locator('[data-testid="test-post-item"]').click();
     await page.waitForTimeout(300);
 
     // Set up dialog handler for confirmation (use once to avoid affecting other tests)
@@ -82,11 +82,11 @@ test.describe("Nested posts - Delete operations", () => {
 
     // Parent should no longer have expand button (no children)
     const parentUpdated = getPostByTitle(page, "Delete Parent");
-    const expandBtn = parentUpdated.locator('[data-testid="post-expand-btn"]');
+    const expandBtn = parentUpdated.locator('[data-testid="test-post-expand-btn"]');
     await expect(expandBtn).toHaveCount(0);
 
     // Total count should be reduced by 1
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       initialCount - 1,
     );
   });
@@ -117,7 +117,7 @@ test.describe("Nested posts - Delete operations", () => {
 
     // Select the parent post
     const cascadeParent = getPostByTitle(page, "Cascade Parent");
-    await cascadeParent.locator('[data-testid="post-item"]').click();
+    await cascadeParent.locator('[data-testid="test-post-item"]').click();
     await page.waitForTimeout(300);
 
     // Track dialog message (use once to avoid affecting other tests)
@@ -158,12 +158,12 @@ test.describe("Nested posts - Delete operations", () => {
     });
 
     const countBefore = await postList
-      .locator('[data-testid="post-wrapper"]')
+      .locator('[data-testid="test-post-wrapper"]')
       .count();
 
     // Select parent
     const cancelParent = getPostByTitle(page, "Cancel Parent");
-    await cancelParent.locator('[data-testid="post-item"]').click();
+    await cancelParent.locator('[data-testid="test-post-item"]').click();
     await page.waitForTimeout(300);
 
     // Set up dialog to dismiss (cancel) - use once to avoid affecting other tests
@@ -179,7 +179,7 @@ test.describe("Nested posts - Delete operations", () => {
     await expect(getPostByTitle(page, "Cancel Child")).toBeVisible();
 
     // Count should be same
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       countBefore,
     );
   });

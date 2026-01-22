@@ -44,7 +44,7 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial auto-created post
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       1,
       {
         timeout: 10000,
@@ -53,7 +53,7 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
 
     // Create parent post
     await createPostWithTitle(page, "DnD Parent");
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       2,
       {
         timeout: 5000,
@@ -62,7 +62,7 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
 
     // Create child post
     await createPostWithTitle(page, "DnD Child");
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       3,
       {
         timeout: 5000,
@@ -88,7 +88,7 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
 
     // Parent should now have the expand button (has_children = true)
     const parentExpandBtn = parentPost.locator(
-      '[data-testid="post-expand-btn"]',
+      '[data-testid="test-post-expand-btn"]',
     );
     await expect(parentExpandBtn).toBeVisible({ timeout: 5000 });
 
@@ -116,7 +116,7 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
     await reloadAndUnlock(page);
 
     // Wait for posts to load
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       3,
       {
         timeout: 10000,
@@ -130,7 +130,7 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
     // Parent should still have expand button
     const parentPost = getPostByTitle(page, "DnD Parent");
     const parentExpandBtn = parentPost.locator(
-      '[data-testid="post-expand-btn"]',
+      '[data-testid="test-post-expand-btn"]',
     );
     await expect(parentExpandBtn).toBeVisible();
   });

@@ -11,10 +11,8 @@ let editor: EditorView | null = null;
 let posts: PostNode[] = [];
 let loadedPost: Post | null = null;
 let loadedDecryptedContent: string | null = null;
-let currentDecryptedTitle: string | null = null;
 let decryptedTitles: Map<string, string> = new Map();
 let saveTimeout: number | null = null;
-let previousAttachmentUuids: string[] = [];
 
 // Expanded state for tree nodes
 let expandedPosts: Set<string> = new Set();
@@ -93,29 +91,6 @@ export function findParent(uuid: string): PostNode | null {
 }
 
 /**
- * Get the path from root to a post (ancestors).
- */
-export function getPath(uuid: string): PostNode[] {
-  const path: PostNode[] = [];
-  function search(nodes: PostNode[]): boolean {
-    for (const node of nodes) {
-      if (node.uuid === uuid) {
-        return true;
-      }
-      if (node.children) {
-        if (search(node.children)) {
-          path.unshift(node);
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  search(posts);
-  return path;
-}
-
-/**
  * Get siblings of a post (posts with the same parent).
  */
 export function getSiblings(uuid: string): PostNode[] {
@@ -176,19 +151,6 @@ export function removePost(uuid: string): PostNode | null {
 }
 
 /**
- * Update a post in the tree.
- */
-export function updatePostInTree(
-  uuid: string,
-  updates: Partial<PostNode>,
-): void {
-  const post = findPost(uuid);
-  if (post) {
-    Object.assign(post, updates);
-  }
-}
-
-/**
  * Move a post within its siblings (reorder).
  */
 export function movePostInSiblings(
@@ -239,7 +201,7 @@ export function movePostToParent(
 export function getSiblingUuids(parentId: string | null): string[] {
   const siblings =
     parentId === null ? posts : (findPost(parentId)?.children ?? []);
-  return siblings.map((p) => p.uuid);
+  return siblings.map((p: PostNode) => p.uuid);
 }
 
 /**
@@ -284,14 +246,6 @@ export function getFirstSelectablePost(): PostNode | null {
 }
 
 // --- Expanded State ---
-
-export function getExpandedPosts(): Set<string> {
-  return expandedPosts;
-}
-
-export function setExpandedPosts(expanded: Set<string>): void {
-  expandedPosts = expanded;
-}
 
 export function isExpanded(uuid: string): boolean {
   return expandedPosts.has(uuid);
@@ -349,16 +303,6 @@ export function setLoadedDecryptedContent(content: string | null): void {
   loadedDecryptedContent = content;
 }
 
-// --- Current Decrypted Title ---
-
-export function getCurrentDecryptedTitle(): string | null {
-  return currentDecryptedTitle;
-}
-
-export function setCurrentDecryptedTitle(title: string | null): void {
-  currentDecryptedTitle = title;
-}
-
 // --- Decrypted Titles Map (for post list display) ---
 
 export function getDecryptedTitles(): Map<string, string> {
@@ -375,10 +319,6 @@ export function setDecryptedTitle(uuid: string, title: string): void {
 
 // --- Save Timeout ---
 
-export function getSaveTimeout(): number | null {
-  return saveTimeout;
-}
-
 export function setSaveTimeout(timeout: number | null): void {
   saveTimeout = timeout;
 }
@@ -388,16 +328,6 @@ export function clearSaveTimeout(): void {
     clearTimeout(saveTimeout);
     saveTimeout = null;
   }
-}
-
-// --- Previous Attachment UUIDs ---
-
-export function getPreviousAttachmentUuids(): string[] {
-  return previousAttachmentUuids;
-}
-
-export function setPreviousAttachmentUuids(uuids: string[]): void {
-  previousAttachmentUuids = uuids;
 }
 
 // --- Pending Encrypted Data ---

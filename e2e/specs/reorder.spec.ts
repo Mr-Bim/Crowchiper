@@ -36,18 +36,24 @@ test.describe("Post reorder functionality", () => {
     // Page is already at the app and unlocked from createUser
     // Wait for initial post (created automatically on first visit)
     const postList = page.locator("#post-list");
-    await expect(postList.locator(".post-wrapper")).toHaveCount(1, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      1,
+      {
+        timeout: 10000,
+      },
+    );
 
     // Create a second post by clicking the new post button
     const newPostBtn = page.locator("#new-post-btn");
     await newPostBtn.click();
 
     // Wait for second post to appear
-    await expect(postList.locator(".post-wrapper")).toHaveCount(2, {
-      timeout: 5000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      2,
+      {
+        timeout: 5000,
+      },
+    );
 
     // Type content in the second post to give it a title
     const editor = page.locator("#editor .cm-content");
@@ -56,14 +62,19 @@ test.describe("Post reorder functionality", () => {
 
     // Wait for title to update in sidebar
     await expect(
-      postList.locator(".post-item").filter({ hasText: "Second Post" }),
+      postList
+        .locator('[data-testid="test-post-item"]')
+        .filter({ hasText: "Second Post" }),
     ).toBeVisible({ timeout: 5000 });
 
     // Create a third post
     await newPostBtn.click();
-    await expect(postList.locator(".post-wrapper")).toHaveCount(3, {
-      timeout: 5000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      3,
+      {
+        timeout: 5000,
+      },
+    );
 
     // Type content in the third post
     await editor.click();
@@ -71,23 +82,25 @@ test.describe("Post reorder functionality", () => {
 
     // Wait for title to update in sidebar
     await expect(
-      postList.locator(".post-item").filter({ hasText: "Third Post" }),
+      postList
+        .locator('[data-testid="test-post-item"]')
+        .filter({ hasText: "Third Post" }),
     ).toBeVisible({ timeout: 5000 });
 
     // Get the initial order - newest posts are at the top
     // Order should be: Third Post, Second Post, Untitled
-    const postWrappers = postList.locator(".post-wrapper");
+    const postWrappers = postList.locator('[data-testid="test-post-wrapper"]');
     const initialFirstPost = await postWrappers
       .nth(0)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
     const initialSecondPost = await postWrappers
       .nth(1)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
     const initialThirdPost = await postWrappers
       .nth(2)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
 
     expect(initialFirstPost).toBe("Third Post");
@@ -128,15 +141,15 @@ test.describe("Post reorder functionality", () => {
     // Verify the new order: Second Post, Third Post, Untitled
     const newFirstPost = await postWrappers
       .nth(0)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
     const newSecondPost = await postWrappers
       .nth(1)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
     const newThirdPost = await postWrappers
       .nth(2)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
 
     expect(newFirstPost).toBe("Second Post");
@@ -156,22 +169,25 @@ test.describe("Post reorder functionality", () => {
     await unlockOverlay.waitFor({ state: "hidden", timeout: 10000 });
 
     // Wait for posts to load
-    await expect(postList.locator(".post-wrapper")).toHaveCount(3, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
+      3,
+      {
+        timeout: 10000,
+      },
+    );
 
     // Verify the order persisted after reload
     const reloadedFirstPost = await postWrappers
       .nth(0)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
     const reloadedSecondPost = await postWrappers
       .nth(1)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
     const reloadedThirdPost = await postWrappers
       .nth(2)
-      .locator(".post-item")
+      .locator('[data-testid="test-post-item"]')
       .textContent();
 
     expect(reloadedFirstPost).toBe("Second Post");

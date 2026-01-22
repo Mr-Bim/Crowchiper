@@ -170,7 +170,7 @@ test.describe("Encryption usage", () => {
 
     // Post should appear in the list
     const postList = page.locator("#post-list");
-    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
       2,
       {
         timeout: 5000,

@@ -21,6 +21,9 @@ declare const __TEST_MODE__: boolean;
 
 // --- UI Helpers ---
 
+/**
+ * Show the unlock overlay prompting for passkey authentication.
+ */
 export function showUnlockOverlay(): void {
   const overlay = document.getElementById("unlock-overlay");
   if (overlay) {
@@ -28,6 +31,9 @@ export function showUnlockOverlay(): void {
   }
 }
 
+/**
+ * Hide the unlock overlay after successful authentication.
+ */
 export function hideUnlockOverlay(): void {
   const overlay = document.getElementById("unlock-overlay");
   if (overlay) {

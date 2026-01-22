@@ -50,6 +50,28 @@ function extractIdsFromHtml(html) {
 }
 
 /**
+ * Extract all data-testid attributes from HTML content
+ * Matches data-testid="my-testid" attributes
+ */
+function extractTestIdsFromHtml(html) {
+  const testIdRegex = /\bdata-testid="([^"]*)"/g;
+  const testIds = new Set();
+  for (const match of html.matchAll(testIdRegex)) {
+    testIds.add(match[1]);
+  }
+  return testIds;
+}
+
+/**
+ * Strip all data-testid attributes from HTML content
+ * @param {string} html - HTML content
+ * @returns {string} HTML with data-testid attributes removed
+ */
+function stripTestIds(html) {
+  return html.replace(/\s*data-testid="[^"]*"/g, "");
+}
+
+/**
  * Find overlap between HTML IDs and CSS class names.
  * This is problematic because minified class names could collide with IDs.
  * @param {string} html - HTML content
@@ -63,6 +85,25 @@ function findIdClassOverlap(html, css) {
   for (const id of htmlIds) {
     if (cssClasses.has(id)) {
       overlap.add(id);
+    }
+  }
+  return overlap;
+}
+
+/**
+ * Find overlap between data-testid values and CSS class names.
+ * This is problematic because minified class names could collide with testids in JS.
+ * @param {string} html - HTML content
+ * @param {string} css - CSS content
+ * @returns {Set<string>} Set of names that appear as both data-testid values and CSS classes
+ */
+function findTestIdClassOverlap(html, css) {
+  const testIds = extractTestIdsFromHtml(html);
+  const cssClasses = extractClassNames(css);
+  const overlap = new Set();
+  for (const testId of testIds) {
+    if (cssClasses.has(testId)) {
+      overlap.add(testId);
     }
   }
   return overlap;
@@ -284,13 +325,15 @@ function scanHtmlForIIFEMarkers(sourceDir) {
  * 4. Replace asset path placeholders
  * 5. Minify CSS class names
  * 6. Minify HTML
+ * 7. Strip data-testid attributes when not in test mode
  *
  * @param {Object} options
  * @param {string} options.assetsPath - The base path for assets (e.g., "/login" or "/fiery-sparrow")
  * @param {string} options.sourceDir - The source directory for HTML files (e.g., "web/public" or "web/app")
+ * @param {boolean} options.testMode - Whether test mode is enabled (keeps data-testid attributes)
  */
 export function inlineIIFEPlugin(options = {}) {
-  const { assetsPath, sourceDir } = options;
+  const { assetsPath, sourceDir, testMode = false } = options;
 
   // Scan source HTML files to determine which IIFE variants are needed
   const { needsBase, needsConfig, fileMarkers } = scanHtmlForIIFEMarkers(
@@ -395,25 +438,45 @@ export function inlineIIFEPlugin(options = {}) {
               throw new Error(
                 "Skipping build: CSS class minification would break getElementById calls.",
               );
-            } else {
-              const {
-                css,
-                html: minifiedHtml,
-                classMap,
-              } = minifyClassNames(inlinedCss, html, sharedClasses);
-              html = minifiedHtml;
-              finalCss = css;
-              totalClassesMinified += classMap.size;
+            }
 
-              // Also minify class names in JS files
-              if (classMap.size > 0) {
-                const jsFiles = globSync(`${distDir}/**/*.js`);
-                for (const jsFile of jsFiles) {
-                  const jsContent = readFileSync(jsFile, "utf-8");
-                  const minifiedJs = minifyJsClassNames(jsContent, classMap);
-                  if (jsContent !== minifiedJs) {
-                    writeFileSync(jsFile, minifiedJs);
-                  }
+            // In test mode, check for overlap between data-testid values and CSS class names
+            // This would break testid selectors when JS strings are minified
+            if (testMode) {
+              const testIdClassOverlap = findTestIdClassOverlap(
+                html,
+                inlinedCss,
+              );
+              if (testIdClassOverlap.size > 0) {
+                console.warn(
+                  `⚠ Warning: Found overlap between data-testid values and CSS class names in ${filename}:`,
+                );
+                console.warn(
+                  `  Overlapping names: ${[...testIdClassOverlap].join(", ")}`,
+                );
+                throw new Error(
+                  "Skipping build: CSS class minification would break data-testid selectors.",
+                );
+              }
+            }
+
+            const {
+              css,
+              html: minifiedHtml,
+              classMap,
+            } = minifyClassNames(inlinedCss, html, sharedClasses);
+            html = minifiedHtml;
+            finalCss = css;
+            totalClassesMinified += classMap.size;
+
+            // Also minify class names in JS files
+            if (classMap.size > 0) {
+              const jsFiles = globSync(`${distDir}/**/*.js`);
+              for (const jsFile of jsFiles) {
+                const jsContent = readFileSync(jsFile, "utf-8");
+                const minifiedJs = minifyJsClassNames(jsContent, classMap);
+                if (jsContent !== minifiedJs) {
+                  writeFileSync(jsFile, minifiedJs);
                 }
               }
             }
@@ -466,6 +529,11 @@ export function inlineIIFEPlugin(options = {}) {
           const config = JSON.parse(readFileSync("./config.json", "utf-8"));
           html = html.replaceAll("/__APP_ASSETS__/", `${config.assets}/`);
           html = html.replaceAll("/__APP_ASSETS__", `${config.assets}`);
+
+          // Strip data-testid attributes when not in test mode
+          if (!testMode) {
+            html = stripTestIds(html);
+          }
 
           // Minify HTML
           html = html

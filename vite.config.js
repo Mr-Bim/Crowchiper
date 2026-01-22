@@ -89,7 +89,11 @@ const app = defineConfig({
     },
   },
   plugins: [
-    inlineIIFEPlugin({ assetsPath: config.assets, sourceDir: "web/app" }),
+    inlineIIFEPlugin({
+      assetsPath: config.assets,
+      sourceDir: "web/app",
+      testMode: !!process.env.TEST_MODE,
+    }),
     sriPlugin({ assetsPath: config.assets }),
   ],
   experimental: {

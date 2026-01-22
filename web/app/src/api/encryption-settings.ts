@@ -1,14 +1,25 @@
+/**
+ * Encryption settings API client.
+ */
+
 import { fetchWithAuth } from "./auth.ts";
 import { getErrorMessage } from "./utils.ts";
+import {
+  EncryptionSettingsSchema,
+  SetupResponseSchema,
+  validate,
+  type EncryptionSettings,
+  type SetupResponse,
+} from "./schemas.ts";
 
 declare const API_PATH: string;
 
-export interface EncryptionSettings {
-  setup_done: boolean;
-  encryption_enabled: boolean;
-  prf_salt?: string;
-}
+// Re-export types for convenience
+export type { EncryptionSettings, SetupResponse };
 
+/**
+ * Get the current encryption settings for the user.
+ */
 export async function getEncryptionSettings(): Promise<EncryptionSettings> {
   const response = await fetchWithAuth(`${API_PATH}/encryption/settings`);
   if (!response.ok) {
@@ -18,19 +29,20 @@ export async function getEncryptionSettings(): Promise<EncryptionSettings> {
     );
     throw new Error(errorMsg);
   }
-  return response.json();
+  const data = await response.json();
+  return validate(EncryptionSettingsSchema, data, "encryption settings");
 }
 
-export interface SetupResponse {
-  prf_salt: string;
-}
-
+/**
+ * Set up encryption for the user's account.
+ * Generates and stores a PRF salt for key derivation.
+ * @throws ConflictError if encryption is already set up
+ */
 export async function setupEncryption(): Promise<SetupResponse> {
   const response = await fetchWithAuth(`${API_PATH}/encryption/setup`, {
     method: "POST",
   });
   if (response.status === 409) {
-    // Already set up - throw a specific error so caller can handle
     throw new ConflictError("Encryption already set up");
   }
   if (!response.ok) {
@@ -40,15 +52,19 @@ export async function setupEncryption(): Promise<SetupResponse> {
     );
     throw new Error(errorMsg);
   }
-  return response.json();
+  const data = await response.json();
+  return validate(SetupResponseSchema, data, "setup response");
 }
 
+/**
+ * Skip encryption setup (use unencrypted storage).
+ * @throws ConflictError if encryption is already set up
+ */
 export async function skipEncryption(): Promise<void> {
   const response = await fetchWithAuth(`${API_PATH}/encryption/skip`, {
     method: "POST",
   });
   if (response.status === 409) {
-    // Already set up - throw a specific error so caller can handle
     throw new ConflictError("Encryption already set up");
   }
   if (!response.ok) {

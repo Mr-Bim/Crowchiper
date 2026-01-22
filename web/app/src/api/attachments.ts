@@ -5,8 +5,16 @@
 
 import { fetchWithAuth } from "./auth.ts";
 import { getErrorMessage } from "./utils.ts";
+import {
+  UploadAttachmentResponseSchema,
+  validate,
+  type UploadAttachmentResponse,
+} from "./schemas.ts";
 
 declare const API_PATH: string;
+
+// Re-export types for convenience
+export type { UploadAttachmentResponse };
 
 export interface UploadAttachmentRequest {
   image: ArrayBuffer;
@@ -20,24 +28,9 @@ export interface UploadAttachmentRequest {
   encryption_version: number;
 }
 
-export interface UploadAttachmentResponse {
-  uuid: string;
-}
-
 export interface BinaryAttachmentResponse {
   data: ArrayBuffer;
   iv: string;
-}
-
-export interface ThumbnailData {
-  data: ArrayBuffer;
-  iv: string;
-}
-
-export interface ThumbnailsResponse {
-  sm: ThumbnailData;
-  md?: ThumbnailData;
-  lg?: ThumbnailData;
 }
 
 export type ThumbnailSize = "sm" | "md" | "lg";
@@ -72,7 +65,8 @@ export async function uploadAttachment(
     throw new Error(errorMsg);
   }
 
-  return response.json();
+  const data = await response.json();
+  return validate(UploadAttachmentResponseSchema, data, "upload response");
 }
 
 /**
@@ -125,143 +119,4 @@ export async function getAttachmentThumbnail(
 
   const data = await response.arrayBuffer();
   return { data, iv };
-}
-
-/**
- * Find a byte sequence in a Uint8Array.
- * Returns the index of the first occurrence, or -1 if not found.
- */
-function findBytes(
-  haystack: Uint8Array,
-  needle: Uint8Array,
-  start = 0,
-): number {
-  outer: for (let i = start; i <= haystack.length - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return i;
-  }
-  return -1;
-}
-
-/**
- * Get all encrypted thumbnails by attachment UUID.
- * Returns thumbnails at all available sizes.
- * @deprecated Use getAttachmentThumbnail for single-size fetches
- */
-export async function getAttachmentThumbnails(
-  uuid: string,
-): Promise<ThumbnailsResponse> {
-  const response = await fetchWithAuth(
-    `${API_PATH}/attachments/${uuid}/thumbnails`,
-  );
-
-  if (!response.ok) {
-    const errorMsg = await getErrorMessage(
-      response,
-      "Failed to get thumbnails",
-    );
-    throw new Error(errorMsg);
-  }
-
-  // Parse multipart response
-  const contentType = response.headers.get("Content-Type") || "";
-  const boundaryMatch = contentType.match(/boundary=(.+)/);
-  if (!boundaryMatch) {
-    throw new Error("Invalid multipart response: missing boundary");
-  }
-  const boundary = boundaryMatch[1];
-
-  const arrayBuffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-
-  const boundaryBytes = encoder.encode(`--${boundary}`);
-  const headerSeparator = encoder.encode("\r\n\r\n");
-
-  const result: ThumbnailsResponse = {
-    sm: { data: new ArrayBuffer(0), iv: "" },
-  };
-
-  // Find all boundary positions
-  let pos = 0;
-  while (pos < bytes.length) {
-    const boundaryStart = findBytes(bytes, boundaryBytes, pos);
-    if (boundaryStart === -1) break;
-
-    // Move past the boundary
-    let partStart = boundaryStart + boundaryBytes.length;
-
-    // Check for closing boundary (--)
-    if (bytes[partStart] === 0x2d && bytes[partStart + 1] === 0x2d) {
-      break;
-    }
-
-    // Skip CRLF after boundary
-    if (bytes[partStart] === 0x0d && bytes[partStart + 1] === 0x0a) {
-      partStart += 2;
-    }
-
-    // Find header/body separator
-    const headerEnd = findBytes(bytes, headerSeparator, partStart);
-    if (headerEnd === -1) {
-      pos = partStart;
-      continue;
-    }
-
-    // Parse headers (ASCII safe to decode as text)
-    const headerBytes = bytes.slice(partStart, headerEnd);
-    const headerText = decoder.decode(headerBytes);
-
-    const sizeMatch = headerText.match(/X-Thumbnail-Size:\s*(\w+)/i);
-    const ivMatch = headerText.match(/X-Encryption-IV:\s*([^\r\n]+)/i);
-
-    if (!sizeMatch || !ivMatch) {
-      pos = headerEnd + 4;
-      continue;
-    }
-
-    const size = sizeMatch[1] as "sm" | "md" | "lg";
-    const iv = ivMatch[1].trim();
-
-    // Body starts after header separator
-    const bodyStart = headerEnd + 4;
-
-    // Find the next boundary to determine body end
-    const nextBoundary = findBytes(bytes, boundaryBytes, bodyStart);
-    let bodyEnd: number;
-    if (nextBoundary === -1) {
-      bodyEnd = bytes.length;
-    } else {
-      // Body ends before CRLF preceding next boundary
-      bodyEnd = nextBoundary;
-      if (
-        bodyEnd >= 2 &&
-        bytes[bodyEnd - 2] === 0x0d &&
-        bytes[bodyEnd - 1] === 0x0a
-      ) {
-        bodyEnd -= 2;
-      }
-    }
-
-    // Extract binary body data
-    const bodyData = arrayBuffer.slice(bodyStart, bodyEnd);
-
-    const thumbnailData: ThumbnailData = { data: bodyData, iv };
-
-    if (size === "sm") {
-      result.sm = thumbnailData;
-    } else if (size === "md") {
-      result.md = thumbnailData;
-    } else if (size === "lg") {
-      result.lg = thumbnailData;
-    }
-
-    pos = nextBoundary === -1 ? bytes.length : nextBoundary;
-  }
-  console.log(result);
-
-  return result;
 }

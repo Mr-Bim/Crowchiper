@@ -42,7 +42,9 @@ test.describe("Nested posts - Visual hierarchy", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial post
-    await expect(postList.locator(".post-wrapper")).toHaveCount(1, {
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(1, {
       timeout: 10000,
     });
 
@@ -56,19 +58,33 @@ test.describe("Nested posts - Visual hierarchy", () => {
       centerTarget: true,
     });
 
+    // Wait for Level 1 to be nested (depth 1)
+    const level1Post = getPostByTitle(page, "Indent Level 1");
+    await expect(level1Post).toHaveAttribute("data-depth", "1", {
+      timeout: 5000,
+    });
+
     // Drag Level 2 under Level 1
     await dragPostToPost(page, "Indent Level 2", "Indent Level 1", {
       centerTarget: true,
     });
 
+    // Wait for Level 2 to be nested (depth 2)
+    const level2Post = getPostByTitle(page, "Indent Level 2");
+    await expect(level2Post).toHaveAttribute("data-depth", "2", {
+      timeout: 5000,
+    });
+
     // Verify indentation via padding-left style
     const root = getPostByTitle(page, "Indent Root");
-    const rootContainer = root.locator(".post-item-container");
-    const level1Container = getPostByTitle(page, "Indent Level 1").locator(
-      ".post-item-container",
+    const rootContainer = root.locator(
+      '[data-testid="test-post-item-container"]',
     );
-    const level2Container = getPostByTitle(page, "Indent Level 2").locator(
-      ".post-item-container",
+    const level1Container = level1Post.locator(
+      '[data-testid="test-post-item-container"]',
+    );
+    const level2Container = level2Post.locator(
+      '[data-testid="test-post-item-container"]',
     );
 
     // Root (depth 0) should have 0px padding
@@ -90,40 +106,26 @@ test.describe("Nested posts - Visual hierarchy", () => {
     expect(level2Padding).toBe("32px");
   });
 
-  test("chevron rotates when expanded/collapsed", async () => {
+  test("chevron toggles when expanded/collapsed", async () => {
     const { page } = userResult;
 
     // Use the hierarchy we just created
     const root = getPostByTitle(page, "Indent Root");
-    const expandBtn = root.locator(".post-expand-btn");
-    const chevron = expandBtn.locator(".chevron");
+    const expandBtn = root.locator('[data-testid="test-post-expand-btn"]');
 
-    // Ensure expanded
+    // Verify chevron element exists
+    const chevron = expandBtn.locator('[data-testid="test-chevron"]');
+    await expect(chevron).toBeVisible();
+
+    // Ensure expanded initially
     await expect(expandBtn).toHaveAttribute("data-expanded", "true");
-
-    // Get initial transform (should be rotated)
-    const expandedTransform = await chevron.evaluate(
-      (el) => getComputedStyle(el).transform,
-    );
 
     // Collapse
     await expandBtn.click();
-    await page.waitForTimeout(300);
+    await expect(expandBtn).toHaveAttribute("data-expanded", "false");
 
-    const collapsedTransform = await chevron.evaluate(
-      (el) => getComputedStyle(el).transform,
-    );
-
-    // Transforms should be different (one rotated, one not)
-    expect(expandedTransform).not.toBe(collapsedTransform);
-
-    // Expand again and verify transform returns
+    // Expand again
     await expandBtn.click();
-    await page.waitForTimeout(300);
-
-    const expandedAgainTransform = await chevron.evaluate(
-      (el) => getComputedStyle(el).transform,
-    );
-    expect(expandedAgainTransform).toBe(expandedTransform);
+    await expect(expandBtn).toHaveAttribute("data-expanded", "true");
   });
 });

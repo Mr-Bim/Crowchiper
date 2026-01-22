@@ -3,6 +3,18 @@
  */
 
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+let currentCloseHandler: (() => void) | null = null;
+
+/**
+ * Hide the toast and clear any pending timeout.
+ */
+function hideToast(toast: HTMLElement): void {
+  if (hideTimeout) {
+    clearTimeout(hideTimeout);
+    hideTimeout = null;
+  }
+  toast.hidden = true;
+}
 
 /**
  * Show an error toast notification.
@@ -28,6 +40,15 @@ export function showError(message: string): void {
     hideTimeout = null;
   }
 
+  // Remove old handler if it exists
+  if (currentCloseHandler) {
+    closeBtn.removeEventListener("click", currentCloseHandler);
+  }
+
+  // Create and store new handler
+  currentCloseHandler = () => hideToast(toast);
+  closeBtn.addEventListener("click", currentCloseHandler);
+
   messageEl.textContent = message;
   toast.hidden = false;
 
@@ -35,15 +56,4 @@ export function showError(message: string): void {
   hideTimeout = setTimeout(() => {
     toast.hidden = true;
   }, 5000);
-
-  // Set up close button handler (remove old one first to avoid duplicates)
-  const newCloseBtn = closeBtn.cloneNode(true) as HTMLButtonElement;
-  closeBtn.parentNode?.replaceChild(newCloseBtn, closeBtn);
-  newCloseBtn.addEventListener("click", () => {
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-      hideTimeout = null;
-    }
-    toast.hidden = true;
-  });
 }
