@@ -5,7 +5,6 @@
  */
 
 import { listPosts } from "../api/posts.ts";
-import { setOnAttachmentChange } from "../editor/attachment-widget/index.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
 import { registerHandlers } from "./handlers.ts";
 import {
@@ -19,6 +18,8 @@ import { handleSave, saveBeacon } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
 import { handleNewPost, handleReorder, handleReparent } from "./actions.ts";
+
+const widetPromise = import("../editor/attachment-widget/index.ts");
 
 /**
  * Initialize the handler registry.
@@ -45,9 +46,6 @@ export async function loadPosts(): Promise<void> {
     window.addEventListener("pagehide", saveBeacon);
 
     // Auto-save when attachments are uploaded or deleted
-    setOnAttachmentChange(() => {
-      handleSave();
-    });
 
     const posts = await listPosts();
     setPosts(posts);
@@ -61,6 +59,12 @@ export async function loadPosts(): Promise<void> {
     setDecryptedTitles(titles);
 
     renderPostList();
+
+    widetPromise.then((widet) =>
+      widet.setOnAttachmentChange(() => {
+        handleSave();
+      }),
+    );
 
     // Select first non-folder post
     const firstPost = getFirstSelectablePost();

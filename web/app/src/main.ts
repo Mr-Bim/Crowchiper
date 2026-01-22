@@ -146,7 +146,7 @@ async function init(): Promise<void> {
 
       showUnlockOverlay();
       // Load posts without selecting (they're encrypted)
-      await loadPostsWithoutSelection();
+      // await loadPostsWithoutSelection();
       renderPostList();
       if (!__TEST_MODE__) {
         unnlockBtn?.click();

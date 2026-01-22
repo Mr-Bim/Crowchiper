@@ -5,12 +5,10 @@
  */
 
 import { updatePost, updatePostBeacon } from "../api/posts.ts";
-import {
-  clearImageCacheExcept,
-  parseAttachmentUuids,
-} from "../editor/attachment-widget/index.ts";
 import { encryptPostData } from "../crypto/post-encryption.ts";
 import { callRenderPostList } from "./handlers.ts";
+import { parseAttachmentUuids } from "../editor/attachment-widget/utils.ts";
+import { clearImageCacheExcept } from "../editor/attachment-widget/cache.ts";
 import {
   clearSaveTimeout,
   clearServerSaveInterval,
@@ -26,8 +24,6 @@ import {
   setSaveTimeout,
   setServerSaveInterval,
 } from "./state.ts";
-
-// --- Title Extraction ---
 
 function extractTitle(content: string): string {
   const firstLine = content.split("\n")[0] || "";
@@ -166,7 +162,7 @@ export async function saveToServerNow(): Promise<void> {
   const pendingData = getPendingEncryptedData();
   if (!pendingData) return;
 
-  const attachmentUuids = parseAttachmentUuids(currentContent);
+  const attachmentUuids = await parseAttachmentUuids(currentContent);
 
   try {
     await updatePost(loadedPost.uuid, {
