@@ -141,6 +141,7 @@ async function init(): Promise<void> {
       // Create unlock handler that loads posts after unlock
       const handleUnlock = createUnlockHandler(loadPosts);
       const unnlockBtn = document.getElementById("unlock-btn");
+
       unnlockBtn?.addEventListener("click", handleUnlock);
 
       showUnlockOverlay();

@@ -34,7 +34,6 @@ let reparentHandler:
       position: number,
     ) => Promise<void>)
   | null = null;
-let deletePostHandler: ((post: PostNode) => void) | null = null;
 
 export function setSelectPostHandler(handler: (post: PostNode) => void): void {
   selectPostHandler = handler;
@@ -60,10 +59,6 @@ export function setReparentHandler(
   reparentHandler = handler;
 }
 
-export function setDeletePostHandler(handler: (post: PostNode) => void): void {
-  deletePostHandler = handler;
-}
-
 /**
  * Render a single post node and its children recursively.
  */
@@ -79,6 +74,7 @@ function renderPostNode(
   // Wrapper div for drag and drop
   const wrapper = document.createElement("div");
   wrapper.className = "post-wrapper";
+  wrapper.setAttribute("data-testid", "post-wrapper");
   wrapper.setAttribute("data-uuid", post.uuid);
   wrapper.setAttribute("data-index", String(index));
   wrapper.setAttribute("data-depth", String(depth));
@@ -87,14 +83,17 @@ function renderPostNode(
   // Container for the post item (expand button + title button)
   const itemContainer = document.createElement("div");
   itemContainer.className = "post-item-container";
+  itemContainer.setAttribute("data-testid", "post-item-container");
   itemContainer.style.paddingLeft = `${depth * 16}px`;
 
   // Expand/collapse button (only if has children)
   if (post.has_children) {
     const expandBtn = document.createElement("button");
     expandBtn.className = "ghost post-expand-btn";
+    expandBtn.setAttribute("data-testid", "post-expand-btn");
     expandBtn.setAttribute("data-expanded", String(expanded));
-    expandBtn.innerHTML = '<span class="chevron">&#9654;</span>';
+    expandBtn.innerHTML =
+      '<span class="chevron" data-testid="chevron">&#9654;</span>';
     expandBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       handleToggleExpand(post);
@@ -115,7 +114,9 @@ function renderPostNode(
 
   // Button for selection
   const item = document.createElement("button");
-  item.className = "ghost post-item";
+  item.className = "cl-post-item";
+  item.classList = item.classList + " ghost";
+  item.setAttribute("data-testid", "post-item");
   if (loadedPost?.uuid === post.uuid) {
     item.classList.add("active");
   }
@@ -131,18 +132,6 @@ function renderPostNode(
   });
 
   itemContainer.appendChild(item);
-
-  // Delete button (appears on hover)
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "ghost post-delete-btn";
-  deleteBtn.innerHTML = "&#215;"; // × symbol
-  deleteBtn.title = "Delete";
-  deleteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    deletePostHandler?.(post);
-  });
-  itemContainer.appendChild(deleteBtn);
-
   wrapper.appendChild(itemContainer);
 
   return wrapper;

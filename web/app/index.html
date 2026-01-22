@@ -6,23 +6,26 @@
         <title>Crowchiper</title>
         <link rel="stylesheet" href="./css/app.css" />
         <link rel="stylesheet" href="./css/unlock.css" />
-        <link rel="stylesheet" href="./css/slash-commands.css" />
     </head>
     <body>
         <div class="app-container">
-            <aside id="sidebar" class="sidebar">
+            <aside id="sidebar" class="cl-sidebar">
                 <div class="sidebar-header">
                     <h1>Crowchiper</h1>
-                    <button id="new-post-btn" class="info" title="New post">
+                    <button
+                        id="new-post-btn"
+                        class="info cl-save-btn"
+                        title="New post"
+                    >
                         +
                     </button>
                 </div>
-                <div class="post-list" id="post-list"></div>
+                <div class="cl-post-list" id="post-list"></div>
                 <div class="sidebar-footer">
                     <div class="settings-dropdown">
                         <button
                             id="settings-btn"
-                            class="settings-btn"
+                            class="cl-settings-btn"
                             type="button"
                             title="Settings"
                             aria-expanded="false"
@@ -45,7 +48,7 @@
                                 ></path>
                             </svg>
                         </button>
-                        <div id="settings-menu" class="settings-menu" hidden>
+                        <div id="settings-menu" class="cl-settings-menu" hidden>
                             <div class="settings-menu-item" id="theme-setting">
                                 <span class="settings-label">Theme</span>
                                 <div id="theme-toggle"></div>
@@ -88,7 +91,7 @@
                     <div class="header-actions">
                         <button
                             id="spellcheck-btn"
-                            class="ghost spellcheck-btn"
+                            class="ghost cl-spellcheck-btn"
                             type="button"
                             data-enabled="false"
                             title="Toggle spellcheck"
@@ -114,7 +117,7 @@
                         </button>
                         <button
                             id="save-btn"
-                            class="info save-btn"
+                            class="info cl-save-btn"
                             disabled
                             data-dirty="false"
                         >
@@ -122,7 +125,7 @@
                         </button>
                         <button
                             id="delete-btn"
-                            class="warning delete-btn"
+                            class="warning cl-save-btn"
                             disabled
                         >
                             Delete
@@ -135,7 +138,7 @@
             </main>
         </div>
         <!-- Unlock overlay for encrypted content -->
-        <div id="unlock-overlay" class="unlock-overlay" hidden>
+        <div id="unlock-overlay" class="cl-unlock-overlay" hidden>
             <div class="unlock-modal">
                 <div class="unlock-icon">
                     <svg
@@ -167,7 +170,7 @@
                 <button id="unlock-btn" class="btn-primary">
                     Unlock with Passkey
                 </button>
-                <div id="unlock-error" class="unlock-error" hidden></div>
+                <div id="unlock-error" class="cl-unlock-error" hidden></div>
             </div>
         </div>
 
@@ -181,11 +184,11 @@
         />
 
         <!-- Error toast notification -->
-        <div id="error-toast" class="error-toast" hidden>
+        <div id="error-toast" class="cl-error-toast" hidden>
             <span id="error-toast-message"></span>
             <button
                 id="error-toast-close"
-                class="error-toast-close"
+                class="cl-error-toast-close"
                 aria-label="Dismiss"
             >
                 &times;

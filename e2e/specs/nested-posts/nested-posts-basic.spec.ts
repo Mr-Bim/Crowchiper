@@ -36,24 +36,33 @@ test.describe("Nested posts - Basic operations", () => {
     const postList = page.locator("#post-list");
 
     // Initial state - should have one auto-created post
-    await expect(postList.locator(".post-wrapper")).toHaveCount(1, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+      1,
+      {
+        timeout: 10000,
+      },
+    );
 
     // Create first named post
     await createPostWithTitle(page, "Parent Post");
-    await expect(postList.locator(".post-wrapper")).toHaveCount(2, {
-      timeout: 5000,
-    });
+    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+      2,
+      {
+        timeout: 5000,
+      },
+    );
 
     // Create second post
     await createPostWithTitle(page, "Child Post");
-    await expect(postList.locator(".post-wrapper")).toHaveCount(3, {
-      timeout: 5000,
-    });
+    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+      3,
+      {
+        timeout: 5000,
+      },
+    );
 
     // Verify all posts are at depth 0 (root level)
-    const wrappers = postList.locator(".post-wrapper");
+    const wrappers = postList.locator('[data-testid="post-wrapper"]');
     const count = await wrappers.count();
     for (let i = 0; i < count; i++) {
       const depth = await wrappers.nth(i).getAttribute("data-depth");

@@ -42,9 +42,12 @@ test.describe("Nested posts - Expand/Collapse", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial post
-    await expect(postList.locator(".post-wrapper")).toHaveCount(1, {
-      timeout: 10000,
-    });
+    await expect(postList.locator('[data-testid="post-wrapper"]')).toHaveCount(
+      1,
+      {
+        timeout: 10000,
+      },
+    );
 
     // Create parent and child
     await createPostWithTitle(page, "Expand Parent");
@@ -57,7 +60,7 @@ test.describe("Nested posts - Expand/Collapse", () => {
 
     // Parent should be expanded after reparenting
     const parentPost = getPostByTitle(page, "Expand Parent");
-    const expandBtn = parentPost.locator(".post-expand-btn");
+    const expandBtn = parentPost.locator('[data-testid="post-expand-btn"]');
     await expect(expandBtn).toBeVisible();
     await expect(expandBtn).toHaveAttribute("data-expanded", "true");
 
@@ -109,8 +112,8 @@ test.describe("Nested posts - Expand/Collapse", () => {
     await expect(level3).toHaveAttribute("data-depth", "2");
 
     // Both Level 1 and Level 2 should have expand buttons
-    const level1ExpandBtn = level1.locator(".post-expand-btn");
-    const level2ExpandBtn = level2.locator(".post-expand-btn");
+    const level1ExpandBtn = level1.locator('[data-testid="post-expand-btn"]');
+    const level2ExpandBtn = level2.locator('[data-testid="post-expand-btn"]');
 
     await expect(level1ExpandBtn).toBeVisible();
     await expect(level2ExpandBtn).toBeVisible();
@@ -131,7 +134,9 @@ test.describe("Nested posts - Expand/Collapse", () => {
     const level2Visible = getPostByTitle(page, "Level 2");
     await expect(level2Visible).toBeVisible();
     // Level 3 stays hidden until Level 2 is expanded
-    const level2ExpandBtnAgain = level2Visible.locator(".post-expand-btn");
+    const level2ExpandBtnAgain = level2Visible.locator(
+      '[data-testid="post-expand-btn"]',
+    );
     await expect(level2ExpandBtnAgain).toHaveAttribute(
       "data-expanded",
       "false",

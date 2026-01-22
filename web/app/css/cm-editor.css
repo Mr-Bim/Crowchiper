@@ -1,12 +1,9 @@
 /* CodeMirror editor theme styling */
 
-.gl-minify-disable-editor {
-    --marker: 1;
-}
-
 .cm-editor {
     height: 100%;
     font-size: 16px;
+    color: var(--text);
 }
 
 .cm-scroller {
@@ -238,8 +235,4 @@
 .cm-gallery-option-btn svg {
     width: 16px;
     height: 16px;
-}
-
-.gl-minify-enable-editor {
-    --marker: 1;
 }

@@ -17,18 +17,12 @@ import {
 import { handleSave, saveBeacon, setRenderPostList } from "./save.ts";
 import {
   renderPostList,
-  setDeletePostHandler,
   setReorderHandler,
   setReparentHandler,
   setSelectPostHandler,
 } from "./render.ts";
 import { selectPost } from "./selection.ts";
-import {
-  handleDeletePostByNode,
-  handleNewPost,
-  handleReorder,
-  handleReparent,
-} from "./actions.ts";
+import { handleNewPost, handleReorder, handleReparent } from "./actions.ts";
 
 /**
  * Initialize module connections to avoid circular dependencies.
@@ -41,7 +35,6 @@ function initModuleConnections(): void {
   setSelectPostHandler(selectPost);
   setReorderHandler(handleReorder);
   setReparentHandler(handleReparent);
-  setDeletePostHandler(handleDeletePostByNode);
 }
 
 /**

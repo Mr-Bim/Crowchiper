@@ -3,18 +3,19 @@
   const path = window.location.pathname;
   let base = "";
 
+  const assets = "/__APP_ASSETS__";
   // If we're on a /login page, remove /login and everything after
   if (path.includes("/login")) {
     const loginIndex = path.indexOf("/login");
     base = path.substring(0, loginIndex);
   }
   // Otherwise, remove /__APP_ASSETS__ and everything after (will be replaced by build)
-  else if (path.includes("/__APP_ASSETS__")) {
-    const appIndex = path.indexOf("/__APP_ASSETS__");
+  else if (path.includes(assets)) {
+    const appIndex = path.indexOf(assets);
     base = path.substring(0, appIndex);
   }
 
-  const appPath = `${base}/__APP_ASSETS__`;
+  const appPath = `${base}${assets}`;
   (window as unknown as Record<string, string>).API_PATH = `${base}/api`;
   (window as unknown as Record<string, string>).LOGIN_PATH = `${base}/login`;
   (window as unknown as Record<string, string>).APP_PATH = appPath;
@@ -24,7 +25,7 @@
   (
     window as unknown as Record<string, (filename: string) => string>
   ).__assetsPath = (filename: string) => {
-    return `${base}/__APP_ASSETS__/${filename}`;
+    return `${base}${assets}/${filename}`;
   };
 
   // Conditionally fetch config at startup (for login/register pages)

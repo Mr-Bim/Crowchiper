@@ -76,6 +76,9 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     oldEditor.destroy();
   }
 
+  // Clear container (removes empty-state div or any leftover content)
+  container.innerHTML = "";
+
   // Create new editor
   const { createEditor } = await editorPromise;
   const newEditor = createEditor(container, displayContent, () => {

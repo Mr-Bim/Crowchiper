@@ -1,6 +1,6 @@
 /* Unlock overlay styles */
 
-.unlock-overlay {
+.cl-unlock-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -14,7 +14,7 @@
     z-index: 1000;
 }
 
-.unlock-overlay[hidden] {
+.cl-unlock-overlay[hidden] {
     display: none;
 }
 
@@ -70,7 +70,7 @@
     cursor: not-allowed;
 }
 
-.unlock-error {
+.cl-unlock-error {
     margin-top: 16px;
     padding: 12px;
     background: oklch(0.95 0.05 25);
@@ -81,18 +81,13 @@
 }
 
 /* Dark theme adjustments */
-:root[data-theme="dark"] .unlock-error {
+:root[data-theme="dark"] .cl-unlock-error {
     background: oklch(0.25 0.05 25);
     border-color: oklch(0.4 0.1 25);
     color: oklch(0.75 0.1 25);
 }
 
-/* Encrypted post indicator in list */
-.gl-minify-disable-encrypted-indicator {
-    --marker: 1;
-}
-
-.post-item[data-encrypted]::before {
+.cl-post-item[data-encrypted]::before {
     content: "";
     display: inline-block;
     width: 12px;
@@ -101,8 +96,4 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Crect x='3' y='11' width='18' height='11' rx='2'/%3E%3Cpath d='M7 11V7a5 5 0 0110 0v4'/%3E%3C/svg%3E");
     background-size: contain;
     opacity: 0.5;
-}
-
-.gl-minify-enable-encrypted-indicator {
-    --marker: 1;
 }

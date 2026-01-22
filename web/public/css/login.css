@@ -20,7 +20,7 @@
     margin-bottom: 1rem;
 }
 
-.error-message {
+.cl-error-message {
     padding: 0.75rem;
     background: var(--error-bg, #fef2f2);
     color: var(--error-text, #dc2626);
@@ -30,7 +30,7 @@
     text-align: center;
 }
 
-.error-message[hidden] {
+.cl-error-message[hidden] {
     display: none;
 }
 
@@ -114,14 +114,14 @@
     display: block;
 }
 
-.auth-type-fieldset {
+.cl-auth-type-fieldset {
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.75rem;
     margin: 0;
 }
 
-.auth-type-fieldset legend {
+.cl-auth-type-fieldset legend {
     padding: 0 0.5rem;
     font-size: 0.85rem;
     color: var(--text-muted, var(--text));

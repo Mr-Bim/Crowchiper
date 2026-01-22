@@ -45,10 +45,27 @@ With `--base /app`, all paths are prefixed.
 
 ## CSS Minifier Control
 
-```css
-.gl-minify-disable-NAME { --marker: 1 }  /* turns OFF minification */
-.gl-minify-enable-NAME { --marker: 1 }   /* turns it back ON */
+
+### ID/Class Name Overlap Warning
+
+The CSS minifier also replaces class names in JS files (for `getElementById`, `classList.add`, etc.). If an HTML `id` attribute has the same name as a CSS class, this would break `getElementById` calls.
+
+**Example problem:**
+```html
+<div id="unlock-overlay"></div>  <!-- HTML id -->
 ```
+```css
+.unlock-overlay { ... }  /* CSS class with same name */
+```
+```js
+document.getElementById("unlock-overlay")  // Would get minified to "aa" and break!
+```
+
+When overlap is detected, the build will:
+1. Print a warning with the overlapping names
+2. Skip CSS minification for that file
+
+**To fix:** Rename either the HTML ID or the CSS class so they don't share names.
 
 ## Configuration
 

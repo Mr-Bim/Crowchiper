@@ -3,6 +3,7 @@ import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { inlineIIFEPlugin } from "./inline-plugin.js";
+import { sriPlugin } from "./sri-plugin.js";
 
 const config = JSON.parse(readFileSync("./config.json", "utf-8"));
 
@@ -49,6 +50,7 @@ const login = defineConfig({
   },
   plugins: [
     inlineIIFEPlugin({ assetsPath: "/login", sourceDir: "web/public" }),
+    sriPlugin({ assetsPath: "/login" }),
   ],
 });
 
@@ -88,6 +90,7 @@ const app = defineConfig({
   },
   plugins: [
     inlineIIFEPlugin({ assetsPath: config.assets, sourceDir: "web/app" }),
+    sriPlugin({ assetsPath: config.assets }),
   ],
   experimental: {
     renderBuiltUrl(filename, { hostType }) {

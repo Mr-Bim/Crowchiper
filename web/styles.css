@@ -196,6 +196,7 @@ button.warning:hover {
 
 button.info {
     background: var(--info);
+    padding: 0.5rem 0.75rem;
     color: white;
 }
 
