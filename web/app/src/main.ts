@@ -16,7 +16,6 @@ import {
   handleNewPost,
   handleSave,
   loadPosts,
-  loadPostsWithoutSelection,
   renderPostList,
 } from "./posts/index.ts";
 import { setupSpellcheck } from "./spellcheck.ts";
