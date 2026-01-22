@@ -24,6 +24,7 @@ export type ReparentHandler = (
 ) => Promise<void>;
 export type RenderPostListHandler = () => void;
 
+let handlersRegistered = false;
 /**
  * Handler registry - populated during initialization.
  */
@@ -34,6 +35,10 @@ const handlers = {
   renderPostList: null as RenderPostListHandler | null,
 };
 
+export function isHandlersRegistered() {
+  return handlersRegistered;
+}
+
 /**
  * Register all handlers at once during initialization.
  */
@@ -43,6 +48,7 @@ export function registerHandlers(config: {
   reparent: ReparentHandler;
   renderPostList: RenderPostListHandler;
 }): void {
+  handlersRegistered = true;
   handlers.selectPost = config.selectPost;
   handlers.reorder = config.reorder;
   handlers.reparent = config.reparent;

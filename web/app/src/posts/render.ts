@@ -11,6 +11,7 @@ import {
   getReorderHandler,
   getReparentHandler,
   getSelectPostHandler,
+  isHandlersRegistered,
 } from "./handlers.ts";
 import {
   flattenPosts,
@@ -138,8 +139,10 @@ export function renderPostList(): void {
 
   renderLevel(posts, 0);
 
-  // Initialize drag and drop on the list
-  initDragAndDrop(list, getReorderHandler(), getReparentHandler());
+  if (isHandlersRegistered()) {
+    // Initialize drag and drop on the list
+    initDragAndDrop(list, getReorderHandler(), getReparentHandler());
+  }
 }
 
 /**
