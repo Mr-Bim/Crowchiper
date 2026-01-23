@@ -525,11 +525,13 @@ export class GalleryContainerWidget extends WidgetType {
 
       // Update button visibility
       if (prevBtn) {
-        prevBtn.style.visibility = currentIndex > 0 ? "visible" : "hidden";
+        prevBtn.toggleAttribute("data-hidden", currentIndex <= 0);
       }
       if (nextBtn) {
-        nextBtn.style.visibility =
-          currentIndex < allImages.length - 1 ? "visible" : "hidden";
+        nextBtn.toggleAttribute(
+          "data-hidden",
+          currentIndex >= allImages.length - 1,
+        );
       }
 
       // Clear current content

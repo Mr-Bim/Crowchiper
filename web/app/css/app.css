@@ -82,6 +82,17 @@
     gap: 0.25rem;
 }
 
+/* Tree depth indentation (up to 3 levels) */
+.post-item-container[data-depth="1"] {
+    padding-left: 16px;
+}
+.post-item-container[data-depth="2"] {
+    padding-left: 32px;
+}
+.post-item-container[data-depth="3"] {
+    padding-left: 48px;
+}
+
 .post-expand-btn {
     width: 1.25rem;
     height: 1.25rem;
@@ -269,6 +280,11 @@
 #theme-toggle select {
     padding: 0.25rem 0.5rem;
     font-size: 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text);
 }
 
 :root[data-theme="dark"] .cl-settings-menu {
@@ -458,6 +474,10 @@
 
 .cm-attachment-nav-btn:hover {
     background: rgba(0, 0, 0, 0.8);
+}
+
+.cm-attachment-nav-btn[data-hidden] {
+    visibility: hidden;
 }
 
 .cm-attachment-nav-prev {

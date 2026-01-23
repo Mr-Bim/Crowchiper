@@ -13,6 +13,15 @@ use crate::auth::{
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
+// =============================================================================
+// CSP Headers
+// =============================================================================
+
+/// Pre-built CSP header for login pages (built at compile time)
+const LOGIN_CSP_HEADER: &str = env!("CSP_HEADER_LOGIN");
+/// Pre-built CSP header for app pages (built at compile time)
+const APP_CSP_HEADER: &str = env!("CSP_HEADER_APP");
+
 /// Login assets (public, no auth required)
 #[derive(Embed)]
 #[folder = "dist/login/"]
@@ -170,6 +179,9 @@ const IMMUTABLE_CACHE: &str = "public, max-age=31536000, immutable";
 /// Cache duration for HTML files (no cache, always revalidate)
 const NO_CACHE: &str = "no-cache";
 
+/// CSP header name
+const CSP_HEADER: header::HeaderName = header::CONTENT_SECURITY_POLICY;
+
 #[inline]
 fn serve_asset<T: Embed>(path: &str) -> Response {
     match T::get(path) {
@@ -194,9 +206,34 @@ fn serve_asset<T: Embed>(path: &str) -> Response {
     }
 }
 
+/// Serve an HTML response with CSP header
+#[inline]
+fn html_response_with_csp(body: &'static str, csp: &'static str) -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/html"),
+            (header::CACHE_CONTROL, NO_CACHE),
+            (CSP_HEADER, csp),
+        ],
+        body,
+    )
+        .into_response()
+}
+
 /// Serve login assets directly (no base path rewriting)
 pub async fn login_handler_direct(path: Option<axum::extract::Path<String>>) -> Response {
-    serve_asset::<LoginAssets>(normalize_path(path.as_ref()))
+    let path = normalize_path(path.as_ref());
+    if path.ends_with(".html") {
+        if let Some(content) = LoginAssets::get(path) {
+            let html: &'static str = Box::leak(
+                String::from_utf8_lossy(&content.data)
+                    .into_owned()
+                    .into_boxed_str(),
+            );
+            return html_response_with_csp(html, LOGIN_CSP_HEADER);
+        }
+    }
+    serve_asset::<LoginAssets>(path)
 }
 
 /// Serve login index page, redirecting authenticated users to the app.
@@ -215,14 +252,7 @@ pub async fn login_index_handler(
             return Redirect::temporary(state.app_path).into_response();
         }
     }
-    (
-        [
-            (header::CONTENT_TYPE, "text/html"),
-            (header::CACHE_CONTROL, NO_CACHE),
-        ],
-        state.login_index_html,
-    )
-        .into_response()
+    html_response_with_csp(state.login_index_html, LOGIN_CSP_HEADER)
 }
 
 /// Serve login assets with base path rewriting
@@ -233,14 +263,7 @@ pub async fn login_handler(
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(&processed) = state.processed_login_html.get(path) {
-            return (
-                [
-                    (header::CONTENT_TYPE, "text/html"),
-                    (header::CACHE_CONTROL, NO_CACHE),
-                ],
-                processed,
-            )
-                .into_response();
+            return html_response_with_csp(processed, LOGIN_CSP_HEADER);
         }
     }
     serve_asset::<LoginAssets>(path)
@@ -251,7 +274,18 @@ pub async fn app_handler_direct(
     AssetAuth(_): AssetAuth,
     path: Option<axum::extract::Path<String>>,
 ) -> Response {
-    serve_asset::<AppAssets>(normalize_path(path.as_ref()))
+    let path = normalize_path(path.as_ref());
+    if path.ends_with(".html") {
+        if let Some(content) = AppAssets::get(path) {
+            let html: &'static str = Box::leak(
+                String::from_utf8_lossy(&content.data)
+                    .into_owned()
+                    .into_boxed_str(),
+            );
+            return html_response_with_csp(html, APP_CSP_HEADER);
+        }
+    }
+    serve_asset::<AppAssets>(path)
 }
 
 /// Serve app assets with base path rewriting - requires auth
@@ -263,14 +297,7 @@ pub async fn app_handler(
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(&processed) = state.processed_app_html.get(path) {
-            return (
-                [
-                    (header::CONTENT_TYPE, "text/html"),
-                    (header::CACHE_CONTROL, NO_CACHE),
-                ],
-                processed,
-            )
-                .into_response();
+            return html_response_with_csp(processed, APP_CSP_HEADER);
         }
     }
     serve_asset::<AppAssets>(path)

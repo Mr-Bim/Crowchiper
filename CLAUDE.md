@@ -10,6 +10,7 @@ DO always update the appropriate CLAUDE.md after a finished task.
 ```bash
 npm run build-all          # Build frontend for production (no test mode)
 npm run build-all-test     # Build frontend with test mode
+npm run prepare-test       # Build frontend and rust in test mode, run before tests
 npm run lint:fix           # TypeScript type check (tsc) and lint fix (oxlint)
 npm run test:rust          # Run Rust tests (requires prior cargo build --features test-mode)
 npm run test:web           # Run Playwright tests (requires prior build-all-test + cargo build)
@@ -362,6 +363,69 @@ Comprehensive tests for the dual-token authentication system:
 - Login flow refresh token reuse (doesn't issue new token if valid one exists)
 - Token type confusion prevention (refresh can't be used as access and vice versa)
 - Deactivated/deleted user handling
+
+## Build Plugins
+
+Vite build plugins are located in the `plugins/` folder. The main orchestrator plugin (`plugins/index.js`) coordinates all post-build processing in sequence.
+
+### Plugin Files
+- **`plugins/index.js`** - Main orchestrator that runs all plugins in correct order
+- **`plugins/css-minify.js`** - CSS class name minification (extracts classes, generates short names, applies to HTML/JS)
+- **`plugins/inline-iife.js`** - Compiles and inlines IIFE scripts into HTML head
+- **`plugins/sri.js`** - Adds Subresource Integrity hashes to script tags
+- **`plugins/html-utils.js`** - HTML processing utilities (minification, CSS inlining, testid stripping)
+
+### Processing Order (per HTML file)
+1. Collect and inline CSS files under 20KB
+2. Minify CSS class names (and update JS files with class map)
+3. Inject IIFE script based on markers
+4. Replace asset placeholders
+5. Strip `data-testid` attributes (when not in test mode)
+6. Minify HTML
+7. Add SRI attributes to scripts
+
+### CSP Hashes Output
+After build, script integrity hashes are written to `dist/csp-hashes.json`:
+```json
+{
+  "login": ["sha384-...", "sha384-..."],
+  "app": ["sha384-...", "sha384-..."]
+}
+```
+
+These hashes are embedded at compile time and used to generate CSP headers for HTML responses.
+
+## Content Security Policy (CSP)
+
+CSP headers are automatically added to all HTML responses. The headers are built at compile time from `dist/csp-hashes.json`.
+
+### How It Works
+1. Frontend build generates `dist/csp-hashes.json` with script integrity hashes
+2. `build.rs` reads the hashes and builds full CSP header strings as compile-time constants
+3. `src/assets.rs` serves HTML files with the pre-built CSP headers
+
+### CSP Policy
+```
+default-src 'self';
+script-src '<hash1>' '<hash2>' ...;
+style-src 'self' 'unsafe-inline';
+img-src 'self' data:;
+connect-src 'self';
+frame-ancestors 'none';
+form-action 'self';
+base-uri 'self'
+```
+
+- **script-src**: Only scripts matching the SRI hashes can execute (no `'unsafe-inline'`)
+- **style-src**: Allows inline styles (needed for dynamic styling)
+- **img-src**: Allows `data:` URIs for inline images
+- **frame-ancestors**: Prevents clickjacking by disallowing framing
+- **form-action**: Restricts form submissions to same origin
+
+### Separate Headers for Login/App
+Login and app pages have different script hashes, so they get different CSP headers:
+- `LOGIN_CSP_HEADER` - For `/login/*` pages
+- `APP_CSP_HEADER` - For `/fiery-sparrow/*` pages
 
 ## Playwright E2E Tests
 

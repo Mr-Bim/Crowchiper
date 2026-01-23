@@ -74,7 +74,7 @@ async fn add_access_token_cookie(request: axum::extract::Request, next: Next) ->
 
 /// Create the application router with the given configuration.
 pub fn create_app(config: &ServerConfig) -> Router {
-    let base_path: &'static str = leak_string(config.base.clone().unwrap_or_default());
+    let base_path: &'static str = leak_string(config.base.clone().unwrap_or("".to_string()));
     let api_path: &'static str = leak_string(AssetsState::make_api_path(base_path));
     let login_path: &'static str = leak_string(AssetsState::make_login_path(base_path));
     let app_path: &'static str = leak_string(AssetsState::make_app_path(base_path));

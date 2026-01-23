@@ -91,13 +91,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create select element
     const select = document.createElement("select");
     select.id = "theme-select";
-    select.style.cssText = `
-			background: var(--surface);
-			border: 1px solid var(--border);
-			border-radius: 4px;
-			cursor: pointer;
-			color: var(--text);
-		`;
 
     // Add options
     themes.forEach((theme) => {

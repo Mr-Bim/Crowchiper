@@ -37,7 +37,6 @@ async fn main() {
             error!(address = %addr, error = %e, "Failed to bind");
             std::process::exit(1);
         });
-
     let local_addr = listener.local_addr().unwrap();
 
     // In test mode, update rp_origin to include actual port when using port 0 with localhost

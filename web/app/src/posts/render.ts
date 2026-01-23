@@ -46,7 +46,7 @@ function renderPostNode(
   }
   wrapper.setAttribute("data-uuid", post.uuid);
   wrapper.setAttribute("data-index", String(index));
-  wrapper.setAttribute("data-depth", String(depth));
+  wrapper.setAttribute("data-depth", String(Math.min(3, depth)));
   wrapper.setAttribute("data-parent-id", post.parent_id ?? "");
 
   // Container for the post item (expand button + title button)
@@ -55,7 +55,7 @@ function renderPostNode(
   if (__TEST_MODE__) {
     itemContainer.setAttribute("data-testid", "test-post-item-container");
   }
-  itemContainer.style.paddingLeft = `${depth * 16}px`;
+  itemContainer.setAttribute("data-depth", String(Math.min(3, depth)));
 
   // Expand/collapse button (only if has children)
   if (post.has_children) {
