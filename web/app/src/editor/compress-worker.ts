@@ -1,6 +1,11 @@
 /**
  * Web Worker for image compression using OffscreenCanvas.
  * Enables true parallel processing of thumbnails and main image.
+ *
+ * Uses smart quality estimation and binary search for fast compression:
+ * - Estimates initial quality based on image dimensions and target size
+ * - Uses binary search to find optimal quality (max 4 iterations)
+ * - Downscales images larger than 4K before compression
  */
 
 /** Thumbnail size configuration */
@@ -16,6 +21,9 @@ const THUMBNAIL_MAX_BYTES = {
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MIN_IMAGE_QUALITY = 0.5;
 const MIN_THUMB_QUALITY = 0.1;
+
+/** Maximum dimension for main images (4K) - larger images are downscaled */
+const MAX_IMAGE_DIMENSION = 3840;
 
 export type WorkerTask =
   | { type: "main"; bitmap: ImageBitmap }
@@ -42,36 +50,115 @@ async function canvasToBlob(
 }
 
 /**
+ * Estimate initial quality based on pixel count and target size.
+ * Uses empirical data: WebP at quality 0.8 typically produces ~0.5 bytes/pixel.
+ */
+function estimateInitialQuality(
+  width: number,
+  height: number,
+  targetBytes: number,
+): number {
+  const pixels = width * height;
+  // Estimate bytes per pixel at quality 1.0 (roughly 0.8 bytes/pixel for WebP)
+  const estimatedSize = pixels * 0.8;
+
+  if (estimatedSize <= targetBytes) {
+    return 1.0; // Image will likely fit at max quality
+  }
+
+  // Estimate quality needed: quality roughly scales linearly with output size
+  const ratio = targetBytes / estimatedSize;
+  // Clamp between 0.5 and 0.95 (never start below min or at absolute max)
+  return Math.max(0.5, Math.min(0.95, ratio * 1.2));
+}
+
+/**
+ * Find optimal quality using binary search.
+ * Much faster than linear iteration - max 4 iterations instead of 10+.
+ */
+async function findOptimalQuality(
+  canvas: OffscreenCanvas,
+  targetBytes: number,
+  minQuality: number,
+  startQuality: number,
+): Promise<Blob> {
+  let low = minQuality;
+  let high = startQuality;
+  let bestBlob: Blob | null = null;
+
+  // First try at estimated quality
+  let blob = await canvasToBlob(canvas, high);
+
+  // If it fits, we're done
+  if (blob.size <= targetBytes) {
+    return blob;
+  }
+
+  // Binary search for optimal quality (max 4 iterations)
+  for (let i = 0; i < 4; i++) {
+    const mid = (low + high) / 2;
+    blob = await canvasToBlob(canvas, mid);
+
+    if (blob.size <= targetBytes) {
+      bestBlob = blob;
+      low = mid; // Try higher quality
+    } else {
+      high = mid; // Need lower quality
+    }
+
+    // Stop if we're close enough (within 5% of quality range)
+    if (high - low < 0.05) {
+      break;
+    }
+  }
+
+  // If we never found a fitting blob, use the last one at minimum quality
+  if (!bestBlob) {
+    bestBlob = await canvasToBlob(canvas, minQuality);
+  }
+
+  return bestBlob;
+}
+
+/**
  * Process the main image - compress to fit within size limit.
+ * Downscales images larger than 4K before compression for faster processing.
  */
 async function processMainImage(bitmap: ImageBitmap): Promise<ArrayBuffer> {
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  let width = bitmap.width;
+  let height = bitmap.height;
+
+  // Downscale if larger than max dimension (4K)
+  if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+    const scale = MAX_IMAGE_DIMENSION / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+
+  const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     throw new Error("Failed to get canvas context");
   }
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, width, height);
 
-  let quality = 1.0;
-  let blob: Blob | null = null;
+  // Estimate starting quality based on image size
+  const startQuality = estimateInitialQuality(width, height, MAX_IMAGE_BYTES);
 
-  while (quality >= MIN_IMAGE_QUALITY) {
-    blob = await canvasToBlob(canvas, quality);
-    if (blob.size <= MAX_IMAGE_BYTES) {
-      break;
-    }
-    quality -= 0.05;
-  }
-
-  if (!blob) {
-    throw new Error("Failed to create image blob");
-  }
+  // Use binary search to find optimal quality
+  const blob = await findOptimalQuality(
+    canvas,
+    MAX_IMAGE_BYTES,
+    MIN_IMAGE_QUALITY,
+    startQuality,
+  );
 
   return blob.arrayBuffer();
 }
 
 /**
  * Generate a thumbnail at the specified size.
+ * Uses binary search for quality optimization.
  */
 async function processThumbnail(
   bitmap: ImageBitmap,
@@ -98,18 +185,15 @@ async function processThumbnail(
   }
   ctx.drawImage(bitmap, 0, 0, width, height);
 
-  let quality = startQuality;
-  let blob: Blob | null = null;
+  // Use binary search for optimal quality
+  const blob = await findOptimalQuality(
+    canvas,
+    maxBytes,
+    MIN_THUMB_QUALITY,
+    startQuality,
+  );
 
-  while (quality >= MIN_THUMB_QUALITY) {
-    blob = await canvasToBlob(canvas, quality);
-    if (blob.size <= maxBytes) {
-      break;
-    }
-    quality -= 0.05;
-  }
-
-  return blob!.arrayBuffer();
+  return blob.arrayBuffer();
 }
 
 // Worker context type for postMessage with transfer

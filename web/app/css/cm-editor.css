@@ -2,7 +2,7 @@
 
 .cm-editor {
     height: 100%;
-    font-size: 16px;
+    font-size: 1rem;
     color: var(--text);
 }
 
@@ -12,7 +12,7 @@
 }
 
 .cm-content {
-    padding: 16px;
+    padding: 1rem;
     caret-color: var(--accent);
 }
 
@@ -53,7 +53,7 @@
 /* Attachment widgets */
 .cm-attachment-widget {
     display: block;
-    margin: 8px 0;
+    margin: 0.5rem 0;
 }
 
 .cm-attachment-thumbnail-wrapper {
@@ -64,7 +64,7 @@
     max-width: 100%;
     width: auto;
     height: auto;
-    border-radius: 4px;
+    border-radius: 0.25rem;
     cursor: pointer;
     transition: opacity 0.15s;
     display: block;
@@ -78,15 +78,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 80px;
-    min-height: 80px;
-    padding: 16px;
+    min-width: 5rem;
+    min-height: 5rem;
+    padding: 1rem;
     color: var(--text-muted);
     font-size: 0.75rem;
 }
 
 .cm-attachment-error {
-    padding: 16px;
+    padding: 1rem;
     color: var(--error, #dc3545);
 }
 
@@ -95,25 +95,25 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    min-width: 120px;
-    min-height: 100px;
-    padding: 16px;
+    gap: 0.5rem;
+    min-width: 7.5rem;
+    min-height: 6.25rem;
+    padding: 1rem;
     color: var(--text-muted);
     font-size: 0.75rem;
     background: var(--surface);
-    border-radius: 4px;
+    border-radius: 0.25rem;
 }
 
 .cm-attachment-uploading-status {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 .cm-attachment-spinner {
-    width: 14px;
-    height: 14px;
+    width: 0.875rem;
+    height: 0.875rem;
     border: 2px solid transparent;
     border-top-color: var(--accent);
     border-right-color: var(--accent);
@@ -137,15 +137,15 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
-    gap: 8px;
-    margin: 8px 0;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
 }
 
 .cm-gallery-images {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 .cm-gallery-image {
@@ -159,16 +159,16 @@
 }
 
 .cm-gallery-image .cm-attachment-thumbnail {
-    max-height: 200px;
+    max-height: 12.5rem;
     width: auto;
 }
 
 .cm-gallery-delete-btn {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 24px;
-    height: 24px;
+    top: 0.25rem;
+    right: 0.25rem;
+    width: 1.5rem;
+    height: 1.5rem;
     padding: 0;
     border: none;
     border-radius: 50%;
@@ -197,15 +197,15 @@
 }
 
 .cm-gallery-delete-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 0.875rem;
+    height: 0.875rem;
 }
 
 /* Cancel button for upload - centered text button */
 .cm-gallery-cancel-btn {
-    padding: 4px 12px;
+    padding: 0.25rem 0.75rem;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 0.25rem;
     background: var(--surface);
     color: var(--text-muted);
     font-size: 0.75rem;
@@ -230,16 +230,16 @@
 /* Gallery options panel */
 .cm-gallery-options {
     display: flex;
-    gap: 4px;
+    gap: 0.25rem;
     align-self: flex-end;
 }
 
 .cm-gallery-option-btn {
-    width: 28px;
-    height: 28px;
+    width: 1.75rem;
+    height: 1.75rem;
     padding: 0;
     border: none;
-    border-radius: 4px;
+    border-radius: 0.25rem;
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
@@ -266,6 +266,6 @@
 }
 
 .cm-gallery-option-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 1rem;
+    height: 1rem;
 }
