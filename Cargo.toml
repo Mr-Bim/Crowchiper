@@ -18,7 +18,7 @@ futures = "0.3"
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive", "env"] }
 
-sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "452da1acf549e94a6358a770e7513433f15b5f0a", features = [
+sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "1dd526a2ed67fa763766e670c30b1ce3b152a42e", features = [
   "runtime-tokio",
   "sqlite",
 ] }
