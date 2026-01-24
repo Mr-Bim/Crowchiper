@@ -12,6 +12,7 @@ import {
 } from "./schemas.ts";
 
 declare const API_PATH: string;
+declare const LOGIN_PATH: string;
 
 // Re-export types for convenience
 export type { UploadAttachmentResponse };
@@ -35,12 +36,13 @@ export interface BinaryAttachmentResponse {
 
 export type ThumbnailSize = "sm" | "md" | "lg";
 
+/** Progress callback for upload tracking */
+export type UploadProgressCallback = (percent: number) => void;
+
 /**
- * Upload an encrypted attachment using multipart form data.
+ * Build FormData for attachment upload.
  */
-export async function uploadAttachment(
-  req: UploadAttachmentRequest,
-): Promise<UploadAttachmentResponse> {
+function buildUploadFormData(req: UploadAttachmentRequest): FormData {
   const formData = new FormData();
   formData.append("image", new Blob([req.image]));
   formData.append("image_iv", req.image_iv);
@@ -51,6 +53,16 @@ export async function uploadAttachment(
   formData.append("thumb_lg", new Blob([req.thumb_lg]));
   formData.append("thumb_lg_iv", req.thumb_lg_iv);
   formData.append("encryption_version", req.encryption_version.toString());
+  return formData;
+}
+
+/**
+ * Upload an encrypted attachment using multipart form data.
+ */
+export async function uploadAttachment(
+  req: UploadAttachmentRequest,
+): Promise<UploadAttachmentResponse> {
+  const formData = buildUploadFormData(req);
 
   const response = await fetchWithAuth(`${API_PATH}/attachments`, {
     method: "POST",
@@ -67,6 +79,64 @@ export async function uploadAttachment(
 
   const data = await response.json();
   return validate(UploadAttachmentResponseSchema, data, "upload response");
+}
+
+/**
+ * Upload an encrypted attachment with progress tracking.
+ * Uses XMLHttpRequest for upload progress events.
+ */
+export function uploadAttachmentWithProgress(
+  req: UploadAttachmentRequest,
+  onProgress: UploadProgressCallback,
+): Promise<UploadAttachmentResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = buildUploadFormData(req);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        onProgress(percent);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status === 401) {
+        window.location.href = LOGIN_PATH;
+        reject(new Error("Authentication required"));
+        return;
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          const result = validate(
+            UploadAttachmentResponseSchema,
+            data,
+            "upload response",
+          );
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      } else {
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error during upload"));
+    });
+
+    xhr.addEventListener("timeout", () => {
+      reject(new Error("Upload timed out"));
+    });
+
+    xhr.open("POST", `${API_PATH}/attachments`);
+    xhr.withCredentials = true;
+    xhr.timeout = 120000; // 2 minute timeout for large uploads
+    xhr.send(formData);
+  });
 }
 
 /**
