@@ -216,6 +216,7 @@ pub fn build_config(
     jwt_secret: String,
     no_signup: bool,
     csp_nonce: bool,
+    ip_header: Option<ClientIpHeader>,
 ) -> ServerConfig {
     let secure_cookies = rp_origin.scheme() == "https";
 
@@ -228,6 +229,7 @@ pub fn build_config(
         secure_cookies,
         no_signup,
         csp_nonce,
+        ip_header,
     }
 }
 

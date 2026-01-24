@@ -21,6 +21,7 @@ async fn create_test_app() -> axum::Router {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     create_app(&config)
 }
@@ -126,6 +127,7 @@ async fn test_create_user_duplicate() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -175,6 +177,7 @@ async fn test_delete_user_success() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -266,6 +269,7 @@ async fn test_delete_activated_user_requires_auth() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -306,6 +310,7 @@ async fn test_delete_activated_user_self() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -351,6 +356,7 @@ async fn test_delete_activated_user_other_forbidden() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -404,6 +410,7 @@ async fn test_delete_activated_user_admin() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -460,6 +467,7 @@ async fn test_register_start_default_authenticator_type() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -512,6 +520,7 @@ async fn test_register_start_passkey_authenticator_type() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -566,6 +575,7 @@ async fn test_register_start_security_key_authenticator_type() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -621,6 +631,7 @@ async fn test_create_user_with_base_path() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -653,6 +664,7 @@ async fn test_no_signup_blocks_user_creation() {
         secure_cookies: false,
         no_signup: true,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -711,6 +723,7 @@ async fn test_config_endpoint_returns_no_signup_true() {
         secure_cookies: false,
         no_signup: true,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 
@@ -754,6 +767,7 @@ async fn test_no_signup_allows_delete_user() {
         secure_cookies: false,
         no_signup: true,
         csp_nonce: false,
+        ip_header: None,
     };
     let app = create_app(&config);
 

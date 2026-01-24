@@ -51,6 +51,7 @@ async fn main() {
         jwt_secret,
         args.no_signup,
         args.csp_nonce,
+        args.ip_header,
     );
     let app = create_app(&config);
 
