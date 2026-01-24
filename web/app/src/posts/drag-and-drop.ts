@@ -15,6 +15,17 @@ import {
 import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
 import { getSiblings } from "./state.ts";
 
+// UUID v4 regex pattern
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validate that a string is a valid UUID v4 format.
+ */
+function isValidUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 type ReorderCallback = (
   parentId: string | null,
   fromIndex: number,
@@ -73,6 +84,18 @@ export function initDragAndDrop(
     const uuid = item.getAttribute("data-uuid") ?? "";
     const parentId = item.getAttribute("data-parent-id") || null;
 
+    // Validate UUID before using
+    if (!isValidUuid(uuid)) {
+      console.warn("Invalid UUID in drag-and-drop item:", uuid);
+      continue;
+    }
+
+    // Validate parent ID if present
+    if (parentId && !isValidUuid(parentId)) {
+      console.warn("Invalid parent UUID in drag-and-drop item:", parentId);
+      continue;
+    }
+
     // Make each item draggable
     const dragCleanup = draggable({
       element: item,
@@ -101,6 +124,14 @@ export function initDragAndDrop(
       getData: ({ input, element }) => {
         const targetUuid = element.getAttribute("data-uuid") ?? "";
         const targetParentId = element.getAttribute("data-parent-id") || null;
+
+        // Validate UUIDs
+        if (!isValidUuid(targetUuid)) {
+          return {};
+        }
+        if (targetParentId && !isValidUuid(targetParentId)) {
+          return {};
+        }
 
         // Get index within siblings
         const siblings = getSiblings(targetUuid);
@@ -152,6 +183,20 @@ export function initDragAndDrop(
       const toUuid = destination.data.uuid as string;
       const toParentId = destination.data.parentId as string | null;
       const toIndex = destination.data.index as number;
+
+      // Validate all UUIDs before processing
+      if (!isValidUuid(fromUuid) || !isValidUuid(toUuid)) {
+        console.warn("Invalid UUID in drag-and-drop operation");
+        return;
+      }
+      if (fromParentId && !isValidUuid(fromParentId)) {
+        console.warn("Invalid from parent UUID in drag-and-drop operation");
+        return;
+      }
+      if (toParentId && !isValidUuid(toParentId)) {
+        console.warn("Invalid to parent UUID in drag-and-drop operation");
+        return;
+      }
 
       // Get drop mode based on last input position
       const targetElement = destination.element as HTMLElement;

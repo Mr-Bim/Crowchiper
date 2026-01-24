@@ -2,6 +2,8 @@
  * Toast notification for displaying errors to the user.
  */
 
+import { getOptionalElement } from "../../shared/dom.ts";
+
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 let currentCloseHandler: (() => void) | null = null;
 
@@ -21,13 +23,9 @@ function hideToast(toast: HTMLElement): void {
  * The toast auto-hides after 5 seconds, or can be dismissed manually.
  */
 export function showError(message: string): void {
-  const toast = document.getElementById("error-toast") as HTMLElement;
-  const messageEl = document.getElementById(
-    "error-toast-message",
-  ) as HTMLElement;
-  const closeBtn = document.getElementById(
-    "error-toast-close",
-  ) as HTMLButtonElement;
+  const toast = getOptionalElement("error-toast");
+  const messageEl = getOptionalElement("error-toast-message");
+  const closeBtn = getOptionalElement("error-toast-close", HTMLButtonElement);
 
   if (!toast || !messageEl || !closeBtn) {
     console.error("Error toast elements not found");

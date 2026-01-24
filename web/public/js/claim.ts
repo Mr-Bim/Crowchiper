@@ -4,6 +4,7 @@ import {
   startRegistration,
 } from "@simplewebauthn/browser";
 import { getErrorMessage } from "./api-utils.ts";
+import { getRequiredElement } from "../../shared/dom.ts";
 
 declare const API_PATH: string;
 declare const LOGIN_PATH: string;
@@ -120,11 +121,9 @@ async function reclaimAccount(): Promise<void> {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const titleEl = document.getElementById("claim-title") as HTMLHeadingElement;
-  const statusEl = document.getElementById("status") as HTMLParagraphElement;
-  const claimButton = document.getElementById(
-    "claim-button",
-  ) as HTMLButtonElement;
+  const titleEl = getRequiredElement("claim-title", HTMLHeadingElement);
+  const statusEl = getRequiredElement("status", HTMLParagraphElement);
+  const claimButton = getRequiredElement("claim-button", HTMLButtonElement);
 
   const params = new URLSearchParams(window.location.search);
   const uuid = params.get("uuid");

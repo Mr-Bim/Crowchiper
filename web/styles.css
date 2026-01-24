@@ -1,3 +1,34 @@
+/*
+ * CSS Custom Properties Reference
+ *
+ * CORE COLORS (theme-aware):
+ *   --accent          Primary action color (buttons, links)
+ *   --accent-hover    Hover state for accent
+ *   --bg              Page background
+ *   --surface         Card/panel background
+ *   --text            Primary text color
+ *   --text-muted      Secondary/dimmed text
+ *   --border          Border/divider color
+ *
+ * SEMANTIC COLORS:
+ *   --error-bg, --error-text, --error-border    Error states
+ *   --success-bg, --success-border              Success states
+ *   --failure-bg, --failure-border              Failure states
+ *   --warning, --warning-hover, --warning-text  Warning buttons
+ *   --info, --info-hover                        Info buttons
+ *   --ok, --ok-hover                            Success/confirm buttons
+ *
+ * NAMING CONVENTIONS:
+ *   - Base color: --name (e.g., --accent)
+ *   - Hover variant: --name-hover
+ *   - Background: --name-bg
+ *   - Text on background: --name-text
+ *   - Border: --name-border
+ *
+ * THEMES: warm-light (default), scandi-dark, paper-light, paper-dark
+ * Theme is applied via data-theme attribute on <html>
+ */
+
 :root {
     /* Orange accent */
     --accent: oklch(0.67 0.16 55);

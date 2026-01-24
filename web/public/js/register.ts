@@ -1,5 +1,6 @@
 import { startRegistration } from "@simplewebauthn/browser";
 import { getErrorMessage } from "./api-utils.ts";
+import { getOptionalElement, getRequiredElement } from "../../shared/dom.ts";
 
 declare const API_PATH: string;
 declare const LOGIN_PATH: string;
@@ -144,22 +145,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Update login link with correct base path
-  const loginLink = document.getElementById("login-link");
+  const loginLink = getOptionalElement("login-link");
   if (loginLink) {
     loginLink.setAttribute("href", `${LOGIN_PATH}/index.html`);
   }
 
   // Show authenticator type selection only on Android
-  const authTypeFieldset = document.getElementById("auth-type-fieldset");
+  const authTypeFieldset = getOptionalElement("auth-type-fieldset");
   if (authTypeFieldset && isAndroid()) {
     authTypeFieldset.hidden = false;
   }
 
-  const usernameInput = document.getElementById("username") as HTMLInputElement;
-  const registerButton = document.getElementById(
+  const usernameInput = getRequiredElement("username", HTMLInputElement);
+  const registerButton = getRequiredElement(
     "register-button",
-  ) as HTMLButtonElement;
-  const errorMessage = document.getElementById("error-message");
+    HTMLButtonElement,
+  );
+  const errorMessage = getOptionalElement("error-message");
 
   let isLoading = false;
   registerButton.disabled = false;
@@ -180,7 +182,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const handleRegister = async () => {
     if (isLoading) return;
 
-    const username = usernameInput?.value.trim();
+    const username = usernameInput.value.trim();
     if (username) {
       hideError();
       isLoading = true;
@@ -212,17 +214,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   // Register button click
-  registerButton?.addEventListener("click", handleRegister);
+  registerButton.addEventListener("click", handleRegister);
 
   // Enter key in username input
-  usernameInput?.addEventListener("keydown", (e) => {
+  usernameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       handleRegister();
     }
   });
 
   // Hide error when user starts typing
-  usernameInput?.addEventListener("input", hideError);
+  usernameInput.addEventListener("input", hideError);
 
   // Free claimed username when leaving the page
   window.addEventListener("beforeunload", () => {

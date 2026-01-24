@@ -11,6 +11,16 @@ export const ENCRYPTED_FORMAT_VERSION = 1;
 // Test mode flag - replaced at build time by Vite
 declare const __TEST_MODE__: boolean;
 
+/**
+ * Securely clear an ArrayBuffer by overwriting with random data.
+ * This helps prevent sensitive data from lingering in memory.
+ * Note: Due to JavaScript's memory model, this is best-effort only.
+ */
+export function secureClear(buffer: ArrayBuffer): void {
+  const view = new Uint8Array(buffer);
+  crypto.getRandomValues(view);
+}
+
 export interface EncryptedData {
   ciphertext: string; // base64url encoded
   iv: string; // base64url encoded
@@ -18,38 +28,44 @@ export interface EncryptedData {
 
 /**
  * Derive a 256-bit AES key from PRF output using HKDF-SHA256.
+ * Clears the PRF output buffer after deriving the key.
  */
 export async function deriveEncryptionKeyFromPrf(
   prfOutput: ArrayBuffer,
 ): Promise<CryptoKey> {
-  // Import PRF output as raw key material for HKDF
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    prfOutput,
-    "HKDF",
-    false,
-    ["deriveKey"],
-  );
+  try {
+    // Import PRF output as raw key material for HKDF
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      prfOutput,
+      "HKDF",
+      false,
+      ["deriveKey"],
+    );
 
-  // Derive AES-256-GCM key using HKDF
-  const salt = new TextEncoder().encode("crowchiper-encryption-key-v1");
-  const info = new TextEncoder().encode("posts-encryption-key");
+    // Derive AES-256-GCM key using HKDF
+    const salt = new TextEncoder().encode("crowchiper-encryption-key-v1");
+    const info = new TextEncoder().encode("posts-encryption-key");
 
-  return crypto.subtle.deriveKey(
-    {
-      name: "HKDF",
-      salt,
-      info,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    {
-      name: "AES-GCM",
-      length: 256,
-    },
-    false, // not extractable
-    ["encrypt", "decrypt"],
-  );
+    return await crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        salt,
+        info,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      {
+        name: "AES-GCM",
+        length: 256,
+      },
+      false, // not extractable
+      ["encrypt", "decrypt"],
+    );
+  } finally {
+    // Clear PRF output from memory (best-effort)
+    secureClear(prfOutput);
+  }
 }
 
 /**
@@ -233,6 +249,7 @@ export async function encryptBinary(
 
 /**
  * Decrypt binary data using AES-256-GCM.
+ * Clears the ciphertext buffer after decryption.
  * @param ciphertext - encrypted binary data
  * @param iv - base64url-encoded initialization vector
  * @param key - the decryption key
@@ -244,14 +261,19 @@ export async function decryptBinary(
 ): Promise<ArrayBuffer> {
   const ivBuffer = base64UrlToArrayBuffer(iv);
 
-  return crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: ivBuffer,
-    },
-    key,
-    ciphertext,
-  );
+  try {
+    return await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: ivBuffer,
+      },
+      key,
+      ciphertext,
+    );
+  } finally {
+    // Clear ciphertext from memory (best-effort)
+    secureClear(ciphertext);
+  }
 }
 
 /**

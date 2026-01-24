@@ -22,6 +22,7 @@ import {
 } from "../heic-convert.ts";
 import { showError } from "../../toast.ts";
 import { GALLERY_PATTERN } from "./patterns.ts";
+import { getRequiredElement } from "../../../../shared/dom.ts";
 
 /**
  * Check if a file is a HEIC/HEIF image.
@@ -190,13 +191,7 @@ export async function processAndUploadFile(
 
 /** Get the hidden file input element from the DOM */
 function getFileInput(): HTMLInputElement {
-  const input = document.getElementById(
-    "image-upload-input",
-  ) as HTMLInputElement;
-  if (!input) {
-    throw new Error("File input element not found");
-  }
-  return input;
+  return getRequiredElement("image-upload-input", HTMLInputElement);
 }
 
 /** Current upload handler - replaced each time we trigger an upload */

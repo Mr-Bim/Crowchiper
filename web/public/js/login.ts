@@ -3,6 +3,7 @@ import {
   startAuthentication,
 } from "@simplewebauthn/browser";
 import { fetchWithRetry, getErrorMessage } from "./api-utils.ts";
+import { getOptionalElement, getRequiredElement } from "../../shared/dom.ts";
 
 declare const API_PATH: string;
 declare const APP_PATH: string;
@@ -134,24 +135,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const config = await getConfig();
 
   // Update register link with correct base path, show only if signups are enabled
-  const registerLink = document.getElementById("register-link");
-  if (registerLink) {
-    if (!config.no_signup) {
-      registerLink.setAttribute("href", `${LOGIN_PATH}/register.html`);
-      registerLink.setAttribute("data-visible", "");
-    }
+  const registerLink = getOptionalElement("register-link");
+  if (registerLink && !config.no_signup) {
+    registerLink.setAttribute("href", `${LOGIN_PATH}/register.html`);
+    registerLink.setAttribute("data-visible", "");
   }
 
-  const usernameInput = document.getElementById("username") as HTMLInputElement;
-  const loginButton = document.getElementById(
-    "login-button",
-  ) as HTMLButtonElement;
-  const passkeyButton = document.getElementById(
-    "passkey-button",
-  ) as HTMLButtonElement;
-  const errorMessage = document.getElementById(
-    "error-message",
-  ) as HTMLDivElement;
+  const usernameInput = getRequiredElement("username", HTMLInputElement);
+  const loginButton = getRequiredElement("login-button", HTMLButtonElement);
+  const passkeyButton = getOptionalElement("passkey-button", HTMLButtonElement);
+  const errorMessage = getOptionalElement("error-message", HTMLDivElement);
 
   let isLoading = false;
 
@@ -191,7 +184,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     hideError();
 
-    const username = usernameInput?.value.trim();
+    const username = usernameInput.value.trim();
     if (!username) {
       showError("Please enter your username");
       return;
@@ -258,18 +251,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   // Login button click (with username)
-  loginButton?.addEventListener("click", handleLogin);
+  loginButton.addEventListener("click", handleLogin);
 
   // Passkey button click (without username)
   passkeyButton?.addEventListener("click", handlePasskeyLogin);
 
   // Enter key in username input
-  usernameInput?.addEventListener("keydown", (e) => {
+  usernameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       handleLogin();
     }
   });
 
   // Clear error when user starts typing
-  usernameInput?.addEventListener("input", hideError);
+  usernameInput.addEventListener("input", hideError);
 });

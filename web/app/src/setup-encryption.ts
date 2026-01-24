@@ -19,6 +19,7 @@ import {
 } from "./api/encryption-settings.ts";
 import { getErrorMessage } from "./api/utils.ts";
 import { extractPrfOutput } from "./crypto/operations.ts";
+import { getRequiredElement } from "../../shared/dom.ts";
 
 declare const API_PATH: string;
 declare const APP_PATH: string;
@@ -29,22 +30,22 @@ declare const __TEST_MODE__: boolean;
 
 function getElements() {
   return {
-    stepPrfTest: document.getElementById("step-prf-test") as HTMLDivElement,
-    stepPrfSupported: document.getElementById(
-      "step-prf-supported",
-    ) as HTMLDivElement,
-    stepNoPrf: document.getElementById("step-no-prf") as HTMLDivElement,
-    testPrfBtn: document.getElementById("test-prf-btn") as HTMLButtonElement,
-    skipBtn: document.getElementById("skip-btn") as HTMLButtonElement,
-    enableEncryptionBtn: document.getElementById(
+    stepPrfTest: getRequiredElement("step-prf-test", HTMLDivElement),
+    stepPrfSupported: getRequiredElement("step-prf-supported", HTMLDivElement),
+    stepNoPrf: getRequiredElement("step-no-prf", HTMLDivElement),
+    testPrfBtn: getRequiredElement("test-prf-btn", HTMLButtonElement),
+    skipBtn: getRequiredElement("skip-btn", HTMLButtonElement),
+    enableEncryptionBtn: getRequiredElement(
       "enable-encryption-btn",
-    ) as HTMLButtonElement,
-    skipEncryptionBtn: document.getElementById(
+      HTMLButtonElement,
+    ),
+    skipEncryptionBtn: getRequiredElement(
       "skip-encryption-btn",
-    ) as HTMLButtonElement,
-    prfError: document.getElementById("prf-error") as HTMLDivElement,
-    enableError: document.getElementById("enable-error") as HTMLDivElement,
-    continueLink: document.getElementById("continue-link") as HTMLAnchorElement,
+      HTMLButtonElement,
+    ),
+    prfError: getRequiredElement("prf-error", HTMLDivElement),
+    enableError: getRequiredElement("enable-error", HTMLDivElement),
+    continueLink: getRequiredElement("continue-link", HTMLAnchorElement),
   };
 }
 

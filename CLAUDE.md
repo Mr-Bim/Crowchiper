@@ -211,8 +211,24 @@ Shared regex patterns for gallery parsing are in `web/app/src/editor/attachment-
 - `GALLERY_PATTERN` - Match gallery syntax anywhere in text
 - `GALLERY_LINE_PATTERN` - Match gallery syntax on a single line (with ^ anchor)
 - `GALLERY_IMAGE_PATTERN` - Extract individual images from gallery content
+- `sanitizeAltText(alt)` - Sanitize alt text to prevent XSS and formatting issues
 
 Always import and reuse these patterns instead of defining new regex for galleries.
+
+## Security Utilities
+
+### Request Timeouts
+`fetchWithAuth()` in `web/app/src/api/auth.ts` includes a 30-second timeout by default to prevent indefinite hangs. Custom timeout can be passed via `timeoutMs` option.
+
+### UUID Validation
+Drag-and-drop operations validate UUIDs from data attributes before processing to prevent injection attacks. See `isValidUuid()` in `web/app/src/posts/drag-and-drop.ts`.
+
+### Sensitive Buffer Clearing
+`secureClear(buffer)` in `web/app/src/crypto/operations.ts` overwrites ArrayBuffers with random data after use. Used automatically in:
+- `deriveEncryptionKeyFromPrf()` - Clears PRF output after key derivation
+- `decryptBinary()` - Clears ciphertext after decryption
+
+Note: Due to JavaScript's memory model, this is best-effort only.
 
 ## Code Splitting Structure
 
@@ -235,6 +251,21 @@ Utilities used by both the main bundle and lazy chunks. Import from here to avoi
 
 - **`attachment-utils.ts`** - `parseAttachmentUuids()`, `cleanupPendingUploads()`
 - **`image-cache.ts`** - `thumbnailCache`, `fullImageCache`, `clearImageCache()`, `clearImageCacheExcept()`
+- **`index.ts`** - Barrel export for all shared utilities
+
+### DOM Utilities (`web/shared/dom.ts`)
+Type-safe DOM query helpers shared across login and app builds:
+
+- **`getRequiredElement(id, type?)`** - Get element by ID, throws if not found
+- **`getOptionalElement(id, type?)`** - Get element by ID, returns null if not found
+
+```typescript
+// Throws if element doesn't exist or isn't an HTMLButtonElement
+const btn = getRequiredElement("submit-btn", HTMLButtonElement);
+
+// Returns null if element doesn't exist
+const optional = getOptionalElement("maybe-exists");
+```
 
 **Example:**
 ```typescript

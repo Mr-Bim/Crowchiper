@@ -86,10 +86,7 @@ export async function getAttachment(
     throw new Error(errorMsg);
   }
 
-  const iv = response.headers.get("X-Encryption-IV");
-  if (!iv) {
-    throw new Error("Missing X-Encryption-IV header");
-  }
+  const iv = response.headers.get("X-Encryption-IV") ?? "";
 
   const data = await response.arrayBuffer();
   return { data, iv };
@@ -112,10 +109,7 @@ export async function getAttachmentThumbnail(
     throw new Error(errorMsg);
   }
 
-  const iv = response.headers.get("X-Encryption-IV");
-  if (!iv) {
-    throw new Error("Missing X-Encryption-IV header");
-  }
+  const iv = response.headers.get("X-Encryption-IV") ?? "";
 
   const data = await response.arrayBuffer();
   return { data, iv };

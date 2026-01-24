@@ -16,17 +16,31 @@
   }
 
   const appPath = `${base}${assets}`;
-  (window as unknown as Record<string, string>).API_PATH = `${base}/api`;
-  (window as unknown as Record<string, string>).LOGIN_PATH = `${base}/login`;
-  (window as unknown as Record<string, string>).APP_PATH = appPath;
+
+  // Define path constants as non-writable/non-configurable to prevent tampering
+  Object.defineProperty(window, "API_PATH", {
+    value: `${base}/api`,
+    writable: false,
+    configurable: false,
+  });
+  Object.defineProperty(window, "LOGIN_PATH", {
+    value: `${base}/login`,
+    writable: false,
+    configurable: false,
+  });
+  Object.defineProperty(window, "APP_PATH", {
+    value: appPath,
+    writable: false,
+    configurable: false,
+  });
 
   // Provide __assetsPath for Vite's renderBuiltUrl runtime resolution
   // This allows dynamic imports to resolve correctly with runtime base path
-  (
-    window as unknown as Record<string, (filename: string) => string>
-  ).__assetsPath = (filename: string) => {
-    return `${base}${assets}/${filename}`;
-  };
+  Object.defineProperty(window, "__assetsPath", {
+    value: (filename: string) => `${base}${assets}/${filename}`,
+    writable: false,
+    configurable: false,
+  });
 
   // Conditionally fetch config at startup (for login/register pages)
   // Redirect immediately if already authenticated

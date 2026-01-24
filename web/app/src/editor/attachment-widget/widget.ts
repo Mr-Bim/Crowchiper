@@ -20,7 +20,11 @@ import {
   triggerFileInput,
 } from "./upload.ts";
 import { notifyAttachmentChange } from "./index.ts";
-import { GALLERY_PATTERN, GALLERY_IMAGE_PATTERN } from "./patterns.ts";
+import {
+  GALLERY_PATTERN,
+  GALLERY_IMAGE_PATTERN,
+  sanitizeAltText,
+} from "./patterns.ts";
 
 interface GalleryPosition {
   from: number;
@@ -242,7 +246,7 @@ export class GalleryContainerWidget extends WidgetType {
 
     const imgEl = document.createElement("img");
     imgEl.src = src;
-    imgEl.alt = img.alt || "Attached image (click to enlarge)";
+    imgEl.alt = sanitizeAltText(img.alt) || "Attached image (click to enlarge)";
     imgEl.className = "cm-attachment-thumbnail";
     imgEl.title = "Click to view full size";
 
@@ -542,7 +546,7 @@ export class GalleryContainerWidget extends WidgetType {
       if (cached) {
         const imgEl = document.createElement("img");
         imgEl.src = cached;
-        imgEl.alt = img.alt || "Attached image";
+        imgEl.alt = sanitizeAltText(img.alt) || "Attached image";
         imgEl.className = "cm-attachment-full-image";
         imgEl.addEventListener("click", (e) => e.stopPropagation());
         imageContainer.appendChild(imgEl);
@@ -581,7 +585,7 @@ export class GalleryContainerWidget extends WidgetType {
         imageContainer.innerHTML = "";
         const imgEl = document.createElement("img");
         imgEl.src = blobUrl;
-        imgEl.alt = img.alt || "Attached image";
+        imgEl.alt = sanitizeAltText(img.alt) || "Attached image";
         imgEl.className = "cm-attachment-full-image";
         imgEl.addEventListener("click", (e) => e.stopPropagation());
         imageContainer.appendChild(imgEl);

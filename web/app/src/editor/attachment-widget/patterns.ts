@@ -22,4 +22,18 @@ export const GALLERY_PATTERN =
  * Pattern for extracting individual images from gallery content.
  * Groups: [1] = alt text, [2] = UUID
  */
-export const GALLERY_IMAGE_PATTERN = /!\[([^\]]*)\]\(attachment:([a-zA-Z0-9-]+)\)/g;
+export const GALLERY_IMAGE_PATTERN =
+  /!\[([^\]]*)\]\(attachment:([a-zA-Z0-9-]+)\)/g;
+
+/**
+ * Sanitize alt text for safe display.
+ * Removes dangerous characters that could cause issues in HTML or markdown.
+ */
+export function sanitizeAltText(alt: string): string {
+  return alt
+    .replace(/[\r\n\t]/g, " ") // Replace newlines/tabs with space
+    .replace(/[<>]/g, "") // Remove angle brackets (XSS prevention)
+    .replace(/\s+/g, " ") // Collapse multiple spaces
+    .trim()
+    .slice(0, 200); // Limit length
+}
