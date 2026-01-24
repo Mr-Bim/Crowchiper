@@ -18,8 +18,11 @@ import {
   isHeicFile,
   processAndUploadFile,
   triggerFileInput,
+  getProgressText,
+  type UploadProgress,
 } from "./upload.ts";
 import { notifyAttachmentChange } from "./index.ts";
+import type { UploadStage } from "./progress.ts";
 import {
   GALLERY_PATTERN,
   GALLERY_IMAGE_PATTERN,
@@ -347,6 +350,79 @@ export class GalleryContainerWidget extends WidgetType {
     });
   }
 
+  /** Unique ID counter for widget upload placeholders */
+  private static widgetUploadIdCounter = 0;
+
+  /**
+   * Generate a unique upload ID for tracking placeholders within widget.
+   */
+  private generateUploadId(): string {
+    return `widget-upload-${++GalleryContainerWidget.widgetUploadIdCounter}`;
+  }
+
+  /**
+   * Create placeholder text for a given upload ID and stage.
+   */
+  private createPlaceholderText(
+    uploadId: string,
+    stage: UploadStage,
+    percent?: number,
+  ): string {
+    const stageText =
+      stage === "uploading" && percent !== undefined
+        ? `${stage}:${percent}`
+        : stage;
+    return `![${stageText}](attachment:${uploadId})`;
+  }
+
+  /**
+   * Find a placeholder by upload ID in the document.
+   */
+  private findWidgetPlaceholder(
+    view: EditorView,
+    uploadId: string,
+  ): { from: number; to: number; text: string } | null {
+    const doc = view.state.doc.toString();
+    const pattern = new RegExp(
+      `!\\[[^\\]]*\\]\\(attachment:${uploadId}\\)`,
+      "g",
+    );
+    const match = pattern.exec(doc);
+    if (match) {
+      return {
+        from: match.index,
+        to: match.index + match[0].length,
+        text: match[0],
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Update a placeholder with new progress state.
+   */
+  private updateWidgetPlaceholder(
+    view: EditorView,
+    uploadId: string,
+    stage: UploadStage,
+    percent?: number,
+  ): boolean {
+    const placeholder = this.findWidgetPlaceholder(view, uploadId);
+    if (!placeholder) return false;
+
+    const newText = this.createPlaceholderText(uploadId, stage, percent);
+    if (newText !== placeholder.text) {
+      view.dispatch({
+        changes: {
+          from: placeholder.from,
+          to: placeholder.to,
+          insert: newText,
+        },
+      });
+    }
+    return true;
+  }
+
   private async addSingleImage(
     view: EditorView,
     file: File,
@@ -359,11 +435,17 @@ export class GalleryContainerWidget extends WidgetType {
       return;
     }
 
-    // Use "converting" state for HEIC files, "pending" for others
-    const initialState = isHeicFile(file) ? "converting" : "pending";
-    const initialAlt =
-      initialState === "converting" ? "converting..." : "uploading...";
-    const loadingPlaceholder = `![${initialAlt}](attachment:${initialState})`;
+    // Generate unique ID for this upload
+    const uploadId = this.generateUploadId();
+
+    // Initial stage: converting for HEIC, compressing for others
+    const initialStage: UploadStage = isHeicFile(file)
+      ? "converting"
+      : "compressing";
+    const loadingPlaceholder = this.createPlaceholderText(
+      uploadId,
+      initialStage,
+    );
 
     // Insert loading placeholder before the closing ::
     const insertPos = gallery.to - 2;
@@ -371,45 +453,27 @@ export class GalleryContainerWidget extends WidgetType {
       changes: { from: insertPos, to: insertPos, insert: loadingPlaceholder },
     });
 
-    // Track current state for cleanup and cancellation check
-    let currentState: "converting" | "pending" = initialState;
-
-    // Helper to check if placeholder still exists
-    const placeholderExists = () =>
-      findImageInGallery(view.state.doc, currentState) !== null;
-
     try {
       const uuid = await processAndUploadFile(file, {
-        onStateChange: (newState) => {
-          // Update placeholder when state changes (converting -> pending)
-          if (newState === "pending" && initialState === "converting") {
-            const placeholderPos = findImageInGallery(
-              view.state.doc,
-              "converting",
-            );
-            if (placeholderPos) {
-              view.dispatch({
-                changes: {
-                  from: placeholderPos.from,
-                  to: placeholderPos.to,
-                  insert: "![uploading...](attachment:pending)",
-                },
-              });
-              currentState = "pending";
-            }
-          }
+        onProgress: (progress) => {
+          this.updateWidgetPlaceholder(
+            view,
+            uploadId,
+            progress.stage,
+            progress.percent,
+          );
         },
-        isCancelled: () => !placeholderExists(),
+        isCancelled: () => this.findWidgetPlaceholder(view, uploadId) === null,
       });
 
       if (uuid === null) {
         // User cancelled or placeholder deleted - clean up if still exists
-        const placeholderPos = findImageInGallery(view.state.doc, currentState);
-        if (placeholderPos) {
+        const placeholder = this.findWidgetPlaceholder(view, uploadId);
+        if (placeholder) {
           view.dispatch({
             changes: {
-              from: placeholderPos.from,
-              to: placeholderPos.to,
+              from: placeholder.from,
+              to: placeholder.to,
               insert: "",
             },
           });
@@ -417,14 +481,14 @@ export class GalleryContainerWidget extends WidgetType {
         return;
       }
 
-      // Find the placeholder and replace it with the real UUID
-      const placeholderPos = findImageInGallery(view.state.doc, "pending");
-      if (placeholderPos) {
+      // Replace the placeholder with the real UUID
+      const placeholder = this.findWidgetPlaceholder(view, uploadId);
+      if (placeholder) {
         const newImage = `![image](attachment:${uuid})`;
         view.dispatch({
           changes: {
-            from: placeholderPos.from,
-            to: placeholderPos.to,
+            from: placeholder.from,
+            to: placeholder.to,
             insert: newImage,
           },
         });
@@ -432,12 +496,12 @@ export class GalleryContainerWidget extends WidgetType {
       }
     } catch {
       // Remove the placeholder on error if it still exists
-      const placeholderPos = findImageInGallery(view.state.doc, currentState);
-      if (placeholderPos) {
+      const placeholder = this.findWidgetPlaceholder(view, uploadId);
+      if (placeholder) {
         view.dispatch({
           changes: {
-            from: placeholderPos.from,
-            to: placeholderPos.to,
+            from: placeholder.from,
+            to: placeholder.to,
             insert: "",
           },
         });
