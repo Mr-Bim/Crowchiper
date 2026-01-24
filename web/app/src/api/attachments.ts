@@ -17,6 +17,14 @@ declare const LOGIN_PATH: string;
 // Re-export types for convenience
 export type { UploadAttachmentResponse };
 
+/** Error thrown when an attachment is not found (404) */
+export class AttachmentNotFoundError extends Error {
+  constructor(uuid: string) {
+    super(`Attachment not found: ${uuid}`);
+    this.name = "AttachmentNotFoundError";
+  }
+}
+
 export interface UploadAttachmentRequest {
   image: ArrayBuffer;
   image_iv: string;
@@ -81,17 +89,51 @@ export async function uploadAttachment(
   return validate(UploadAttachmentResponseSchema, data, "upload response");
 }
 
+/** Error thrown when upload is aborted */
+export class UploadAbortedError extends Error {
+  constructor() {
+    super("Upload aborted");
+    this.name = "UploadAbortedError";
+  }
+}
+
+/** Options for upload with progress */
+export interface UploadWithProgressOptions {
+  onProgress: UploadProgressCallback;
+  signal?: AbortSignal;
+}
+
 /**
  * Upload an encrypted attachment with progress tracking.
  * Uses XMLHttpRequest for upload progress events.
+ * Supports abort via AbortSignal.
  */
 export function uploadAttachmentWithProgress(
   req: UploadAttachmentRequest,
-  onProgress: UploadProgressCallback,
+  options: UploadWithProgressOptions,
 ): Promise<UploadAttachmentResponse> {
+  const { onProgress, signal } = options;
+
   return new Promise((resolve, reject) => {
+    // Check if already aborted
+    if (signal?.aborted) {
+      reject(new UploadAbortedError());
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
     const formData = buildUploadFormData(req);
+
+    // Handle abort signal
+    const abortHandler = () => {
+      xhr.abort();
+      reject(new UploadAbortedError());
+    };
+    signal?.addEventListener("abort", abortHandler);
+
+    const cleanup = () => {
+      signal?.removeEventListener("abort", abortHandler);
+    };
 
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) {
@@ -101,6 +143,7 @@ export function uploadAttachmentWithProgress(
     });
 
     xhr.addEventListener("load", () => {
+      cleanup();
       if (xhr.status === 401) {
         window.location.href = LOGIN_PATH;
         reject(new Error("Authentication required"));
@@ -125,11 +168,18 @@ export function uploadAttachmentWithProgress(
     });
 
     xhr.addEventListener("error", () => {
+      cleanup();
       reject(new Error("Network error during upload"));
     });
 
     xhr.addEventListener("timeout", () => {
+      cleanup();
       reject(new Error("Upload timed out"));
+    });
+
+    xhr.addEventListener("abort", () => {
+      cleanup();
+      // Don't reject here - abortHandler already did
     });
 
     xhr.open("POST", `${API_PATH}/attachments`);
@@ -165,6 +215,7 @@ export async function getAttachment(
 /**
  * Get a single encrypted thumbnail by attachment UUID and size.
  * Returns the encrypted data and IV from header.
+ * Throws AttachmentNotFoundError if the attachment doesn't exist.
  */
 export async function getAttachmentThumbnail(
   uuid: string,
@@ -175,6 +226,9 @@ export async function getAttachmentThumbnail(
   );
 
   if (!response.ok) {
+    if (response.status === 404) {
+      throw new AttachmentNotFoundError(uuid);
+    }
     const errorMsg = await getErrorMessage(response, "Failed to get thumbnail");
     throw new Error(errorMsg);
   }

@@ -9,7 +9,10 @@ import {
   decryptPostContent,
   decryptPostTitle,
 } from "../crypto/post-encryption.ts";
-import { cleanupPendingUploads } from "../shared/attachment-utils.ts";
+import {
+  cleanupPendingUploads,
+  abortAllUploads,
+} from "../shared/attachment-utils.ts";
 import { applySpellcheckToEditor } from "../spellcheck.ts";
 import {
   getEditor,
@@ -35,6 +38,9 @@ const editorPromise = import("../editor/setup.ts");
  * Select a post for editing.
  */
 export async function selectPost(postNode: PostNode): Promise<void> {
+  // Abort any active uploads before switching
+  abortAllUploads();
+
   // Save current post to server before switching (includes attachment refs)
   stopServerSaveInterval();
   await saveToServerNow();

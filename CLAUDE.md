@@ -215,6 +215,67 @@ Shared regex patterns for gallery parsing are in `web/app/src/editor/attachment-
 
 Always import and reuse these patterns instead of defining new regex for galleries.
 
+## Upload Progress Feedback
+
+Image uploads display granular progress through multiple stages:
+
+### Progress Stages (`web/app/src/editor/attachment-widget/progress.ts`)
+1. **Converting** - HEIC to WebP conversion (HEIC files only)
+2. **Compressing** - Image compression and thumbnail generation
+3. **Encrypting** - Encrypting image and thumbnails (if encryption enabled)
+4. **Uploading** - Network upload with percentage (0-100%)
+
+### HEIC Conversion
+HEIC files (Apple's image format) require conversion to WebP before upload:
+- **Warning modal** - Shows before conversion with estimated time (10-30 seconds per image)
+- **Abort button** - X button on image placeholder to cancel conversion/upload
+- **Lazy-loaded** - The `heic-to` library (2.5MB) is only loaded when HEIC files are detected
+- **Key file**: `heic-convert.ts` - `convertHeicIfNeeded()`, `showHeicConversionModal()`
+
+### Placeholder Format
+During upload, a temporary placeholder is inserted in the editor:
+```
+![stage](attachment:upload-N)
+![uploading:45](attachment:upload-N)
+```
+- `upload-N` or `widget-upload-N` - Unique ID for tracking
+- Alt text contains stage name or `uploading:percent`
+
+### Upload Abort/Cleanup
+Uploads can be aborted when switching posts or cleaning up:
+- `abortAllUploads()` - Aborts all active uploads (called in `selectPost()`)
+- `registerUpload(id)` / `unregisterUpload(id)` - Track active uploads
+- `cleanupPendingUploads(content)` - Removes placeholder text from content
+
+All abort functions are in `web/app/src/shared/attachment-utils.ts` to avoid pulling editor chunk into main bundle.
+
+### Key Files
+- **`shared/attachment-utils.ts`** - Upload tracking, abort, cleanup functions
+- **`progress.ts`** - Progress types and `getProgressText()` helper
+- **`upload.ts`** - `processAndUploadFile()` with `onProgress` and `signal` for abort
+- **`widget.ts`** - `renderImage()` parses placeholder, displays progress, adds abort button
+- **`api/attachments.ts`** - `uploadAttachmentWithProgress()` uses XMLHttpRequest with AbortSignal
+- **`heic-convert.ts`** - HEIC detection, conversion, warning modal
+
+### Adding Progress to Custom Uploads
+```typescript
+import { processAndUploadFile, type UploadProgress } from "./upload.ts";
+import { registerUpload, unregisterUpload } from "../../shared/attachment-utils.ts";
+
+const uploadId = "my-upload-1";
+const controller = registerUpload(uploadId);
+
+const uuid = await processAndUploadFile(file, {
+  onProgress: (progress: UploadProgress) => {
+    console.log(progress.stage, progress.percent);
+  },
+  isCancelled: () => false,
+  signal: controller.signal,
+});
+
+unregisterUpload(uploadId);
+```
+
 ## Security Utilities
 
 ### Request Timeouts
@@ -224,7 +285,7 @@ Always import and reuse these patterns instead of defining new regex for galleri
 Drag-and-drop operations validate UUIDs from data attributes before processing to prevent injection attacks. See `isValidUuid()` in `web/app/src/posts/drag-and-drop.ts`.
 
 ### Sensitive Buffer Clearing
-`secureClear(buffer)` in `web/app/src/crypto/operations.ts` overwrites ArrayBuffers with random data after use. Used automatically in:
+`secureClear(buffer)` in `web/app/src/crypto/operations.ts` overwrites ArrayBuffers with zeros after use. Used automatically in:
 - `deriveEncryptionKeyFromPrf()` - Clears PRF output after key derivation
 - `decryptBinary()` - Clears ciphertext after decryption
 
