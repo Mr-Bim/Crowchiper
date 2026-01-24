@@ -48,6 +48,8 @@ pub struct ServerConfig {
     pub no_signup: bool,
     /// Whether to add a random nonce to CSP headers for each HTML response
     pub csp_nonce: bool,
+    /// Header to extract client IP from (requires running behind a proxy)
+    pub ip_header: Option<cli::ClientIpHeader>,
 }
 
 /// Leak a String to get a &'static str. Used for paths that live for the program lifetime.
@@ -121,15 +123,17 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.db.clone(),
         config.secure_cookies,
         config.csp_nonce,
+        config.ip_header.clone(),
     )
     .expect("Failed to initialize assets");
 
     let api_router = create_api_router(
         config.db.clone(),
         webauthn,
-        jwt,
+        jwt.clone(),
         config.secure_cookies,
         config.no_signup,
+        config.ip_header.clone(),
     )
     .layer(middleware::from_fn(add_access_token_cookie));
 

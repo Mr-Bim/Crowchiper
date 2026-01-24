@@ -23,6 +23,7 @@ fn mime_from_path(path: &str) -> &'static str {
 use crate::auth::{
     ACCESS_COOKIE_NAME, AssetAuth, HasAssetAuthState, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
 };
+use crate::cli::ClientIpHeader;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
@@ -59,6 +60,8 @@ pub struct AssetsState {
     pub secure_cookies: bool,
     /// Whether to add a random nonce to CSP headers
     pub csp_nonce: bool,
+    /// Header to extract client IP from
+    pub ip_header: Option<ClientIpHeader>,
 }
 
 impl HasAuthState for AssetsState {
@@ -72,6 +75,10 @@ impl HasAuthState for AssetsState {
 
     fn secure_cookies(&self) -> bool {
         self.secure_cookies
+    }
+
+    fn ip_header(&self) -> Option<&ClientIpHeader> {
+        self.ip_header.as_ref()
     }
 }
 
@@ -94,6 +101,7 @@ impl AssetsState {
         db: Database,
         secure_cookies: bool,
         csp_nonce: bool,
+        ip_header: Option<ClientIpHeader>,
     ) -> Result<Self, &'static str> {
         // Get login index HTML - use processed version if available, otherwise raw
         let login_index_html = if let Some(&html) = processed_login_html.get("index.html") {
@@ -116,6 +124,7 @@ impl AssetsState {
             db,
             secure_cookies,
             csp_nonce,
+            ip_header,
         })
     }
 

@@ -18,6 +18,14 @@ pub enum LogFormat {
     Compact,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum ClientIpHeader {
+    CFConnectingIP,
+    XRealIp,
+    XForwardFor,
+    Forward,
+}
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "Crowchiper",
@@ -63,6 +71,10 @@ pub struct Args {
     /// Log output format
     #[arg(short, long, default_value = "pretty")]
     pub log_format: LogFormat,
+
+    /// Derive real ip from header (App must be run behind a proxy)
+    #[arg(short, long)]
+    pub ip_header: Option<ClientIpHeader>,
 }
 
 fn validate_base_path(s: &str) -> Result<String, String> {
@@ -204,6 +216,7 @@ pub fn build_config(
     jwt_secret: String,
     no_signup: bool,
     csp_nonce: bool,
+    ip_header: Option<ClientIpHeader>,
 ) -> ServerConfig {
     let secure_cookies = rp_origin.scheme() == "https";
 
@@ -216,6 +229,7 @@ pub fn build_config(
         secure_cookies,
         no_signup,
         csp_nonce,
+        ip_header,
     }
 }
 

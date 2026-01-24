@@ -30,6 +30,7 @@ async fn create_app_with_nonce() -> (axum::Router, Database, JwtConfig) {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: true,
+        ip_header: None,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -48,6 +49,7 @@ async fn create_app_without_nonce() -> axum::Router {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
+        ip_header: None,
     };
     create_app(&config)
 }

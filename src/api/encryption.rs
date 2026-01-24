@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{ActivatedApiAuth, HasAuthState};
+use crate::cli::ClientIpHeader;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
@@ -24,6 +25,7 @@ pub struct EncryptionState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
+    pub ip_header: Option<ClientIpHeader>,
 }
 
 impl HasAuthState for EncryptionState {
@@ -35,6 +37,9 @@ impl HasAuthState for EncryptionState {
     }
     fn secure_cookies(&self) -> bool {
         self.secure_cookies
+    }
+    fn ip_header(&self) -> Option<&ClientIpHeader> {
+        self.ip_header.as_ref()
     }
 }
 
