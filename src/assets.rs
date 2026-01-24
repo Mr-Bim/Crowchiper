@@ -7,6 +7,17 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
+/// Get MIME type from file extension. Only supports types we actually serve.
+#[inline]
+fn mime_from_path(path: &str) -> &'static str {
+    match path.rsplit('.').next() {
+        Some("js") => "text/javascript",
+        Some("css") => "text/css",
+        Some("html") => "text/html",
+        _ => "application/octet-stream",
+    }
+}
+
 use crate::auth::{
     ACCESS_COOKIE_NAME, AssetAuth, HasAssetAuthState, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
 };
@@ -186,7 +197,7 @@ const CSP_HEADER: header::HeaderName = header::CONTENT_SECURITY_POLICY;
 fn serve_asset<T: Embed>(path: &str) -> Response {
     match T::get(path) {
         Some(content) => {
-            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            let mime = mime_from_path(path);
             // Hashed assets in /assets/ are immutable, HTML files should not be cached
             let cache_control = if path.starts_with("assets/") {
                 IMMUTABLE_CACHE
@@ -195,7 +206,7 @@ fn serve_asset<T: Embed>(path: &str) -> Response {
             };
             (
                 [
-                    (header::CONTENT_TYPE, mime.as_ref()),
+                    (header::CONTENT_TYPE, mime),
                     (header::CACHE_CONTROL, cache_control),
                 ],
                 content.data,
