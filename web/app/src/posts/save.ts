@@ -7,8 +7,8 @@
 import { updatePost, updatePostBeacon } from "../api/posts.ts";
 import { encryptPostData } from "../crypto/post-encryption.ts";
 import { callRenderPostList } from "./handlers.ts";
-import { parseAttachmentUuids } from "../editor/attachment-widget/utils.ts";
-import { clearImageCacheExcept } from "../editor/attachment-widget/cache.ts";
+import { parseAttachmentUuids } from "../shared/attachment-utils.ts";
+import { clearImageCacheExcept } from "../shared/image-cache.ts";
 import {
   clearSaveTimeout,
   clearServerSaveInterval,

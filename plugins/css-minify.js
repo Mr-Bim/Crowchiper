@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transform } from "lightningcss";
 
@@ -218,15 +219,15 @@ function minifyJsClassNames(js, classMap) {
 }
 
 /**
- * Minify and copy styles.css to dist, returning the set of shared class names
+ * Minify and copy styles.css to dist/assets/ with content hash, returning the set of shared class names
  * @param {string} rootDir - Project root directory
  * @param {string} distDir - Distribution directory
- * @returns {Set<string>} Set of class names from styles.css
+ * @returns {{sharedClasses: Set<string>, hashedFilename: string|null}} Set of class names and hashed filename
  */
 export function processSharedStyles(rootDir, distDir) {
   const stylesPath = join(rootDir, "web", "styles.css");
-  const stylesDistPath = join(distDir, "styles.css");
   let sharedClasses = new Set();
+  let hashedFilename = null;
 
   if (existsSync(stylesPath)) {
     const stylesContent = readFileSync(stylesPath, "utf-8");
@@ -236,11 +237,20 @@ export function processSharedStyles(rootDir, distDir) {
       code: Buffer.from(stylesContent),
       minify: true,
     });
-    writeFileSync(stylesDistPath, code);
-    console.log(`✓ Minified styles.css`);
+
+    // Generate content hash (first 8 chars of SHA-256)
+    const hash = createHash("sha256").update(code).digest("hex").slice(0, 8);
+    hashedFilename = `styles-${hash}.css`;
+
+    // Ensure assets directory exists
+    const assetsDir = join(distDir, "assets");
+    mkdirSync(assetsDir, { recursive: true });
+
+    writeFileSync(join(assetsDir, hashedFilename), code);
+    console.log(`✓ Minified styles.css -> assets/${hashedFilename}`);
   }
 
-  return sharedClasses;
+  return { sharedClasses, hashedFilename };
 }
 
 /**

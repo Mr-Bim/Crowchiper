@@ -25,6 +25,7 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -582,6 +583,7 @@ async fn test_posts_with_base_path() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 

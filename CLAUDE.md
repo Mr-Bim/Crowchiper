@@ -18,15 +18,14 @@ npm run test:all           # Run both test:rust and test:web
 cargo run -- --port 7291 --database crowchiper.db
 cargo run -- --base /app   # With base path for reverse proxy
 cargo run -- --no-signup   # Disable signups
+cargo run -- --csp-nonce   # Add random nonce to CSP headers (for Cloudflare bot detection)
 cargo run --features test-mode  # Run with test mode enabled
 cargo build --release      # Release build (test-mode not included by default)
 ```
 
 ## URL Structure
 
-- `/` redirects to `/login/`
-- `/login/*` - Public login, register, claim pages
-- `/fiery-sparrow/*` - JWT-protected app
+iery-sparrow/*` - JWT-protected app
 - `/api/*` - API endpoints (mixed auth)
 
 With `--base /app`, all paths are prefixed.
@@ -215,6 +214,39 @@ Shared regex patterns for gallery parsing are in `web/app/src/editor/attachment-
 
 Always import and reuse these patterns instead of defining new regex for galleries.
 
+## Code Splitting Structure
+
+The app uses code splitting to keep the initial bundle small (~40KB). Heavy features are lazy-loaded.
+
+### Entry Point (`web/app/src/main.ts`)
+Loaded immediately on page load. Contains:
+- Authentication verification
+- Encryption key management
+- Post list state and rendering
+- Unlock overlay UI
+
+### Lazy-Loaded Chunks
+1. **Editor chunk** (`editor/setup.ts`) - CodeMirror + plugins, loaded when selecting/creating a post
+2. **Attachment widget chunk** (`editor/attachment-widget/index.ts`) - Gallery handling, loaded after posts load
+3. **HEIC converter** (`heic-to` library) - Loaded only when uploading HEIC images
+
+### Shared Utilities (`web/app/src/shared/`)
+Utilities used by both the main bundle and lazy chunks. Import from here to avoid pulling editor dependencies into the main bundle:
+
+- **`attachment-utils.ts`** - `parseAttachmentUuids()`, `cleanupPendingUploads()`
+- **`image-cache.ts`** - `thumbnailCache`, `fullImageCache`, `clearImageCache()`, `clearImageCacheExcept()`
+
+**Example:**
+```typescript
+// GOOD - imports from shared, stays in main bundle
+import { parseAttachmentUuids } from "../shared/attachment-utils.ts";
+
+// AVOID - would pull in editor chunk dependencies
+import { parseAttachmentUuids } from "../editor/attachment-widget/utils.ts";
+```
+
+The `editor/attachment-widget/utils.ts` and `cache.ts` files re-export from shared for backward compatibility within the editor chunk.
+
 ## Save Button
 
 The app header includes a Save button that:
@@ -375,14 +407,23 @@ Vite build plugins are located in the `plugins/` folder. The main orchestrator p
 - **`plugins/sri.js`** - Adds Subresource Integrity hashes to script tags
 - **`plugins/html-utils.js`** - HTML processing utilities (minification, CSS inlining, testid stripping)
 
+### Entry Chunk Size Limit
+The build enforces a **50KB maximum** for the app's main entry chunk (`index-*.js`). This ensures fast initial page loads by keeping the entry point small. If the limit is exceeded, the build fails with an error.
+
+To reduce entry chunk size:
+- Use dynamic `import()` for features not needed on initial load
+- Move shared utilities to `web/app/src/shared/` (keeps them in main bundle but organized)
+- Heavy libraries (CodeMirror, HEIC converter) should be lazy-loaded
+
 ### Processing Order (per HTML file)
-1. Collect and inline CSS files under 20KB
-2. Minify CSS class names (and update JS files with class map)
-3. Inject IIFE script based on markers
-4. Replace asset placeholders
-5. Strip `data-testid` attributes (when not in test mode)
-6. Minify HTML
-7. Add SRI attributes to scripts
+1. Check entry chunk size (app build only, fail if > 50KB)
+2. Collect and inline CSS files under 20KB
+3. Minify CSS class names (and update JS files with class map)
+4. Inject IIFE script based on markers
+5. Replace asset placeholders
+6. Strip `data-testid` attributes (when not in test mode)
+7. Minify HTML
+8. Add SRI attributes to scripts
 
 ### CSP Hashes Output
 After build, script integrity hashes are written to `dist/csp-hashes.json`:

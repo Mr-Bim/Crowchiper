@@ -9,7 +9,7 @@ import {
   decryptPostContent,
   decryptPostTitle,
 } from "../crypto/post-encryption.ts";
-import { cleanupPendingUploads } from "../editor/attachment-widget/utils.ts";
+import { cleanupPendingUploads } from "../shared/attachment-utils.ts";
 import { applySpellcheckToEditor } from "../spellcheck.ts";
 import {
   getEditor,

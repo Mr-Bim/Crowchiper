@@ -56,6 +56,10 @@ pub struct Args {
     #[arg(long)]
     pub no_signup: bool,
 
+    /// Add a random nonce to CSP headers for each HTML response, does not affect script tags
+    #[arg(long)]
+    pub csp_nonce: bool,
+
     /// Log output format
     #[arg(short, long, default_value = "pretty")]
     pub log_format: LogFormat,
@@ -199,6 +203,7 @@ pub fn build_config(
     rp_origin: Url,
     jwt_secret: String,
     no_signup: bool,
+    csp_nonce: bool,
 ) -> ServerConfig {
     let secure_cookies = rp_origin.scheme() == "https";
 
@@ -210,6 +215,7 @@ pub fn build_config(
         jwt_secret: jwt_secret.into_bytes(),
         secure_cookies,
         no_signup,
+        csp_nonce,
     }
 }
 

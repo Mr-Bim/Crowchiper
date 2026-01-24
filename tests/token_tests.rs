@@ -34,6 +34,7 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -412,6 +413,7 @@ async fn test_revoking_one_session_doesnt_affect_others() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -566,6 +568,7 @@ async fn test_user_cannot_revoke_other_users_tokens() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -612,6 +615,7 @@ async fn test_admin_can_revoke_any_users_tokens() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -790,6 +794,7 @@ async fn test_list_tokens_returns_only_own_tokens() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 

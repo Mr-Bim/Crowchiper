@@ -3,12 +3,15 @@
  */
 
 export { createEditor, EditorView } from "./setup.ts";
+export { attachmentPlugin } from "./attachment-widget/index.ts";
 export {
-  attachmentPlugin,
   parseAttachmentUuids,
+  cleanupPendingUploads,
+} from "../shared/attachment-utils.ts";
+export {
   clearImageCache,
   clearImageCacheExcept,
-} from "./attachment-widget/index.ts";
+} from "../shared/image-cache.ts";
 export { checkboxPlugin } from "./checkbox-widget.ts";
 export {
   dateShortcuts,

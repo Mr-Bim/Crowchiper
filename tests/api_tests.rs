@@ -20,6 +20,7 @@ async fn create_test_app() -> axum::Router {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     create_app(&config)
 }
@@ -124,6 +125,7 @@ async fn test_create_user_duplicate() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -172,6 +174,7 @@ async fn test_delete_user_success() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -262,6 +265,7 @@ async fn test_delete_activated_user_requires_auth() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -301,6 +305,7 @@ async fn test_delete_activated_user_self() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -345,6 +350,7 @@ async fn test_delete_activated_user_other_forbidden() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -397,6 +403,7 @@ async fn test_delete_activated_user_admin() {
         jwt_secret,
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -452,6 +459,7 @@ async fn test_register_start_default_authenticator_type() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -503,6 +511,7 @@ async fn test_register_start_passkey_authenticator_type() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -556,6 +565,7 @@ async fn test_register_start_security_key_authenticator_type() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -610,6 +620,7 @@ async fn test_create_user_with_base_path() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: false,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -641,6 +652,7 @@ async fn test_no_signup_blocks_user_creation() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: true,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -698,6 +710,7 @@ async fn test_config_endpoint_returns_no_signup_true() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: true,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 
@@ -740,6 +753,7 @@ async fn test_no_signup_allows_delete_user() {
         jwt_secret: b"test-jwt-secret".to_vec(),
         secure_cookies: false,
         no_signup: true,
+        csp_nonce: false,
     };
     let app = create_app(&config);
 

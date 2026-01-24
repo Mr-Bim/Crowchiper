@@ -92,10 +92,12 @@ export function replaceCssTagWithInline(html, firstCssTag, css) {
  * Inject shared styles.css link at beginning of head
  * @param {string} html - HTML content
  * @param {string} assetsPath - Base path for assets
+ * @param {string} stylesFilename - Hashed styles filename (e.g., "styles-abc12345.css")
  * @returns {string} Updated HTML
  */
-export function injectSharedStylesLink(html, assetsPath) {
-  const stylesLink = `<link rel="stylesheet" href="${assetsPath}/styles.css">`;
+export function injectSharedStylesLink(html, assetsPath, stylesFilename) {
+  if (!stylesFilename) return html;
+  const stylesLink = `<link rel="stylesheet" href="${assetsPath}/assets/${stylesFilename}">`;
   return html.replace("<head>", `<head>${stylesLink}`);
 }
 

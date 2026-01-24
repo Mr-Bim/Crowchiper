@@ -2,6 +2,8 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use rand::RngCore;
 use rust_embed::Embed;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,6 +57,8 @@ pub struct AssetsState {
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
     pub secure_cookies: bool,
+    /// Whether to add a random nonce to CSP headers
+    pub csp_nonce: bool,
 }
 
 impl HasAuthState for AssetsState {
@@ -89,6 +93,7 @@ impl AssetsState {
         jwt: Arc<JwtConfig>,
         db: Database,
         secure_cookies: bool,
+        csp_nonce: bool,
     ) -> Result<Self, &'static str> {
         // Get login index HTML - use processed version if available, otherwise raw
         let login_index_html = if let Some(&html) = processed_login_html.get("index.html") {
@@ -110,6 +115,7 @@ impl AssetsState {
             jwt,
             db,
             secure_cookies,
+            csp_nonce,
         })
     }
 
@@ -193,6 +199,48 @@ const NO_CACHE: &str = "no-cache";
 /// CSP header name
 const CSP_HEADER: header::HeaderName = header::CONTENT_SECURITY_POLICY;
 
+/// Generate a random 128-bit nonce as base64
+fn generate_nonce() -> String {
+    let mut bytes = [0u8; 16];
+    rand::rng().fill_bytes(&mut bytes);
+    BASE64.encode(bytes)
+}
+
+/// Build a CSP header value with an optional nonce added to script-src
+fn csp_with_nonce(base_csp: &str, nonce: &str) -> String {
+    // Insert nonce after script-src directive
+    // The base CSP has format: "... script-src 'hash1' 'hash2' ...; ..."
+    // We want: "... script-src 'nonce-XXX' 'hash1' 'hash2' ...; ..."
+    if let Some(pos) = base_csp.find("script-src ") {
+        let insert_pos = pos + "script-src ".len();
+        let nonce_value = format!("'nonce-{}' ", nonce);
+        let mut result = String::with_capacity(base_csp.len() + nonce_value.len());
+        result.push_str(&base_csp[..insert_pos]);
+        result.push_str(&nonce_value);
+        result.push_str(&base_csp[insert_pos..]);
+        result
+    } else {
+        // Fallback: just return base CSP if script-src not found
+        base_csp.to_string()
+    }
+}
+
+/// Serve an HTML response with CSP header and a random nonce
+#[inline]
+fn html_response_with_csp_nonce(body: &str, base_csp: &str) -> Response {
+    let nonce = generate_nonce();
+    let csp = csp_with_nonce(base_csp, &nonce);
+    (
+        [
+            (header::CONTENT_TYPE, "text/html"),
+            (header::CACHE_CONTROL, NO_CACHE),
+        ],
+        [(CSP_HEADER, csp)],
+        body.to_owned(),
+    )
+        .into_response()
+}
+
 #[inline]
 fn serve_asset<T: Embed>(path: &str) -> Response {
     match T::get(path) {
@@ -232,15 +280,18 @@ fn html_response_with_csp(body: &'static str, csp: &'static str) -> Response {
 }
 
 /// Serve login assets directly (no base path rewriting)
-pub async fn login_handler_direct(path: Option<axum::extract::Path<String>>) -> Response {
+pub async fn login_handler_direct(
+    axum::extract::State(state): axum::extract::State<AssetsState>,
+    path: Option<axum::extract::Path<String>>,
+) -> Response {
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(content) = LoginAssets::get(path) {
-            let html: &'static str = Box::leak(
-                String::from_utf8_lossy(&content.data)
-                    .into_owned()
-                    .into_boxed_str(),
-            );
+            let html = String::from_utf8_lossy(&content.data);
+            if state.csp_nonce {
+                return html_response_with_csp_nonce(&html, LOGIN_CSP_HEADER);
+            }
+            let html: &'static str = Box::leak(html.into_owned().into_boxed_str());
             return html_response_with_csp(html, LOGIN_CSP_HEADER);
         }
     }
@@ -263,6 +314,9 @@ pub async fn login_index_handler(
             return Redirect::temporary(state.app_path).into_response();
         }
     }
+    if state.csp_nonce {
+        return html_response_with_csp_nonce(state.login_index_html, LOGIN_CSP_HEADER);
+    }
     html_response_with_csp(state.login_index_html, LOGIN_CSP_HEADER)
 }
 
@@ -274,6 +328,9 @@ pub async fn login_handler(
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(&processed) = state.processed_login_html.get(path) {
+            if state.csp_nonce {
+                return html_response_with_csp_nonce(processed, LOGIN_CSP_HEADER);
+            }
             return html_response_with_csp(processed, LOGIN_CSP_HEADER);
         }
     }
@@ -282,17 +339,18 @@ pub async fn login_handler(
 
 /// Serve app assets directly (no base path rewriting) - requires auth
 pub async fn app_handler_direct(
+    axum::extract::State(state): axum::extract::State<AssetsState>,
     AssetAuth(_): AssetAuth,
     path: Option<axum::extract::Path<String>>,
 ) -> Response {
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(content) = AppAssets::get(path) {
-            let html: &'static str = Box::leak(
-                String::from_utf8_lossy(&content.data)
-                    .into_owned()
-                    .into_boxed_str(),
-            );
+            let html = String::from_utf8_lossy(&content.data);
+            if state.csp_nonce {
+                return html_response_with_csp_nonce(&html, APP_CSP_HEADER);
+            }
+            let html: &'static str = Box::leak(html.into_owned().into_boxed_str());
             return html_response_with_csp(html, APP_CSP_HEADER);
         }
     }
@@ -308,6 +366,9 @@ pub async fn app_handler(
     let path = normalize_path(path.as_ref());
     if path.ends_with(".html") {
         if let Some(&processed) = state.processed_app_html.get(path) {
+            if state.csp_nonce {
+                return html_response_with_csp_nonce(processed, APP_CSP_HEADER);
+            }
             return html_response_with_csp(processed, APP_CSP_HEADER);
         }
     }

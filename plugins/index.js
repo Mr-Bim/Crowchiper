@@ -1,4 +1,4 @@
-import { globSync, readFileSync, writeFileSync } from "node:fs";
+import { globSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -22,20 +22,24 @@ import {
   deleteFiles,
 } from "./html-utils.js";
 
+// Maximum allowed size for the main entry chunk (in bytes)
+const MAX_ENTRY_SIZE_BYTES = 50 * 1024; // 50KB
+
 /**
  * Main build plugin that orchestrates all post-build processing in the correct order.
  *
  * Processing order for each HTML file:
- * 1. Collect and inline CSS
- * 2. Minify CSS class names (and update JS files)
- * 3. Inject IIFE script
- * 4. Replace asset placeholders
- * 5. Strip test IDs (when not in test mode)
- * 6. Minify HTML
- * 7. Add SRI attributes
+ * 1. Check entry chunk size (fail if over 50KB)
+ * 2. Collect and inline CSS
+ * 3. Minify CSS class names (and update JS files)
+ * 4. Inject IIFE script
+ * 5. Replace asset placeholders
+ * 6. Strip test IDs (when not in test mode)
+ * 7. Minify HTML
+ * 8. Add SRI attributes
  *
  * After all files:
- * 8. Write CSP hashes to dist/csp-hashes.json
+ * 9. Write CSP hashes to dist/csp-hashes.json
  *
  * @param {Object} options
  * @param {string} options.assetsPath - The base path for assets (e.g., "/login" or "/fiery-sparrow")
@@ -60,8 +64,31 @@ export function buildPlugin(options = {}) {
           readFileSync(join(rootDir, "config.json"), "utf-8"),
         );
 
+        // 0. Check entry chunk size (app build only)
+        if (buildType === "app") {
+          const entryChunks = globSync(`${distDir}/assets/index-*.js`);
+          if (entryChunks.length === 1) {
+            const entryChunk = entryChunks[0];
+            const entrySize = statSync(entryChunk).size;
+            const entrySizeKb = (entrySize / 1024).toFixed(2);
+
+            if (entrySize > MAX_ENTRY_SIZE_BYTES) {
+              const maxSizeKb = (MAX_ENTRY_SIZE_BYTES / 1024).toFixed(0);
+              throw new Error(
+                `Entry chunk size (${entrySizeKb} KB) exceeds maximum allowed size (${maxSizeKb} KB).\n` +
+                  `File: ${entryChunk}\n` +
+                  `Consider code-splitting with dynamic imports to reduce the entry chunk size.`,
+              );
+            }
+            console.log(
+              `✓ Entry chunk size: ${entrySizeKb} KB (limit: ${(MAX_ENTRY_SIZE_BYTES / 1024).toFixed(0)} KB)`,
+            );
+          }
+        }
+
         // 1. Process shared styles.css
-        const sharedClasses = processSharedStyles(rootDir, distDir);
+        const { sharedClasses, hashedFilename: stylesFilename } =
+          processSharedStyles(rootDir, distDir);
 
         // 2. Scan and compile IIFE variants
         const { needsBase, needsConfig, fileMarkers } = scanHtmlForIIFEMarkers(
@@ -122,7 +149,7 @@ export function buildPlugin(options = {}) {
           html = replaceCssTagWithInline(html, cssResult.firstCssTag, css);
 
           // 3e. Inject shared styles link
-          html = injectSharedStylesLink(html, assetsPath);
+          html = injectSharedStylesLink(html, assetsPath, stylesFilename);
 
           // 3f. Inject IIFE
           const markerType = fileMarkers.get(filename) || "base";

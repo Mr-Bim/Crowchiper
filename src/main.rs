@@ -50,6 +50,7 @@ async fn main() {
         rp_origin,
         jwt_secret,
         args.no_signup,
+        args.csp_nonce,
     );
     let app = create_app(&config);
 

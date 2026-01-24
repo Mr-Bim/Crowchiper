@@ -46,6 +46,8 @@ pub struct ServerConfig {
     pub secure_cookies: bool,
     /// Whether new user signups are disabled
     pub no_signup: bool,
+    /// Whether to add a random nonce to CSP headers for each HTML response
+    pub csp_nonce: bool,
 }
 
 /// Leak a String to get a &'static str. Used for paths that live for the program lifetime.
@@ -118,6 +120,7 @@ pub fn create_app(config: &ServerConfig) -> Router {
         jwt.clone(),
         config.db.clone(),
         config.secure_cookies,
+        config.csp_nonce,
     )
     .expect("Failed to initialize assets");
 

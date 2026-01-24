@@ -76,7 +76,7 @@ fn main() {
             &format!("'strict-dynamic' {}", app_script_hashes),
         ),
         ("style-src", "'self' 'unsafe-inline'"),
-        ("img-src", "'self' data:"),
+        ("img-src", "'self' data: blob:"),
         ("connect-src", "'self'"),
         ("frame-ancestors", "'none'"),
         ("form-action", "'self'"),
