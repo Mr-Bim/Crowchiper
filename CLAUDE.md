@@ -477,6 +477,31 @@ Test files located in `tests/` folder:
 - **`token_tests.rs`**: Dual-token authentication system tests
 - **`startup_tests.rs`**: Binary startup validation (JWT secret, HTTPS, base path)
 
+### Test-Mode IP Extractor
+
+Tests use `local_ip_extractor()` by default, which always returns `127.0.0.1` regardless of headers. This is only available in test-mode builds.
+
+```rust
+use crowchiper::cli::local_ip_extractor;
+
+let config = ServerConfig {
+    // ...
+    ip_extractor: Some(local_ip_extractor()),
+};
+```
+
+For tests that need to verify IP-related behavior (e.g., IP changes triggering token refresh), use `XForwardFor` extractor instead:
+
+```rust
+use crowchiper::cli::{ClientIpHeader, IpExtractor};
+
+let config = ServerConfig {
+    // ...
+    ip_extractor: Some(IpExtractor::from(ClientIpHeader::XForwardFor)),
+};
+// Then include `x-forwarded-for` header in requests
+```
+
 ### Token Tests (`tests/token_tests.rs`)
 Comprehensive tests for the dual-token authentication system:
 - Access token authentication and IP validation

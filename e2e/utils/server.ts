@@ -58,6 +58,8 @@ async function spawnServer(options: ServerOptions): Promise<ServerInstance> {
     ":memory:",
     "--rp-id",
     "localhost",
+    "--ip-header",
+    "local",
   ];
 
   if (options.noSignup) {

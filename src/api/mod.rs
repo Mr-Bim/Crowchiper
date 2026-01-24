@@ -13,7 +13,7 @@ use axum::Router;
 use std::sync::Arc;
 use webauthn_rs::prelude::*;
 
-use crate::cli::ClientIpHeader;
+use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
@@ -26,42 +26,42 @@ pub fn create_api_router(
     jwt: Arc<JwtConfig>,
     secure_cookies: bool,
     no_signup: bool,
-    ip_header: Option<ClientIpHeader>,
+    ip_extractor: Option<IpExtractor>,
 ) -> Router {
     let passkeys_state = passkeys::PasskeysState {
         db: db.clone(),
         webauthn,
         jwt: jwt.clone(),
         secure_cookies,
-        ip_header: ip_header.clone(),
+        ip_extractor: ip_extractor.clone(),
     };
 
     let posts_state = posts::PostsState {
         db: db.clone(),
         jwt: jwt.clone(),
         secure_cookies,
-        ip_header: ip_header.clone(),
+        ip_extractor: ip_extractor.clone(),
     };
 
     let encryption_state = encryption::EncryptionState {
         db: db.clone(),
         jwt: jwt.clone(),
         secure_cookies,
-        ip_header: ip_header.clone(),
+        ip_extractor: ip_extractor.clone(),
     };
 
     let attachments_state = attachments::AttachmentsState {
         db: db.clone(),
         jwt: jwt.clone(),
         secure_cookies,
-        ip_header: ip_header.clone(),
+        ip_extractor: ip_extractor.clone(),
     };
 
     let tokens_state = tokens::TokensState {
         db: db.clone(),
         jwt: jwt.clone(),
         secure_cookies,
-        ip_header: ip_header.clone(),
+        ip_extractor: ip_extractor.clone(),
     };
 
     #[cfg(feature = "test-mode")]
@@ -75,7 +75,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         db: db.clone(),
         secure_cookies,
-        ip_header,
+        ip_extractor,
     };
 
     let users_state = users::UsersState { db, jwt, no_signup };

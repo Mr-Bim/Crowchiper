@@ -24,6 +24,113 @@ pub enum ClientIpHeader {
     XRealIp,
     XForwardFor,
     Forward,
+    #[cfg(feature = "test-mode")]
+    Local,
+}
+
+/// IP extraction strategy resolved at startup. Stores header name and parsing function.
+#[derive(Clone)]
+pub struct IpExtractor {
+    pub header_name: &'static str,
+    parse_fn: fn(&str) -> Result<String, &'static str>,
+}
+
+impl std::fmt::Debug for IpExtractor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IpExtractor")
+            .field("header_name", &self.header_name)
+            .finish()
+    }
+}
+
+impl IpExtractor {
+    /// Extract IP from the header value using the configured parsing strategy.
+    pub fn extract(&self, header_value: &str) -> Result<String, &'static str> {
+        (self.parse_fn)(header_value)
+    }
+}
+
+impl From<ClientIpHeader> for IpExtractor {
+    fn from(header: ClientIpHeader) -> Self {
+        match header {
+            ClientIpHeader::CFConnectingIP => IpExtractor {
+                header_name: "cf-connecting-ip",
+                parse_fn: parse_single_ip,
+            },
+            ClientIpHeader::XRealIp => IpExtractor {
+                header_name: "x-real-ip",
+                parse_fn: parse_single_ip,
+            },
+            ClientIpHeader::XForwardFor => IpExtractor {
+                header_name: "x-forwarded-for",
+                parse_fn: parse_x_forwarded_for,
+            },
+            ClientIpHeader::Forward => IpExtractor {
+                header_name: "forwarded",
+                parse_fn: parse_forwarded,
+            },
+            #[cfg(feature = "test-mode")]
+            ClientIpHeader::Local => IpExtractor {
+                header_name: "",
+                parse_fn: |_| Ok("127.0.0.1".to_string()),
+            },
+        }
+    }
+}
+
+/// Create a local IP extractor for test mode that always returns 127.0.0.1.
+#[cfg(feature = "test-mode")]
+pub fn local_ip_extractor() -> IpExtractor {
+    IpExtractor::from(ClientIpHeader::Local)
+}
+
+/// Parse a single IP value (CF-Connecting-IP, X-Real-IP).
+fn parse_single_ip(value: &str) -> Result<String, &'static str> {
+    let ip = value.trim();
+    if ip.is_empty() {
+        return Err("IP header is empty");
+    }
+    Ok(ip.to_string())
+}
+
+/// Parse X-Forwarded-For header (comma-separated list, take first).
+fn parse_x_forwarded_for(value: &str) -> Result<String, &'static str> {
+    value
+        .split(',')
+        .next()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .ok_or("X-Forwarded-For header has no valid IP")
+}
+
+/// Parse RFC 7239 Forwarded header.
+fn parse_forwarded(value: &str) -> Result<String, &'static str> {
+    for part in value.split(',') {
+        for param in part.split(';') {
+            let param = param.trim();
+            if let Some(ip_value) = param.strip_prefix("for=") {
+                let ip = ip_value.trim().trim_matches('"');
+                // Handle IPv6 in brackets: [2001:db8::1]
+                let ip = ip.trim_start_matches('[').trim_end_matches(']');
+                // Remove port if present (e.g., "192.0.2.60:8080" or "[2001:db8::1]:8080")
+                let ip = if let Some(colon_pos) = ip.rfind(':') {
+                    // Check if this is IPv6 without brackets (contains multiple colons)
+                    if ip.matches(':').count() > 1 {
+                        ip // IPv6 address, keep as-is
+                    } else {
+                        &ip[..colon_pos] // IPv4 with port, strip port
+                    }
+                } else {
+                    ip
+                };
+                if !ip.is_empty() {
+                    return Ok(ip.to_string());
+                }
+            }
+        }
+    }
+    Err("Forwarded header has no valid 'for' parameter")
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -229,7 +336,7 @@ pub fn build_config(
         secure_cookies,
         no_signup,
         csp_nonce,
-        ip_header,
+        ip_extractor: ip_header.map(IpExtractor::from),
     }
 }
 

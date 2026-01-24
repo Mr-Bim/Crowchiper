@@ -16,13 +16,12 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{ActivatedApiAuth, HasAuthState};
+use crate::cli::IpExtractor;
 use crate::db::{Database, attachments::CreateAttachmentInput};
 use crate::jwt::JwtConfig;
 
 /// Encryption version 0 means unencrypted data
 const UNENCRYPTED_VERSION: i32 = 0;
-
-use crate::cli::ClientIpHeader;
 
 /// State for attachments endpoints.
 #[derive(Clone)]
@@ -30,7 +29,7 @@ pub struct AttachmentsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
-    pub ip_header: Option<ClientIpHeader>,
+    pub ip_extractor: Option<IpExtractor>,
 }
 
 impl HasAuthState for AttachmentsState {
@@ -43,8 +42,8 @@ impl HasAuthState for AttachmentsState {
     fn secure_cookies(&self) -> bool {
         self.secure_cookies
     }
-    fn ip_header(&self) -> Option<&ClientIpHeader> {
-        self.ip_header.as_ref()
+    fn ip_extractor(&self) -> Option<&IpExtractor> {
+        self.ip_extractor.as_ref()
     }
 }
 

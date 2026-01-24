@@ -17,7 +17,7 @@ use webauthn_rs::prelude::*;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
 use crate::auth::{REFRESH_COOKIE_NAME, extract_client_ip, get_cookie};
-use crate::cli::ClientIpHeader;
+use crate::cli::IpExtractor;
 use crate::db::{AuthChallenge, Database, User};
 use crate::jwt::JwtConfig;
 
@@ -27,7 +27,7 @@ pub struct PasskeysState {
     pub webauthn: Arc<Webauthn>,
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
-    pub ip_header: Option<ClientIpHeader>,
+    pub ip_extractor: Option<IpExtractor>,
 }
 
 /// Result of generating auth cookies, includes info needed for token tracking.
@@ -261,7 +261,7 @@ async fn register_finish(
     let refresh_token = state.make_refresh_token(&user)?;
 
     // Store refresh token for tracking
-    let ip = extract_client_ip(&parts, state.ip_header.as_ref()).ok();
+    let ip = extract_client_ip(&parts, state.ip_extractor.as_ref()).ok();
     state
         .store_refresh_token(
             &refresh_token.refresh_jti,
@@ -380,7 +380,7 @@ async fn login_finish(
 
     // Only generate JWT if user is activated
     // Check if there's already a valid refresh token for this user
-    let ip = extract_client_ip(&parts, state.ip_header.as_ref()).ok();
+    let ip = extract_client_ip(&parts, state.ip_extractor.as_ref()).ok();
     let existing_refresh_valid =
         check_existing_refresh_token(&state, &parts.headers, result.user.id).await;
 
@@ -528,7 +528,7 @@ async fn claim_finish(
     let refresh_token = state.make_refresh_token(&result.user)?;
 
     // Store refresh token for tracking
-    let ip = extract_client_ip(&parts, state.ip_header.as_ref()).ok();
+    let ip = extract_client_ip(&parts, state.ip_extractor.as_ref()).ok();
     state
         .store_refresh_token(
             &refresh_token.refresh_jti,

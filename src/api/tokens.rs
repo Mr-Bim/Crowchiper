@@ -19,7 +19,7 @@ use super::error::{ApiError, ResultExt};
 use crate::auth::{
     ACCESS_COOKIE_NAME, ActivatedApiAuth, ApiAuth, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
 };
-use crate::cli::ClientIpHeader;
+use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
 use crate::jwt::JwtConfig;
 
@@ -28,7 +28,7 @@ pub struct TokensState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
-    pub ip_header: Option<ClientIpHeader>,
+    pub ip_extractor: Option<IpExtractor>,
 }
 
 impl HasAuthState for TokensState {
@@ -44,8 +44,8 @@ impl HasAuthState for TokensState {
         self.secure_cookies
     }
 
-    fn ip_header(&self) -> Option<&ClientIpHeader> {
-        self.ip_header.as_ref()
+    fn ip_extractor(&self) -> Option<&IpExtractor> {
+        self.ip_extractor.as_ref()
     }
 }
 

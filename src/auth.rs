@@ -22,7 +22,7 @@ tokio::task_local! {
     pub static NEW_ACCESS_TOKEN_COOKIE: RefCell<Option<String>>;
 }
 
-use crate::cli::ClientIpHeader;
+use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::{AccessClaims, JwtConfig};
 
@@ -48,88 +48,34 @@ pub fn get_cookie<'a>(headers: &'a axum::http::HeaderMap, name: &str) -> Option<
 
 /// Extract client IP address based on configuration.
 ///
-/// If `ip_header` is set, extracts IP from the specified header and returns an error
+/// If `ip_extractor` is set, extracts IP from the configured header and returns an error
 /// if the header is missing or invalid (does NOT fall back to SocketAddr).
 ///
-/// If `ip_header` is None, uses the SocketAddr from ConnectInfo.
+/// If `ip_extractor` is None, uses the SocketAddr from ConnectInfo.
 pub fn extract_client_ip(
     parts: &Parts,
-    ip_header: Option<&ClientIpHeader>,
+    ip_extractor: Option<&IpExtractor>,
 ) -> Result<String, &'static str> {
-    match ip_header {
-        Some(header) => extract_ip_from_header(parts, header),
+    match ip_extractor {
+        Some(extractor) => {
+            #[cfg(feature = "test-mode")]
+            // Empty header name means use the parse function directly (for test-mode Local)
+            if extractor.header_name.is_empty() {
+                return extractor.extract("");
+            }
+            let header_value = parts
+                .headers
+                .get(extractor.header_name)
+                .ok_or("IP header not present")?
+                .to_str()
+                .map_err(|_| "IP header contains invalid characters")?;
+            extractor.extract(header_value)
+        }
         None => parts
             .extensions
             .get::<ConnectInfo<SocketAddr>>()
             .map(|ci| ci.0.ip().to_string())
             .ok_or("No client IP available"),
-    }
-}
-
-/// Extract IP from a specific header. Returns error if header is missing or invalid.
-fn extract_ip_from_header(parts: &Parts, header: &ClientIpHeader) -> Result<String, &'static str> {
-    let header_name = match header {
-        ClientIpHeader::CFConnectingIP => "cf-connecting-ip",
-        ClientIpHeader::XRealIp => "x-real-ip",
-        ClientIpHeader::XForwardFor => "x-forwarded-for",
-        ClientIpHeader::Forward => "forwarded",
-    };
-
-    let header_value = parts
-        .headers
-        .get(header_name)
-        .ok_or("IP header not present")?
-        .to_str()
-        .map_err(|_| "IP header contains invalid characters")?;
-
-    match header {
-        ClientIpHeader::CFConnectingIP | ClientIpHeader::XRealIp => {
-            // Single IP value
-            let ip = header_value.trim();
-            if ip.is_empty() {
-                return Err("IP header is empty");
-            }
-            Ok(ip.to_string())
-        }
-        ClientIpHeader::XForwardFor => {
-            // Comma-separated list, take the first (original client)
-            let ip = header_value
-                .split(',')
-                .next()
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .ok_or("X-Forwarded-For header has no valid IP")?;
-            Ok(ip.to_string())
-        }
-        ClientIpHeader::Forward => {
-            // RFC 7239 format: "for=192.0.2.60;proto=http;by=203.0.113.43"
-            // Can have multiple comma-separated entries, take first "for=" value
-            for part in header_value.split(',') {
-                for param in part.split(';') {
-                    let param = param.trim();
-                    if let Some(value) = param.strip_prefix("for=") {
-                        let ip = value.trim().trim_matches('"');
-                        // Handle IPv6 in brackets: [2001:db8::1]
-                        let ip = ip.trim_start_matches('[').trim_end_matches(']');
-                        // Remove port if present (e.g., "192.0.2.60:8080" or "[2001:db8::1]:8080")
-                        let ip = if let Some(colon_pos) = ip.rfind(':') {
-                            // Check if this is IPv6 without brackets (contains multiple colons)
-                            if ip.matches(':').count() > 1 {
-                                ip // IPv6 address, keep as-is
-                            } else {
-                                &ip[..colon_pos] // IPv4 with port, strip port
-                            }
-                        } else {
-                            ip
-                        };
-                        if !ip.is_empty() {
-                            return Ok(ip.to_string());
-                        }
-                    }
-                }
-            }
-            Err("Forwarded header has no valid 'for' parameter")
-        }
     }
 }
 
@@ -171,8 +117,8 @@ where
     S: HasAuthState + Send + Sync,
 {
     // Extract client IP
-    let client_ip =
-        extract_client_ip(parts, state.ip_header()).map_err(|_| AuthErrorKind::NotAuthenticated)?;
+    let client_ip = extract_client_ip(parts, state.ip_extractor())
+        .map_err(|_| AuthErrorKind::NotAuthenticated)?;
 
     // Try to validate access token first
     if let Some(access_token) = get_cookie(&parts.headers, ACCESS_COOKIE_NAME) {
@@ -353,7 +299,7 @@ pub trait HasAuthState {
     fn jwt(&self) -> &JwtConfig;
     fn db(&self) -> &Database;
     fn secure_cookies(&self) -> bool;
-    fn ip_header(&self) -> Option<&ClientIpHeader>;
+    fn ip_extractor(&self) -> Option<&IpExtractor>;
 }
 
 /// Extractor for API endpoints that require authentication.

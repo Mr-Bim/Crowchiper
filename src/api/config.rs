@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use crate::auth::{HasAuthState, MaybeAuth};
-use crate::cli::ClientIpHeader;
+use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
@@ -15,7 +15,7 @@ pub struct ConfigState {
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
     pub secure_cookies: bool,
-    pub ip_header: Option<ClientIpHeader>,
+    pub ip_extractor: Option<IpExtractor>,
 }
 
 impl HasAuthState for ConfigState {
@@ -31,8 +31,8 @@ impl HasAuthState for ConfigState {
         self.secure_cookies
     }
 
-    fn ip_header(&self) -> Option<&ClientIpHeader> {
-        self.ip_header.as_ref()
+    fn ip_extractor(&self) -> Option<&IpExtractor> {
+        self.ip_extractor.as_ref()
     }
 }
 

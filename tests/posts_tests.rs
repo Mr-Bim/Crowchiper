@@ -6,6 +6,8 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+#[cfg(feature = "test-mode")]
+use crowchiper::local_ip_extractor;
 use crowchiper::{ServerConfig, create_app, db::Database, jwt::JwtConfig};
 use tower::ServiceExt;
 use url::Url;
@@ -26,7 +28,7 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_header: None,
+        ip_extractor: Some(local_ip_extractor()),
     };
     (create_app(&config), db, jwt_config)
 }
@@ -585,7 +587,7 @@ async fn test_posts_with_base_path() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_header: None,
+        ip_extractor: Some(local_ip_extractor()),
     };
     let app = create_app(&config);
 

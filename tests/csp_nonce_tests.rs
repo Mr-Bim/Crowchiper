@@ -7,7 +7,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use crowchiper::{ServerConfig, create_app, db::Database, jwt::JwtConfig};
+use crowchiper::{ServerConfig, create_app, db::Database, jwt::JwtConfig, local_ip_extractor};
 use tower::ServiceExt;
 use url::Url;
 
@@ -30,7 +30,7 @@ async fn create_app_with_nonce() -> (axum::Router, Database, JwtConfig) {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: true,
-        ip_header: None,
+        ip_extractor: Some(local_ip_extractor()),
     };
     (create_app(&config), db, jwt_config)
 }
@@ -49,7 +49,7 @@ async fn create_app_without_nonce() -> axum::Router {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_header: None,
+        ip_extractor: None,
     };
     create_app(&config)
 }
