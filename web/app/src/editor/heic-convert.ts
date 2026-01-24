@@ -18,11 +18,19 @@ export class HeicConversionError extends Error {
   }
 }
 
+/** Error thrown when user aborts conversion */
+export class HeicConversionAbortedError extends Error {
+  constructor() {
+    super("HEIC conversion was aborted");
+    this.name = "HeicConversionAbortedError";
+  }
+}
+
 /**
  * Check if a file might be HEIC based on extension or MIME type.
  * This is a quick check before loading the heavy library.
  */
-function mightBeHeic(file: File): boolean {
+export function mightBeHeic(file: File): boolean {
   const name = file.name.toLowerCase();
   const type = file.type.toLowerCase();
   return (
@@ -34,18 +42,110 @@ function mightBeHeic(file: File): boolean {
 }
 
 /**
+ * Show a confirmation modal for HEIC conversion.
+ * Returns a promise that resolves to true if user confirms, false if cancelled.
+ */
+export function showHeicConversionModal(fileCount: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    // Create modal overlay
+    const overlay = document.createElement("div");
+    overlay.className = "heic-modal-overlay";
+
+    const modal = document.createElement("div");
+    modal.className = "heic-modal";
+
+    const title = document.createElement("h3");
+    title.className = "heic-modal-title";
+    title.textContent = "HEIC Image Detected";
+
+    const message = document.createElement("p");
+    message.className = "heic-modal-message";
+    const fileText =
+      fileCount === 1 ? "This image is" : `${fileCount} images are`;
+    message.textContent = `${fileText} in HEIC format (Apple's image format). Converting to a web-compatible format may take 10-30 seconds per image depending on file size. The page may be less responsive during conversion.`;
+
+    const buttonRow = document.createElement("div");
+    buttonRow.className = "heic-modal-buttons";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "heic-modal-btn heic-modal-btn-cancel";
+    cancelBtn.textContent = "Cancel";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "heic-modal-btn heic-modal-btn-confirm";
+    confirmBtn.textContent = "Convert";
+
+    buttonRow.appendChild(cancelBtn);
+    buttonRow.appendChild(confirmBtn);
+
+    modal.appendChild(title);
+    modal.appendChild(message);
+    modal.appendChild(buttonRow);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const cleanup = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", keyHandler);
+    };
+
+    cancelBtn.addEventListener("click", () => {
+      cleanup();
+      resolve(false);
+    });
+
+    confirmBtn.addEventListener("click", () => {
+      cleanup();
+      resolve(true);
+    });
+
+    // Close on escape
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        cleanup();
+        resolve(false);
+      }
+    };
+    document.addEventListener("keydown", keyHandler);
+
+    // Close on overlay click
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        cleanup();
+        resolve(false);
+      }
+    });
+
+    // Focus confirm button
+    confirmBtn.focus();
+  });
+}
+
+/**
  * Check if a file is HEIC format and convert to WebP if needed.
  * Returns the original file if not HEIC, or a converted WebP File.
  * The heic-to library is only loaded when a HEIC file is detected.
  * Throws HeicConversionError with user-friendly message on failure.
+ * Throws HeicConversionAbortedError if aborted via signal.
  */
-export async function convertHeicIfNeeded(file: File): Promise<File> {
+export async function convertHeicIfNeeded(
+  file: File,
+  signal?: AbortSignal,
+): Promise<File> {
   // Quick check based on extension/mime before loading heavy library
   if (!mightBeHeic(file)) {
     return file;
   }
 
+  // Check if already aborted
+  if (signal?.aborted) {
+    throw new HeicConversionAbortedError();
+  }
+
   // Dynamically import heic-to only when needed
+  // Use the CSP-compatible build that doesn't require unsafe-eval
   let heicModule;
   try {
     heicModule = await import("heic-to/csp");
@@ -54,6 +154,11 @@ export async function convertHeicIfNeeded(file: File): Promise<File> {
       "Failed to load image converter. Please try a different image format.",
       err,
     );
+  }
+
+  // Check again after async import
+  if (signal?.aborted) {
+    throw new HeicConversionAbortedError();
   }
 
   const { isHeic, heicTo } = heicModule;
@@ -73,6 +178,11 @@ export async function convertHeicIfNeeded(file: File): Promise<File> {
     return file;
   }
 
+  // Check again before expensive conversion
+  if (signal?.aborted) {
+    throw new HeicConversionAbortedError();
+  }
+
   // Convert HEIC to WebP at full quality
   let webpBlob: Blob;
   try {
@@ -82,10 +192,18 @@ export async function convertHeicIfNeeded(file: File): Promise<File> {
       quality: 1.0,
     });
   } catch (err) {
+    if (signal?.aborted) {
+      throw new HeicConversionAbortedError();
+    }
     throw new HeicConversionError(
       "Failed to convert HEIC image. Try taking a screenshot of the image instead.",
       err,
     );
+  }
+
+  // Final abort check
+  if (signal?.aborted) {
+    throw new HeicConversionAbortedError();
   }
 
   // Create a new File with .webp extension

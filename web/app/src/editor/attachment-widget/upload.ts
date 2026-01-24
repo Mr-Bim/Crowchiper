@@ -4,7 +4,10 @@
 
 import type { EditorView } from "@codemirror/view";
 
-import { uploadAttachmentWithProgress } from "../../api/attachments.ts";
+import {
+  uploadAttachmentWithProgress,
+  UploadAbortedError,
+} from "../../api/attachments.ts";
 import { notifyAttachmentChange } from "./index.ts";
 import {
   ENCRYPTED_FORMAT_VERSION,
@@ -18,12 +21,22 @@ import {
   convertHeicIfNeeded,
   processImage,
   HeicConversionError,
+  HeicConversionAbortedError,
+  mightBeHeic,
+  showHeicConversionModal,
   type ProcessedImage,
 } from "../heic-convert.ts";
 import { showError } from "../../toast.ts";
 import { GALLERY_PATTERN } from "./patterns.ts";
 import { getRequiredElement } from "../../../../shared/dom.ts";
 import type { UploadProgress, ProgressCallback } from "./progress.ts";
+import {
+  registerUpload,
+  unregisterUpload,
+} from "../../shared/attachment-utils.ts";
+
+// Re-export for widget.ts to use
+export { registerUpload, unregisterUpload };
 
 /**
  * Check if a file is a HEIC/HEIF image.
@@ -43,19 +56,26 @@ const UNENCRYPTED_VERSION = 0;
 /** Options for uploadProcessedImage */
 interface UploadOptions {
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
 }
 
 /**
  * Upload processed image data (with or without encryption).
  * Returns the UUID of the uploaded attachment.
  * Reports progress through onProgress callback.
+ * Supports abort via signal.
  */
 async function uploadProcessedImage(
   processed: ProcessedImage,
   options?: UploadOptions,
 ): Promise<string> {
   const { image, thumbnails } = processed;
-  const { onProgress } = options ?? {};
+  const { onProgress, signal } = options ?? {};
+
+  // Check if already aborted
+  if (signal?.aborted) {
+    throw new UploadAbortedError();
+  }
 
   // Check if encryption is enabled
   if (isEncryptionEnabled()) {
@@ -74,6 +94,11 @@ async function uploadProcessedImage(
         encryptBinary(thumbnails.md, sessionEncryptionKey),
         encryptBinary(thumbnails.lg, sessionEncryptionKey),
       ]);
+
+    // Check if aborted during encryption
+    if (signal?.aborted) {
+      throw new UploadAbortedError();
+    }
 
     const sizes = {
       sm: encThumbSm.ciphertext.byteLength,
@@ -98,7 +123,11 @@ async function uploadProcessedImage(
           thumb_lg_iv: encThumbLg.iv,
           encryption_version: ENCRYPTED_FORMAT_VERSION,
         },
-        (percent) => onProgress?.({ stage: "uploading", percent }),
+        {
+          onProgress: (percent) =>
+            onProgress?.({ stage: "uploading", percent }),
+          signal,
+        },
       );
 
       return response.uuid;
@@ -124,7 +153,10 @@ async function uploadProcessedImage(
         thumb_lg_iv: "",
         encryption_version: UNENCRYPTED_VERSION,
       },
-      (percent) => onProgress?.({ stage: "uploading", percent }),
+      {
+        onProgress: (percent) => onProgress?.({ stage: "uploading", percent }),
+        signal,
+      },
     );
 
     return response.uuid;
@@ -137,6 +169,8 @@ export interface ProcessAndUploadOptions {
   onProgress?: ProgressCallback;
   /** Called to check if upload was cancelled (e.g., placeholder deleted) */
   isCancelled?: () => boolean;
+  /** AbortSignal to cancel the upload */
+  signal?: AbortSignal;
 }
 
 // Re-export types for consumers
@@ -153,7 +187,12 @@ export async function processAndUploadFile(
   file: File,
   options?: ProcessAndUploadOptions,
 ): Promise<string | null> {
-  const { onProgress, isCancelled } = options ?? {};
+  const { onProgress, isCancelled, signal } = options ?? {};
+
+  // Check if already aborted
+  if (signal?.aborted) {
+    return null;
+  }
 
   try {
     let convertedFile: File;
@@ -162,13 +201,17 @@ export async function processAndUploadFile(
       if (isHeicFile(file)) {
         onProgress?.({ stage: "converting" });
       }
-      // Convert HEIC to WebP first (if needed)
-      convertedFile = await convertHeicIfNeeded(file);
+      // Convert HEIC to WebP first (if needed), passing abort signal
+      convertedFile = await convertHeicIfNeeded(file, signal);
       // Check if cancelled during conversion
-      if (isCancelled?.()) {
+      if (isCancelled?.() || signal?.aborted) {
         return null;
       }
     } catch (err) {
+      // Silent return for aborted conversions
+      if (err instanceof HeicConversionAbortedError || signal?.aborted) {
+        return null;
+      }
       console.error("Failed to convert HEIC:", err);
       if (err instanceof HeicConversionError) {
         showError(err.message);
@@ -186,21 +229,31 @@ export async function processAndUploadFile(
     try {
       processed = await processImage(convertedFile);
     } catch (err) {
+      if (signal?.aborted) {
+        return null;
+      }
       console.error("Failed to process image:", err);
       showError("Failed to process image. Please try a different format.");
       return null;
     }
 
     // Check if cancelled before upload
-    if (isCancelled?.()) {
+    if (isCancelled?.() || signal?.aborted) {
       return null;
     }
 
     try {
       // uploadProcessedImage handles encrypting and uploading stages
-      const uuid = await uploadProcessedImage(processed, { onProgress });
+      const uuid = await uploadProcessedImage(processed, {
+        onProgress,
+        signal,
+      });
       return uuid;
     } catch (err) {
+      // Don't show error for aborted uploads
+      if (err instanceof UploadAbortedError || signal?.aborted) {
+        return null;
+      }
       console.error("Failed to upload image:", err);
       const message =
         err instanceof Error ? err.message : "Unknown error occurred";
@@ -211,6 +264,9 @@ export async function processAndUploadFile(
       return null;
     }
   } catch (err) {
+    if (signal?.aborted) {
+      return null;
+    }
     console.error("Unexpected error during image upload:", err);
     showError("An unexpected error occurred. Please try again.");
     return null;
@@ -336,6 +392,9 @@ async function uploadSingleFile(
   // Generate unique ID for this upload
   const uploadId = generateUploadId();
 
+  // Create abort controller and register it
+  const abortController = registerUpload(uploadId);
+
   // Initial stage: converting for HEIC, compressing for others
   const initialStage: UploadStage = isHeicFile(file)
     ? "converting"
@@ -377,7 +436,11 @@ async function uploadSingleFile(
       updatePlaceholder(view, uploadId, progress.stage, progress.percent);
     },
     isCancelled: () => findPlaceholder(view, uploadId) === null,
+    signal: abortController.signal,
   });
+
+  // Remove from active uploads
+  unregisterUpload(uploadId);
 
   // uuid is null on cancel or error - clean up placeholder if it still exists
   if (uuid === null) {
@@ -424,6 +487,7 @@ export { getProgressText };
  * Opens a file dialog, uploads the selected images, and inserts them into a single gallery.
  * Multiple files can be selected but they are processed sequentially.
  * If one fails, continues to the next.
+ * Shows a warning modal for HEIC files before starting.
  */
 export function triggerImageUpload(view: EditorView): void {
   // Get the end of the current line to insert after it
@@ -432,6 +496,16 @@ export function triggerImageUpload(view: EditorView): void {
   const insertPos = currentLine.to;
 
   triggerFileInput(async (files) => {
+    // Check for HEIC files and show warning modal
+    const heicFiles = files.filter((f) => mightBeHeic(f));
+
+    if (heicFiles.length > 0) {
+      const confirmed = await showHeicConversionModal(heicFiles.length);
+      if (!confirmed) {
+        return; // User cancelled
+      }
+    }
+
     let galleryCreated = false;
 
     // Process files one at a time, all into the same gallery

@@ -8,6 +8,7 @@ import { EditorView, WidgetType } from "@codemirror/view";
 import {
   getAttachment,
   getAttachmentThumbnail,
+  AttachmentNotFoundError,
   type ThumbnailSize,
 } from "../../api/attachments.ts";
 import { decryptBinary } from "../../crypto/operations.ts";
@@ -19,8 +20,13 @@ import {
   processAndUploadFile,
   triggerFileInput,
   getProgressText,
+  registerUpload,
+  unregisterUpload,
   type UploadProgress,
 } from "./upload.ts";
+import { abortUpload } from "../../shared/attachment-utils.ts";
+import { showError } from "../../toast.ts";
+import { mightBeHeic, showHeicConversionModal } from "../heic-convert.ts";
 import { notifyAttachmentChange } from "./index.ts";
 import type { UploadStage } from "./progress.ts";
 import {
@@ -171,12 +177,65 @@ export class GalleryContainerWidget extends WidgetType {
     return container;
   }
 
+  /**
+   * Check if UUID is an upload placeholder (upload-N or widget-upload-N).
+   */
+  private isUploadPlaceholder(uuid: string): boolean {
+    return uuid.startsWith("upload-") || uuid.startsWith("widget-upload-");
+  }
+
+  /**
+   * Parse progress info from the alt text.
+   * Alt text format: "stage" or "stage:percent" (e.g., "compressing" or "uploading:45")
+   */
+  private parseProgressFromAlt(alt: string): UploadProgress | null {
+    // Match "uploading:45" format
+    const uploadMatch = alt.match(/^uploading:(\d+)$/);
+    if (uploadMatch) {
+      return { stage: "uploading", percent: parseInt(uploadMatch[1], 10) };
+    }
+
+    // Match simple stage names
+    const stages: UploadStage[] = [
+      "converting",
+      "creating-thumbnails",
+      "compressing",
+      "encrypting",
+      "uploading",
+    ];
+    if (stages.includes(alt as UploadStage)) {
+      return { stage: alt as UploadStage };
+    }
+
+    return null;
+  }
+
   private async renderImage(
     container: HTMLElement,
     img: GalleryImage,
     view: EditorView,
   ): Promise<void> {
-    // Show processing states for special UUIDs
+    // Show processing states for upload placeholders
+    if (this.isUploadPlaceholder(img.uuid)) {
+      const progress = this.parseProgressFromAlt(img.alt);
+      const processing = document.createElement("span");
+      processing.className = "cm-attachment-uploading";
+
+      // Status row with spinner and label
+      const statusRow = document.createElement("span");
+      statusRow.className = "cm-attachment-uploading-status";
+      const label = progress ? getProgressText(progress) : "Processing...";
+      statusRow.innerHTML = `<span class="cm-attachment-spinner"></span><span>${label}</span>`;
+      processing.appendChild(statusRow);
+
+      // Add cancel button inside the uploading container
+      this.addCancelButton(processing, img.uuid, view);
+
+      container.appendChild(processing);
+      return;
+    }
+
+    // Legacy support for old placeholder format
     if (img.uuid === "pending" || img.uuid === "converting") {
       const processing = document.createElement("span");
       processing.className = "cm-attachment-uploading";
@@ -233,8 +292,15 @@ export class GalleryContainerWidget extends WidgetType {
       this.displayThumbnail(container, blobUrl, img, view);
     } catch (err) {
       console.error("Failed to load thumbnail:", err);
-      loading.textContent = "Failed to load";
-      loading.className = "cm-attachment-error";
+      if (err instanceof AttachmentNotFoundError) {
+        // Image doesn't exist on server - show toast and remove from gallery
+        showError("Image not found. It may have been deleted.");
+        this.deleteImage(view, img);
+      } else {
+        // Other errors (network, etc.) - show error state but don't delete
+        loading.textContent = "Failed to load";
+        loading.className = "cm-attachment-error";
+      }
     }
   }
 
@@ -295,6 +361,64 @@ export class GalleryContainerWidget extends WidgetType {
     container.appendChild(deleteBtn);
   }
 
+  private addCancelButton(
+    container: HTMLElement,
+    uploadId: string,
+    view: EditorView,
+  ): void {
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cm-gallery-cancel-btn";
+    cancelBtn.setAttribute("tabindex", "0");
+    cancelBtn.textContent = "Cancel";
+
+    const handleCancel = () => {
+      // Abort the upload
+      abortUpload(uploadId);
+
+      // Remove the placeholder from the document
+      const placeholder = this.findWidgetPlaceholder(view, uploadId);
+      if (placeholder) {
+        view.dispatch({
+          changes: {
+            from: placeholder.from,
+            to: placeholder.to,
+            insert: "",
+          },
+        });
+
+        // Clean up empty galleries
+        const emptyGallery = "::gallery{}::";
+        const doc = view.state.doc.toString();
+        const emptyIndex = doc.indexOf(emptyGallery);
+        if (emptyIndex !== -1) {
+          view.dispatch({
+            changes: {
+              from: emptyIndex,
+              to: emptyIndex + emptyGallery.length,
+              insert: "",
+            },
+          });
+        }
+      }
+    };
+
+    cancelBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleCancel();
+    });
+
+    cancelBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCancel();
+      }
+    });
+
+    container.appendChild(cancelBtn);
+  }
+
   private deleteImage(view: EditorView, img: GalleryImage): void {
     const doc = view.state.doc;
 
@@ -343,6 +467,16 @@ export class GalleryContainerWidget extends WidgetType {
     }
 
     triggerFileInput(async (files) => {
+      // Check for HEIC files and show warning modal
+      const heicFiles = files.filter((f) => mightBeHeic(f));
+
+      if (heicFiles.length > 0) {
+        const confirmed = await showHeicConversionModal(heicFiles.length);
+        if (!confirmed) {
+          return; // User cancelled
+        }
+      }
+
       // Process files one at a time
       for (const file of files) {
         await this.addSingleImage(view, file, knownUuid);
@@ -438,6 +572,9 @@ export class GalleryContainerWidget extends WidgetType {
     // Generate unique ID for this upload
     const uploadId = this.generateUploadId();
 
+    // Create abort controller and register it
+    const abortController = registerUpload(uploadId);
+
     // Initial stage: converting for HEIC, compressing for others
     const initialStage: UploadStage = isHeicFile(file)
       ? "converting"
@@ -464,7 +601,11 @@ export class GalleryContainerWidget extends WidgetType {
           );
         },
         isCancelled: () => this.findWidgetPlaceholder(view, uploadId) === null,
+        signal: abortController.signal,
       });
+
+      // Unregister upload
+      unregisterUpload(uploadId);
 
       if (uuid === null) {
         // User cancelled or placeholder deleted - clean up if still exists
@@ -495,6 +636,9 @@ export class GalleryContainerWidget extends WidgetType {
         notifyAttachmentChange();
       }
     } catch {
+      // Unregister upload on error
+      unregisterUpload(uploadId);
+
       // Remove the placeholder on error if it still exists
       const placeholder = this.findWidgetPlaceholder(view, uploadId);
       if (placeholder) {

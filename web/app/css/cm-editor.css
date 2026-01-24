@@ -92,16 +92,23 @@
 
 .cm-attachment-uploading {
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-width: 80px;
-    min-height: 80px;
+    min-width: 120px;
+    min-height: 100px;
     padding: 16px;
     color: var(--text-muted);
     font-size: 0.75rem;
     background: var(--surface);
     border-radius: 4px;
+}
+
+.cm-attachment-uploading-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .cm-attachment-spinner {
@@ -192,6 +199,32 @@
 .cm-gallery-delete-btn svg {
     width: 14px;
     height: 14px;
+}
+
+/* Cancel button for upload - centered text button */
+.cm-gallery-cancel-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        color 0.15s,
+        border-color 0.15s;
+}
+
+.cm-gallery-cancel-btn:hover {
+    background: var(--error-bg);
+    color: var(--error-text);
+    border-color: var(--error-border);
+}
+
+.cm-gallery-cancel-btn:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 /* Gallery options panel */

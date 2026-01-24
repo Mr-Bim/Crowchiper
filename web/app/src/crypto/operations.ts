@@ -12,13 +12,12 @@ export const ENCRYPTED_FORMAT_VERSION = 1;
 declare const __TEST_MODE__: boolean;
 
 /**
- * Securely clear an ArrayBuffer by overwriting with random data.
+ * Securely clear an ArrayBuffer by overwriting with zeros.
  * This helps prevent sensitive data from lingering in memory.
  * Note: Due to JavaScript's memory model, this is best-effort only.
  */
 export function secureClear(buffer: ArrayBuffer): void {
-  const view = new Uint8Array(buffer);
-  crypto.getRandomValues(view);
+  new Uint8Array(buffer).fill(0);
 }
 
 export interface EncryptedData {
