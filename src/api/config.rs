@@ -4,9 +4,10 @@ use axum::{Json, Router, extract::State, routing::get};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::auth::{HasAuthState, MaybeAuth};
+use crate::auth::MaybeAuth;
 use crate::cli::IpExtractor;
 use crate::db::Database;
+use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
 #[derive(Clone)]
@@ -18,23 +19,7 @@ pub struct ConfigState {
     pub ip_extractor: Option<IpExtractor>,
 }
 
-impl HasAuthState for ConfigState {
-    fn jwt(&self) -> &JwtConfig {
-        &self.jwt
-    }
-
-    fn db(&self) -> &Database {
-        &self.db
-    }
-
-    fn secure_cookies(&self) -> bool {
-        self.secure_cookies
-    }
-
-    fn ip_extractor(&self) -> Option<&IpExtractor> {
-        self.ip_extractor.as_ref()
-    }
-}
+impl_has_auth_state!(ConfigState);
 
 #[derive(Serialize)]
 struct ConfigResponse {

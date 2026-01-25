@@ -14,9 +14,10 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ActivatedApiAuth, HasAuthState};
+use crate::auth::ActivatedApiAuth;
 use crate::cli::IpExtractor;
 use crate::db::Database;
+use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
 /// State for encryption endpoints.
@@ -28,20 +29,7 @@ pub struct EncryptionState {
     pub ip_extractor: Option<IpExtractor>,
 }
 
-impl HasAuthState for EncryptionState {
-    fn jwt(&self) -> &JwtConfig {
-        &self.jwt
-    }
-    fn db(&self) -> &Database {
-        &self.db
-    }
-    fn secure_cookies(&self) -> bool {
-        self.secure_cookies
-    }
-    fn ip_extractor(&self) -> Option<&IpExtractor> {
-        self.ip_extractor.as_ref()
-    }
-}
+impl_has_auth_state!(EncryptionState);
 
 pub fn router(state: EncryptionState) -> Router {
     Router::new()

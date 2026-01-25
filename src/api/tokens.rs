@@ -16,11 +16,10 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{
-    ACCESS_COOKIE_NAME, ActivatedApiAuth, ApiAuth, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
-};
+use crate::auth::{ACCESS_COOKIE_NAME, ActivatedApiAuth, ApiAuth, REFRESH_COOKIE_NAME, get_cookie};
 use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
+use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
 #[derive(Clone)]
@@ -31,23 +30,7 @@ pub struct TokensState {
     pub ip_extractor: Option<IpExtractor>,
 }
 
-impl HasAuthState for TokensState {
-    fn jwt(&self) -> &JwtConfig {
-        &self.jwt
-    }
-
-    fn db(&self) -> &Database {
-        &self.db
-    }
-
-    fn secure_cookies(&self) -> bool {
-        self.secure_cookies
-    }
-
-    fn ip_extractor(&self) -> Option<&IpExtractor> {
-        self.ip_extractor.as_ref()
-    }
-}
+impl_has_auth_state!(TokensState);
 
 pub fn router(state: TokensState) -> Router {
     Router::new()

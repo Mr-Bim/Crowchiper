@@ -21,10 +21,11 @@ fn mime_from_path(path: &str) -> &'static str {
 }
 
 use crate::auth::{
-    ACCESS_COOKIE_NAME, AssetAuth, HasAssetAuthState, HasAuthState, REFRESH_COOKIE_NAME, get_cookie,
+    ACCESS_COOKIE_NAME, AssetAuth, HasAssetAuthState, REFRESH_COOKIE_NAME, get_cookie,
 };
 use crate::cli::IpExtractor;
 use crate::db::Database;
+use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
 // =============================================================================
@@ -64,23 +65,7 @@ pub struct AssetsState {
     pub ip_extractor: Option<IpExtractor>,
 }
 
-impl HasAuthState for AssetsState {
-    fn jwt(&self) -> &JwtConfig {
-        &self.jwt
-    }
-
-    fn db(&self) -> &Database {
-        &self.db
-    }
-
-    fn secure_cookies(&self) -> bool {
-        self.secure_cookies
-    }
-
-    fn ip_extractor(&self) -> Option<&IpExtractor> {
-        self.ip_extractor.as_ref()
-    }
-}
+impl_has_auth_state!(AssetsState);
 
 impl HasAssetAuthState for AssetsState {
     fn login_path(&self) -> &str {

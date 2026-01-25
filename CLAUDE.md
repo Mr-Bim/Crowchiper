@@ -568,6 +568,39 @@ Located in `web/app/index.html`, styled in `web/app/css/app.css`, logic in `web/
 ### Token Cleanup
 Expired tokens are deleted on server startup via `db.tokens().delete_expired()`.
 
+### Auth Module Structure (`src/auth/`)
+
+The authentication logic is organized into focused submodules:
+
+- **`mod.rs`** - Main module with re-exports for backward compatibility
+- **`cookie.rs`** - Cookie parsing (`get_cookie`, cookie name constants)
+- **`errors.rs`** - Error types (`ApiAuthError`, `AssetAuthError`, `AuthErrorKind`)
+- **`extractors.rs`** - Axum extractors (`ApiAuth`, `ActivatedApiAuth`, `AssetAuth`, `MaybeAuth`)
+- **`ip.rs`** - Client IP extraction (`extract_client_ip`, `HasHeadersAndExtensions` trait)
+- **`state.rs`** - State traits (`HasAuthState`, `HasAssetAuthState`) and `impl_has_auth_state!` macro
+- **`types.rs`** - User types (`AuthenticatedUser`, `ActivatedAuthenticatedUser`)
+
+### HasAuthState Macro
+
+API state structs use the `impl_has_auth_state!` macro to avoid boilerplate:
+
+```rust
+use crate::impl_has_auth_state;
+
+#[derive(Clone)]
+pub struct MyApiState {
+    pub db: Database,
+    pub jwt: Arc<JwtConfig>,
+    pub secure_cookies: bool,
+    pub ip_extractor: Option<IpExtractor>,
+    // ... other fields
+}
+
+impl_has_auth_state!(MyApiState);
+```
+
+The macro implements `HasAuthState` trait methods (`jwt()`, `db()`, `secure_cookies()`, `ip_extractor()`).
+
 ## Rust Tests
 
 Test files located in `tests/` folder:

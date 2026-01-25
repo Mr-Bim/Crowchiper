@@ -14,9 +14,10 @@ use sqlx;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ActivatedApiAuth, HasAuthState};
+use crate::auth::ActivatedApiAuth;
 use crate::cli::IpExtractor;
 use crate::db::{Database, PostNode};
+use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
 /// State for posts endpoints.
@@ -28,20 +29,7 @@ pub struct PostsState {
     pub ip_extractor: Option<IpExtractor>,
 }
 
-impl HasAuthState for PostsState {
-    fn jwt(&self) -> &JwtConfig {
-        &self.jwt
-    }
-    fn db(&self) -> &Database {
-        &self.db
-    }
-    fn secure_cookies(&self) -> bool {
-        self.secure_cookies
-    }
-    fn ip_extractor(&self) -> Option<&IpExtractor> {
-        self.ip_extractor.as_ref()
-    }
-}
+impl_has_auth_state!(PostsState);
 
 pub fn router(state: PostsState) -> Router {
     Router::new()

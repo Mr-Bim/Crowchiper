@@ -1,12 +1,8 @@
 //! JWT token generation and validation.
 
-use axum::{extract::ConnectInfo, http::request::Parts};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::{
-    net::SocketAddr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::db::UserRole;
 
@@ -209,28 +205,6 @@ impl JwtConfig {
         }
 
         Ok(token_data.claims)
-    }
-
-    /// Extract client IP address from headers or connection info.
-    /// Checks X-Forwarded-For first (for reverse proxy), then falls back to extensions.
-    pub fn extract_client_ip(&self, parts: &Parts) -> Option<String> {
-        // Check X-Forwarded-For header first (reverse proxy)
-        if let Some(forwarded_for) = parts.headers.get("x-forwarded-for") {
-            if let Ok(value) = forwarded_for.to_str() {
-                // X-Forwarded-For can contain multiple IPs, take the first (original client)
-                if let Some(first_ip) = value.split(',').next() {
-                    let ip = first_ip.trim();
-                    if !ip.is_empty() {
-                        return Some(ip.to_string());
-                    }
-                }
-            }
-        }
-        // Fall back to socket address from ConnectInfo extension
-        parts
-            .extensions
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|ci| ci.0.ip().to_string())
     }
 }
 
