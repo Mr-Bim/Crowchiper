@@ -385,6 +385,29 @@
     background: var(--surface);
 }
 
+/* Loading indicator when editor is busy and empty */
+#editor[aria-busy="true"]:empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#editor[aria-busy="true"]:empty::after {
+    content: "";
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .empty-state {
     display: flex;
     align-items: center;

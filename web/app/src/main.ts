@@ -169,7 +169,6 @@ async function init(): Promise<void> {
       const unnlockBtn = getOptionalElement("unlock-btn");
 
       unnlockBtn?.addEventListener("click", handleUnlock);
-
       showUnlockOverlay();
       // Load posts without selecting (they're encrypted)
       // await loadPostsWithoutSelection();

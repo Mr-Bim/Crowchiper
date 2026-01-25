@@ -9,8 +9,15 @@ import { applySpellcheckToEditor } from "../spellcheck.ts";
 import { getEditor, getLoadedPost, setEditor } from "./state/index.ts";
 import { scheduleEncrypt } from "./save.ts";
 
-// Preload editor chunk - browser starts downloading immediately
-const editorPromise = import("../editor/setup.ts");
+// Lazy-load editor chunk - only starts when setupEditor is first called
+let editorPromise: Promise<typeof import("../editor/setup.ts")> | null = null;
+
+function getEditorModule() {
+  if (!editorPromise) {
+    editorPromise = import("../editor/setup.ts");
+  }
+  return editorPromise;
+}
 
 /**
  * Set up the editor with the given content.
@@ -21,7 +28,7 @@ export async function setupEditor(
   content: string,
 ): Promise<void> {
   const existingEditor = getEditor();
-  const { createEditor, resetEditorContent } = await editorPromise;
+  const { createEditor, resetEditorContent } = await getEditorModule();
 
   const onDocChange = () => {
     if (getLoadedPost()) {

@@ -7,7 +7,7 @@
 import { listPosts } from "../api/posts.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
 import { getOptionalElement } from "../../../shared/dom.ts";
-import { registerHandlers } from "./handlers.ts";
+import { registerHandlers, isHandlersRegistered } from "./handlers.ts";
 import {
   expandToDepth,
   flattenPosts,
@@ -19,8 +19,6 @@ import { handleSave, saveBeacon, setupBeforeUnloadWarning } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
 import { handleNewPost, handleReorder, handleReparent } from "./actions.ts";
-
-const widetPromise = import("../editor/attachment-widget/index.ts");
 
 /**
  * Initialize the handler registry.
@@ -53,6 +51,9 @@ function setPostListLoading(loading: boolean): void {
  * Load posts and initialize the UI.
  */
 export async function loadPosts(): Promise<void> {
+  if (isHandlersRegistered()) {
+    throw new Error("Should only be run at startup");
+  }
   try {
     // Initialize handler registry
     initHandlers();
@@ -82,8 +83,7 @@ export async function loadPosts(): Promise<void> {
     // Clear loading state and render
     setPostListLoading(false);
     renderPostList();
-
-    widetPromise.then((widet) =>
+    import("../editor/attachment-widget/index.ts").then((widet) =>
       widet.setOnAttachmentChange(() => {
         handleSave();
       }),

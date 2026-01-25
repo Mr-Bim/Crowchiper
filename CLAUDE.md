@@ -303,9 +303,11 @@ Loaded immediately on page load. Contains:
 - Unlock overlay UI
 
 ### Lazy-Loaded Chunks
-1. **Editor chunk** (`editor/setup.ts`) - CodeMirror + plugins, loaded when selecting/creating a post
-2. **Attachment widget chunk** (`editor/attachment-widget/index.ts`) - Gallery handling, loaded after posts load
-3. **HEIC converter** (`heic-to` library) - Loaded only when uploading HEIC images
+1. **Editor chunk** (`editor/setup.ts`) - CodeMirror + plugins (~316KB), loaded when `setupEditor()` is first called
+2. **Attachment widget chunk** (`editor/attachment-widget/index.ts`) - Gallery handling (~238KB), loaded inside `loadPosts()` after unlock
+3. **HEIC converter** (`heic-to` library) - Loaded only when uploading HEIC images (~2.5MB)
+
+**Important:** These chunks must NOT be imported at module top-level, or they will block the unlock overlay from appearing quickly. Use lazy `import()` inside functions instead.
 
 ### Shared Utilities (`web/app/src/shared/`)
 Utilities used by both the main bundle and lazy chunks. Import from here to avoid pulling editor dependencies into the main bundle:
