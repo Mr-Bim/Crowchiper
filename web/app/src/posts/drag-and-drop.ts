@@ -14,6 +14,7 @@ import {
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
 import { getSiblings } from "./state/index.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 
 // UUID v4 regex pattern
 const UUID_PATTERN =
@@ -70,6 +71,8 @@ export function initDragAndDrop(
   onReorder: ReorderCallback,
   onReparent: ReparentCallback,
 ): void {
+  if (!getOptionalElement(container.id)) return;
+
   // Clean up previous drag and drop setup
   for (const cleanup of cleanupFns) {
     cleanup();

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { globSync } from "node:fs";
+import { file } from "valibot";
 
 /**
  * Generate SHA-384 integrity hash for content
@@ -202,6 +203,10 @@ export function hashAllJsAssets(distDir) {
     try {
       const content = readFileSync(filePath);
       const integrity = getIntegrity(content);
+      if (filePath.includes("drag-and-drop")) {
+        console.log(filePath);
+        console.log(integrity);
+      }
       hashes.push(integrity);
     } catch (e) {
       console.warn(

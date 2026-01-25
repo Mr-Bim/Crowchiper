@@ -293,7 +293,7 @@ Note: Due to JavaScript's memory model, this is best-effort only.
 
 ## Code Splitting Structure
 
-The app uses code splitting to keep the initial bundle small (~40KB). Heavy features are lazy-loaded.
+The app uses code splitting to keep the initial bundle small (~17KB). Heavy features are lazy-loaded.
 
 ### Entry Point (`web/app/src/main.ts`)
 Loaded immediately on page load. Contains:
@@ -303,11 +303,51 @@ Loaded immediately on page load. Contains:
 - Unlock overlay UI
 
 ### Lazy-Loaded Chunks
-1. **Editor chunk** (`editor/setup.ts`) - CodeMirror + plugins (~316KB), loaded when `setupEditor()` is first called
-2. **Attachment widget chunk** (`editor/attachment-widget/index.ts`) - Gallery handling (~238KB), loaded inside `loadPosts()` after unlock
-3. **HEIC converter** (`heic-to` library) - Loaded only when uploading HEIC images (~2.5MB)
+1. **Drag-and-drop chunk** (`posts/drag-and-drop.ts`) - Post reordering (~27KB), loaded when posts are rendered
+2. **Editor chunk** (`editor/setup.ts`) - CodeMirror + plugins (~316KB), loaded when `setupEditor()` is first called
+3. **Attachment widget chunk** (`editor/attachment-widget/index.ts`) - Gallery handling (~238KB), loaded inside `loadPosts()` after unlock
+4. **HEIC converter** (`heic-to` library) - Loaded only when uploading HEIC images (~2.5MB)
 
 **Important:** These chunks must NOT be imported at module top-level, or they will block the unlock overlay from appearing quickly. Use lazy `import()` inside functions instead.
+
+### CSP and Dynamic Imports
+
+The app uses CSP with `'strict-dynamic'` to allow dynamically loaded scripts. However, **ES module dynamic imports (`import()`) are NOT covered by `strict-dynamic`** according to the W3C CSP spec. Browsers block dynamically imported modules unless they are modulepreloaded with integrity hashes.
+
+**How Vite handles this:**
+- Vite's preload polyfill (`Y` function in bundled code) creates `<link rel="modulepreload">` tags dynamically
+- These tags include `integrity` attributes that match hashes in the CSP
+- Chunks are only added to the preload list (`__vite__mapDeps`) if they share dependencies with other chunks
+- When a chunk has shared dependencies, Vite creates the modulepreload link **just before** the import, not at page load
+
+**The Problem:**
+When a chunk has no shared dependencies with other chunks, Vite imports it with an empty deps array, skipping the modulepreload step. The browser then blocks it due to CSP.
+
+**The Fix:**
+Add an import from a shared module (like `shared/dom.ts`) to create a dependency link:
+
+```typescript
+// In the lazy-loaded chunk (e.g., drag-and-drop.ts):
+// Import from shared/dom to create a shared dependency with other chunks.
+// This allows Vite to modulepreload this chunk dynamically (not eagerly),
+// which is required for CSP strict-dynamic to work with ES module imports.
+import { getOptionalElement } from "../../../shared/dom.ts";
+
+// Use the import somewhere to prevent tree-shaking
+if (!getOptionalElement(container.id)) return;
+```
+
+This makes Vite:
+1. Include the chunk in `__vite__mapDeps` array
+2. Create modulepreload links dynamically when the chunk is needed (not at page load)
+3. Include integrity hashes that satisfy CSP
+
+**When adding new lazy-loaded chunks:**
+1. Build and check the bundled index.js for the chunk's import
+2. If it uses `__vite__mapDeps([])` (empty array), the chunk has no shared dependencies
+3. Add an import from `shared/dom.ts` and use it somewhere in the code
+4. Rebuild both frontend (`npm run build-all`) and Rust (`cargo build`) to update CSP hashes
+5. Verify the chunk now has a non-empty `__vite__mapDeps` array
 
 ### Shared Utilities (`web/app/src/shared/`)
 Utilities used by both the main bundle and lazy chunks. Import from here to avoid pulling editor dependencies into the main bundle:

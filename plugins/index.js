@@ -11,7 +11,7 @@ import {
   compileNeededIIFEs,
   injectIIFE,
 } from "./inline-iife.js";
-import { processSri, hashAllJsAssets, writeCspHashes } from "./sri.js";
+import { processSri, writeCspHashes } from "./sri.js";
 import {
   stripTestIds,
   minifyHtml,
@@ -180,11 +180,10 @@ export function buildPlugin(options = {}) {
         // 4. Delete inlined CSS files
         deleteFiles([...allFilesToDelete]);
 
-        // 5. Hash all JS assets (including dynamically imported chunks)
-        const jsAssetHashes = hashAllJsAssets(distDir);
-        allScriptHashes.push(...jsAssetHashes);
-
-        // 6. Write CSP hashes
+        // 5. Write CSP hashes
+        // Note: We only need hashes for scripts in the HTML (entry, modulepreloads, inline).
+        // Dynamically imported chunks don't need hashes because they're loaded by
+        // already-trusted scripts, and CSP strict-dynamic propagates trust.
         // Load existing hashes or create new object
         const cspHashesPath = join(distRoot, "csp-hashes.json");
         let existingHashes = {};
