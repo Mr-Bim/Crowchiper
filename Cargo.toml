@@ -40,6 +40,7 @@ webauthn-rs = { version = "0.5.4", features = [
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 openssl = { version = "0.10", features = ["vendored"] }
 rand = "0.9.2"
+governor = "0.10"
 
 [dev-dependencies]
 tower = { version = "0.5.2", features = ["util"] }

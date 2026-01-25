@@ -5,6 +5,7 @@ pub mod cli;
 pub mod db;
 pub mod jwt;
 pub mod names;
+pub mod rate_limit;
 
 // Re-export test-mode utilities for easier access in tests
 #[cfg(feature = "test-mode")]

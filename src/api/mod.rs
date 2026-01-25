@@ -16,6 +16,7 @@ use webauthn_rs::prelude::*;
 use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
+use crate::rate_limit::RateLimitConfig;
 
 pub use users::UsersState;
 
@@ -28,6 +29,8 @@ pub fn create_api_router(
     no_signup: bool,
     ip_extractor: Option<IpExtractor>,
 ) -> Router {
+    let rate_limit_config = Arc::new(RateLimitConfig::new(ip_extractor.clone()));
+
     let passkeys_state = passkeys::PasskeysState {
         db: db.clone(),
         webauthn,
@@ -78,11 +81,19 @@ pub fn create_api_router(
         ip_extractor,
     };
 
-    let users_state = users::UsersState { db, jwt, no_signup };
+    let users_state = users::UsersState {
+        db,
+        jwt,
+        no_signup,
+        rate_limit_config: rate_limit_config.clone(),
+    };
 
     let router = Router::new()
         .nest("/users", users::router(users_state))
-        .nest("/passkeys", passkeys::router(passkeys_state))
+        .nest(
+            "/passkeys",
+            passkeys::router(passkeys_state, rate_limit_config),
+        )
         .nest("/posts", posts::router(posts_state))
         .nest("/encryption", encryption::router(encryption_state))
         .nest("/config", config::router(config_state))

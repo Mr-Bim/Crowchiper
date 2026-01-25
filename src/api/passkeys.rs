@@ -7,6 +7,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::{StatusCode, header::SET_COOKIE},
+    middleware,
     response::IntoResponse,
     routing::{delete, post},
 };
@@ -20,6 +21,7 @@ use crate::auth::{REFRESH_COOKIE_NAME, extract_client_ip, get_cookie};
 use crate::cli::IpExtractor;
 use crate::db::{AuthChallenge, Database, User};
 use crate::jwt::JwtConfig;
+use crate::rate_limit::{RateLimitConfig, rate_limit_login_finish, rate_limit_login_start};
 
 #[derive(Clone)]
 pub struct PasskeysState {
@@ -87,19 +89,41 @@ impl PasskeysState {
     }
 }
 
-pub fn router(state: PasskeysState) -> Router {
-    Router::new()
+pub fn router(state: PasskeysState, rate_limit_config: Arc<RateLimitConfig>) -> Router {
+    // Routes with rate limiting on start endpoints (challenge generation)
+    let start_routes = Router::new()
         .route("/register/start", post(register_start))
-        .route("/register/finish", post(register_finish))
         .route("/login/start", post(login_start))
+        .route("/claim/start", post(claim_start))
+        .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(
+            rate_limit_config.clone(),
+            rate_limit_login_start,
+        ));
+
+    // Routes with rate limiting on finish endpoints (authentication attempts)
+    let finish_routes = Router::new()
+        .route("/register/finish", post(register_finish))
         .route("/login/finish", post(login_finish))
+        .route("/claim/finish", post(claim_finish))
+        .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(
+            rate_limit_config,
+            rate_limit_login_finish,
+        ));
+
+    // Routes without rate limiting
+    let other_routes = Router::new()
         .route(
             "/login/challenge/{session_id}",
             delete(delete_login_challenge),
         )
-        .route("/claim/start", post(claim_start))
-        .route("/claim/finish", post(claim_finish))
-        .with_state(state)
+        .with_state(state);
+
+    Router::new()
+        .merge(start_routes)
+        .merge(finish_routes)
+        .merge(other_routes)
 }
 
 #[derive(Deserialize)]

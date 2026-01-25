@@ -3,6 +3,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{delete, post},
 };
@@ -13,24 +14,34 @@ use super::error::{ApiError, ResultExt, validate_uuid};
 use crate::auth::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
 use crate::db::{Database, UserRole};
 use crate::jwt::JwtConfig;
+use crate::rate_limit::{RateLimitConfig, rate_limit_user_create};
 
 #[derive(Clone)]
 pub struct UsersState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
     pub no_signup: bool,
+    pub rate_limit_config: Arc<RateLimitConfig>,
 }
 
 pub fn router(state: UsersState) -> Router {
-    let router = Router::new().route("/{uuid}", delete(delete_user));
+    let delete_router = Router::new()
+        .route("/{uuid}", delete(delete_user))
+        .with_state(state.clone());
 
-    let router = if state.no_signup {
-        router
+    if state.no_signup {
+        delete_router
     } else {
-        router.route("/", post(create_user))
-    };
+        let create_router = Router::new()
+            .route("/", post(create_user))
+            .with_state(state.clone())
+            .layer(middleware::from_fn_with_state(
+                state.rate_limit_config,
+                rate_limit_user_create,
+            ));
 
-    router.with_state(state)
+        Router::new().merge(delete_router).merge(create_router)
+    }
 }
 
 #[derive(Deserialize)]

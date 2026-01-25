@@ -44,14 +44,40 @@ function isRetryableStatus(status: number): boolean {
 
 export interface RetryOptions {
   maxRetries?: number;
-  delayMs?: number;
+  /** Initial delay in milliseconds (default: 1000). Doubles with each retry (exponential backoff). */
+  initialDelayMs?: number;
+  /** Maximum delay in milliseconds (default: 30000). Caps the exponential growth. */
+  maxDelayMs?: number;
   fallbackError: string;
+}
+
+/**
+ * Calculate delay with exponential backoff and jitter.
+ *
+ * @param attempt - Current attempt number (0-indexed, so first retry is attempt 0)
+ * @param initialDelayMs - Base delay in milliseconds
+ * @param maxDelayMs - Maximum delay cap
+ * @returns Delay in milliseconds with jitter applied
+ */
+function calculateBackoffDelay(
+  attempt: number,
+  initialDelayMs: number,
+  maxDelayMs: number,
+): number {
+  // Exponential backoff: initialDelay * 2^attempt
+  const exponentialDelay = initialDelayMs * Math.pow(2, attempt);
+  // Cap at maxDelay
+  const cappedDelay = Math.min(exponentialDelay, maxDelayMs);
+  // Add jitter: ±25% randomization to prevent thundering herd
+  const jitter = cappedDelay * 0.25 * (Math.random() * 2 - 1);
+  return Math.round(cappedDelay + jitter);
 }
 
 /**
  * Fetch with automatic retry for transient server errors (5xx).
  *
  * Retries the request up to maxRetries times if the server returns a 5xx error.
+ * Uses exponential backoff with jitter to prevent thundering herd problems.
  * This is useful for handling transient issues like Cloudflare errors.
  *
  * @param fetchFn - The fetch function to use (allows injecting fetchWithAuth)
@@ -62,9 +88,17 @@ export async function fetchWithRetry(
   options: RetryOptions,
   fetchFn: typeof fetch = fetch,
 ): Promise<Response> {
-  const { maxRetries = 2, delayMs = 1000, fallbackError } = options;
+  const {
+    maxRetries = 2,
+    initialDelayMs = 1000,
+    maxDelayMs = 30000,
+    fallbackError,
+  } = options;
 
-  const attempt = async (retriesLeft: number): Promise<Response> => {
+  const attempt = async (
+    retriesLeft: number,
+    attemptNumber: number,
+  ): Promise<Response> => {
     const response = await fetchFn(input, init);
 
     if (response.ok) {
@@ -73,16 +107,21 @@ export async function fetchWithRetry(
 
     if (isRetryableStatus(response.status) && retriesLeft > 0) {
       const errorMsg = await getErrorMessage(response, "Server error");
-      console.warn(
-        `Request failed with ${response.status}: ${errorMsg}, retrying...`,
+      const delay = calculateBackoffDelay(
+        attemptNumber,
+        initialDelayMs,
+        maxDelayMs,
       );
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      return attempt(retriesLeft - 1);
+      console.warn(
+        `Request failed with ${response.status}: ${errorMsg}, retrying in ${delay}ms...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return attempt(retriesLeft - 1, attemptNumber + 1);
     }
 
     const errorMsg = await getErrorMessage(response, fallbackError);
     throw new Error(errorMsg);
   };
 
-  return attempt(maxRetries);
+  return attempt(maxRetries, 0);
 }

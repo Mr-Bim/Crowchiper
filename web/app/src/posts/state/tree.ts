@@ -8,21 +8,46 @@
 import type { PostNode } from "../../api/posts.ts";
 import { postsSignal, getPosts } from "./signals.ts";
 
+// --- Memoization cache for findPost ---
+
+/** Cached UUID to PostNode lookup map */
+let postLookupCache: Map<string, PostNode> | null = null;
+/** Reference to the posts array used to build the cache (for invalidation) */
+let cachedPostsRef: PostNode[] | null = null;
+
 /**
- * Find a post by UUID in the tree.
+ * Build or retrieve the UUID lookup cache.
+ * Cache is invalidated when postsSignal changes (detected by reference check).
  */
-export function findPost(uuid: string): PostNode | null {
-  function search(nodes: PostNode[]): PostNode | null {
-    for (const node of nodes) {
-      if (node.uuid === uuid) return node;
-      if (node.children) {
-        const found = search(node.children);
-        if (found) return found;
+function getPostLookupCache(): Map<string, PostNode> {
+  const currentPosts = getPosts();
+
+  // Invalidate cache if posts array reference changed
+  if (postLookupCache === null || cachedPostsRef !== currentPosts) {
+    postLookupCache = new Map();
+    cachedPostsRef = currentPosts;
+
+    // Recursively build the lookup map
+    function buildCache(nodes: PostNode[]): void {
+      for (const node of nodes) {
+        postLookupCache!.set(node.uuid, node);
+        if (node.children) {
+          buildCache(node.children);
+        }
       }
     }
-    return null;
+    buildCache(currentPosts);
   }
-  return search(getPosts());
+
+  return postLookupCache;
+}
+
+/**
+ * Find a post by UUID in the tree.
+ * Uses memoized lookup map for O(1) access instead of O(n) tree traversal.
+ */
+export function findPost(uuid: string): PostNode | null {
+  return getPostLookupCache().get(uuid) ?? null;
 }
 
 /**
