@@ -13,6 +13,7 @@ import {
   cleanupPendingUploads,
   abortAllUploads,
 } from "../shared/attachment-utils.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 import { applySpellcheckToEditor } from "../spellcheck.ts";
 import {
   getEditor,
@@ -35,11 +36,40 @@ import { renderPostList } from "./render.ts";
 const editorPromise = import("../editor/setup.ts");
 
 /**
+ * Set loading state on a post item in the sidebar.
+ */
+function setPostItemLoading(uuid: string, loading: boolean): void {
+  const wrapper = document.querySelector(`[data-uuid="${uuid}"]`);
+  const item = wrapper?.querySelector(".cl-post-item");
+  const editor = getOptionalElement("editor");
+  if (item) {
+    if (loading) {
+      item.setAttribute("data-loading", "");
+      item.setAttribute("aria-busy", "true");
+    } else {
+      item.removeAttribute("data-loading");
+      item.removeAttribute("aria-busy");
+    }
+  }
+  // Also set aria-busy on the editor area during loading
+  if (editor) {
+    if (loading) {
+      editor.setAttribute("aria-busy", "true");
+    } else {
+      editor.removeAttribute("aria-busy");
+    }
+  }
+}
+
+/**
  * Select a post for editing.
  */
 export async function selectPost(postNode: PostNode): Promise<void> {
   // Abort any active uploads before switching
   abortAllUploads();
+
+  // Show loading state on the post item
+  setPostItemLoading(postNode.uuid, true);
 
   // Save current post to server before switching (includes attachment refs)
   stopServerSaveInterval();
@@ -49,7 +79,7 @@ export async function selectPost(postNode: PostNode): Promise<void> {
   setPendingEncryptedData(null);
   setIsDirty(false);
 
-  const container = document.getElementById("editor");
+  const container = getOptionalElement("editor");
   if (!container) return;
 
   // Fetch full post data
@@ -88,9 +118,10 @@ export async function selectPost(postNode: PostNode): Promise<void> {
   // Apply spellcheck setting to the new editor
   applySpellcheckToEditor();
 
-  const deleteBtn = document.getElementById(
-    "delete-btn",
-  ) as HTMLButtonElement | null;
+  // Clear loading state
+  setPostItemLoading(postNode.uuid, false);
+
+  const deleteBtn = getOptionalElement("delete-btn", HTMLButtonElement);
   if (deleteBtn) {
     deleteBtn.disabled = false;
   }

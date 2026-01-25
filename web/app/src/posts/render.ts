@@ -6,6 +6,7 @@
 
 import { listPostChildren, type PostNode } from "../api/posts.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 import { initDragAndDrop } from "./drag-and-drop.ts";
 import {
   getReorderHandler,
@@ -94,6 +95,7 @@ function renderPostNode(
   }
   if (loadedPost?.uuid === post.uuid) {
     item.classList.add("active");
+    item.setAttribute("aria-current", "page");
   }
 
   // Use decrypted title from map, fallback to post.title, then "Untitled"
@@ -116,7 +118,7 @@ function renderPostNode(
  * Render the entire post tree.
  */
 export function renderPostList(): void {
-  const list = document.getElementById("post-list");
+  const list = getOptionalElement("post-list");
   if (!list) return;
 
   const posts = getPosts();

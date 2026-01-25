@@ -20,7 +20,11 @@
                         +
                     </button>
                 </div>
-                <div class="cl-post-list" id="post-list"></div>
+                <nav
+                    class="cl-post-list"
+                    id="post-list"
+                    aria-label="Posts"
+                ></nav>
                 <div class="sidebar-footer">
                     <div class="settings-dropdown">
                         <button
@@ -123,9 +127,17 @@
             </main>
         </div>
         <!-- Unlock overlay for encrypted content -->
-        <div id="unlock-overlay" class="cl-unlock-overlay" hidden>
+        <div
+            id="unlock-overlay"
+            class="cl-unlock-overlay"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unlock-title"
+            aria-describedby="unlock-description"
+        >
             <div class="unlock-modal">
-                <div class="unlock-icon">
+                <div class="unlock-icon" aria-hidden="true">
                     <svg
                         width="48"
                         height="48"
@@ -147,15 +159,20 @@
                         <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                     </svg>
                 </div>
-                <h2>Unlock your posts</h2>
-                <p>
+                <h2 id="unlock-title">Unlock your posts</h2>
+                <p id="unlock-description">
                     Your posts are encrypted. Authenticate with your passkey to
                     decrypt them.
                 </p>
                 <button id="unlock-btn" class="btn-primary">
                     Unlock with Passkey
                 </button>
-                <div id="unlock-error" class="cl-unlock-error" hidden></div>
+                <div
+                    id="unlock-error"
+                    class="cl-unlock-error"
+                    hidden
+                    role="alert"
+                ></div>
             </div>
         </div>
 
@@ -168,8 +185,23 @@
             hidden
         />
 
+        <!-- Success toast notification -->
+        <div
+            id="success-toast"
+            class="cl-success-toast"
+            hidden
+            aria-live="polite"
+        >
+            <span id="success-toast-message"></span>
+        </div>
+
         <!-- Error toast notification -->
-        <div id="error-toast" class="cl-error-toast" hidden>
+        <div
+            id="error-toast"
+            class="cl-error-toast"
+            hidden
+            aria-live="assertive"
+        >
             <span id="error-toast-message"></span>
             <button
                 id="error-toast-close"

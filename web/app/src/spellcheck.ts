@@ -5,6 +5,7 @@
  */
 
 import { getStorage, setStorage } from "../../shared/storage.ts";
+import { getOptionalElement } from "../../shared/dom.ts";
 
 let spellcheckEnabled = false;
 
@@ -33,7 +34,7 @@ function saveSpellcheckPreference(): void {
  * Update the spellcheck button UI.
  */
 function updateSpellcheckButton(): void {
-  const btn = document.getElementById("spellcheck-btn");
+  const btn = getOptionalElement("spellcheck-btn");
   if (btn) {
     btn.setAttribute("data-enabled", spellcheckEnabled ? "true" : "false");
     btn.title = spellcheckEnabled ? "Disable spellcheck" : "Enable spellcheck";
@@ -44,7 +45,7 @@ function updateSpellcheckButton(): void {
  * Apply spellcheck attribute to the editor content.
  */
 export function applySpellcheckToEditor(): void {
-  const editorEl = document.getElementById("editor");
+  const editorEl = getOptionalElement("editor");
   if (!editorEl) return;
 
   const contentEl = editorEl.querySelector(".cm-content");
@@ -70,6 +71,6 @@ export function setupSpellcheck(): void {
   loadSpellcheckPreference();
   updateSpellcheckButton();
 
-  const btn = document.getElementById("spellcheck-btn");
+  const btn = getOptionalElement("spellcheck-btn");
   btn?.addEventListener("click", toggleSpellcheck);
 }

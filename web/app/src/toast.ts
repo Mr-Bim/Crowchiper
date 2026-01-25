@@ -1,26 +1,27 @@
 /**
- * Toast notification for displaying errors to the user.
+ * Toast notifications for displaying messages to the user.
  */
 
 import { getOptionalElement } from "../../shared/dom.ts";
 
-let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+let errorHideTimeout: ReturnType<typeof setTimeout> | null = null;
+let successHideTimeout: ReturnType<typeof setTimeout> | null = null;
 let currentCloseHandler: (() => void) | null = null;
 
 /**
- * Hide the toast and clear any pending timeout.
+ * Hide the error toast and clear any pending timeout.
  */
-function hideToast(toast: HTMLElement): void {
-  if (hideTimeout) {
-    clearTimeout(hideTimeout);
-    hideTimeout = null;
+function hideErrorToast(toast: HTMLElement): void {
+  if (errorHideTimeout) {
+    clearTimeout(errorHideTimeout);
+    errorHideTimeout = null;
   }
   toast.hidden = true;
 }
 
 /**
  * Show an error toast notification.
- * The toast auto-hides after 5 seconds, or can be dismissed manually.
+ * The toast auto-hides after 10 seconds, or can be dismissed manually.
  */
 export function showError(message: string): void {
   const toast = getOptionalElement("error-toast");
@@ -33,9 +34,9 @@ export function showError(message: string): void {
   }
 
   // Clear any existing timeout
-  if (hideTimeout) {
-    clearTimeout(hideTimeout);
-    hideTimeout = null;
+  if (errorHideTimeout) {
+    clearTimeout(errorHideTimeout);
+    errorHideTimeout = null;
   }
 
   // Remove old handler if it exists
@@ -44,14 +45,41 @@ export function showError(message: string): void {
   }
 
   // Create and store new handler
-  currentCloseHandler = () => hideToast(toast);
+  currentCloseHandler = () => hideErrorToast(toast);
   closeBtn.addEventListener("click", currentCloseHandler);
 
   messageEl.textContent = message;
   toast.hidden = false;
 
-  // Auto-hide after 5 seconds
-  hideTimeout = setTimeout(() => {
+  // Auto-hide after 10 seconds (longer for important errors)
+  errorHideTimeout = setTimeout(() => {
     toast.hidden = true;
-  }, 5000);
+  }, 10000);
+}
+
+/**
+ * Show a success toast notification.
+ * The toast auto-hides after 2 seconds.
+ */
+export function showSuccess(message: string): void {
+  const toast = getOptionalElement("success-toast");
+  const messageEl = getOptionalElement("success-toast-message");
+
+  if (!toast || !messageEl) {
+    return;
+  }
+
+  // Clear any existing timeout
+  if (successHideTimeout) {
+    clearTimeout(successHideTimeout);
+    successHideTimeout = null;
+  }
+
+  messageEl.textContent = message;
+  toast.hidden = false;
+
+  // Auto-hide after 2 seconds
+  successHideTimeout = setTimeout(() => {
+    toast.hidden = true;
+  }, 2000);
 }

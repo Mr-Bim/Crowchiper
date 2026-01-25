@@ -6,6 +6,7 @@
 
 import { listPosts } from "../api/posts.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 import { registerHandlers } from "./handlers.ts";
 import {
   expandToDepth,
@@ -14,7 +15,7 @@ import {
   setDecryptedTitles,
   setPosts,
 } from "./state.ts";
-import { handleSave, saveBeacon } from "./save.ts";
+import { handleSave, saveBeacon, setupBeforeUnloadWarning } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
 import { handleNewPost, handleReorder, handleReparent } from "./actions.ts";
@@ -35,6 +36,20 @@ function initHandlers(): void {
 }
 
 /**
+ * Set loading state on the post list.
+ */
+function setPostListLoading(loading: boolean): void {
+  const list = getOptionalElement("post-list");
+  if (list) {
+    if (loading) {
+      list.setAttribute("data-loading", "");
+    } else {
+      list.removeAttribute("data-loading");
+    }
+  }
+}
+
+/**
  * Load posts and initialize the UI.
  */
 export async function loadPosts(): Promise<void> {
@@ -44,6 +59,12 @@ export async function loadPosts(): Promise<void> {
 
     // Save post and refs via beacon when page is unloading
     window.addEventListener("pagehide", saveBeacon);
+
+    // Warn about unsaved changes before leaving
+    setupBeforeUnloadWarning();
+
+    // Show loading state
+    setPostListLoading(true);
 
     // Auto-save when attachments are uploaded or deleted
 
@@ -58,6 +79,8 @@ export async function loadPosts(): Promise<void> {
     const titles = await decryptPostTitles(allPosts);
     setDecryptedTitles(titles);
 
+    // Clear loading state and render
+    setPostListLoading(false);
     renderPostList();
 
     widetPromise.then((widet) =>
@@ -105,7 +128,7 @@ export async function loadPostsWithoutSelection(): Promise<void> {
  * Show an empty state message in the editor area.
  */
 function showEmptyState(message: string): void {
-  const container = document.getElementById("editor");
+  const container = getOptionalElement("editor");
   if (container) {
     container.innerHTML = `<div class="empty-state">${message}</div>`;
   }

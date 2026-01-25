@@ -15,6 +15,7 @@ import {
   extractPrfOutput,
 } from "../crypto/operations.ts";
 import { getPrfSalt, setSessionEncryptionKey } from "../crypto/keystore.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 
 declare const API_PATH: string;
 declare const __TEST_MODE__: boolean;
@@ -25,7 +26,7 @@ declare const __TEST_MODE__: boolean;
  * Show the unlock overlay prompting for passkey authentication.
  */
 export function showUnlockOverlay(): void {
-  const overlay = document.getElementById("unlock-overlay");
+  const overlay = getOptionalElement("unlock-overlay");
   if (overlay) {
     overlay.hidden = false;
   }
@@ -35,14 +36,14 @@ export function showUnlockOverlay(): void {
  * Hide the unlock overlay after successful authentication.
  */
 export function hideUnlockOverlay(): void {
-  const overlay = document.getElementById("unlock-overlay");
+  const overlay = getOptionalElement("unlock-overlay");
   if (overlay) {
     overlay.hidden = true;
   }
 }
 
 function showUnlockError(message: string): void {
-  const errorEl = document.getElementById("unlock-error");
+  const errorEl = getOptionalElement("unlock-error");
   if (errorEl) {
     errorEl.textContent = message;
     errorEl.hidden = false;
@@ -50,14 +51,14 @@ function showUnlockError(message: string): void {
 }
 
 function hideUnlockError(): void {
-  const errorEl = document.getElementById("unlock-error");
+  const errorEl = getOptionalElement("unlock-error");
   if (errorEl) {
     errorEl.hidden = true;
   }
 }
 
 function setUnlockLoading(loading: boolean): void {
-  const btn = document.getElementById("unlock-btn") as HTMLButtonElement | null;
+  const btn = getOptionalElement("unlock-btn", HTMLButtonElement);
   if (btn) {
     btn.disabled = loading;
     btn.textContent = loading ? "Unlocking..." : "Unlock with Passkey";

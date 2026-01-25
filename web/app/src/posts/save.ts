@@ -6,9 +6,11 @@
 
 import { updatePost, updatePostBeacon } from "../api/posts.ts";
 import { encryptPostData } from "../crypto/post-encryption.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 import { callRenderPostList } from "./handlers.ts";
 import { parseAttachmentUuids } from "../shared/attachment-utils.ts";
 import { clearImageCacheExcept } from "../shared/image-cache.ts";
+import { showSuccess } from "../toast.ts";
 import {
   clearSaveTimeout,
   clearServerSaveInterval,
@@ -35,6 +37,24 @@ function extractTitle(content: string): string {
 
 const ENCRYPT_DEBOUNCE_MS = 1000;
 const SERVER_SAVE_INTERVAL_MS = 60000;
+
+/**
+ * Handle beforeunload event to warn about unsaved changes.
+ */
+function handleBeforeUnload(e: BeforeUnloadEvent): void {
+  if (getIsDirty()) {
+    e.preventDefault();
+    // Modern browsers ignore custom messages, but we still need to set returnValue
+    e.returnValue = "";
+  }
+}
+
+/**
+ * Set up beforeunload handler to warn about unsaved changes.
+ */
+export function setupBeforeUnloadWarning(): void {
+  window.addEventListener("beforeunload", handleBeforeUnload);
+}
 
 /**
  * Schedule local encryption after 1 second of inactivity.
@@ -220,7 +240,7 @@ export function saveBeacon(): void {
  * @param dirty - Whether there are unsaved changes
  */
 export function updateSaveButton(dirty: boolean): void {
-  const btn = document.getElementById("save-btn") as HTMLButtonElement | null;
+  const btn = getOptionalElement("save-btn", HTMLButtonElement);
   if (!btn) return;
 
   btn.setAttribute("data-dirty", dirty ? "true" : "false");
@@ -264,6 +284,7 @@ export async function handleSave(): Promise<void> {
 
     setIsDirty(false);
     updateSaveButton(false);
+    showSuccess("Saved");
 
     // Clear cache for deleted images
     clearImageCacheExcept(attachmentUuids);

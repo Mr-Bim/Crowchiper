@@ -11,6 +11,7 @@ import {
   type PostNode,
   reorderPosts,
 } from "../api/posts.ts";
+import { getOptionalElement } from "../../../shared/dom.ts";
 import { encryptPostData } from "../crypto/post-encryption.ts";
 import {
   addPost,
@@ -107,7 +108,7 @@ export async function handleNewPost(
     });
     setLoadedDecryptedContent(displayContent);
 
-    const container = document.getElementById("editor");
+    const container = getOptionalElement("editor");
     if (container) {
       // Destroy existing editor
       const oldEditor = getEditor();
@@ -125,9 +126,7 @@ export async function handleNewPost(
       setEditor(newEditor);
     }
 
-    const deleteBtn = document.getElementById(
-      "delete-btn",
-    ) as HTMLButtonElement | null;
+    const deleteBtn = getOptionalElement("delete-btn", HTMLButtonElement);
     if (deleteBtn) {
       deleteBtn.disabled = false;
     }

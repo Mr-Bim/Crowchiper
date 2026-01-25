@@ -516,6 +516,73 @@
     }
 }
 
+/* Loading indicator for post list */
+.cl-post-list[data-loading]::after {
+    content: "";
+    display: block;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: 1rem auto;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: cl-spin 0.8s linear infinite;
+}
+
+@keyframes cl-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Loading state for post item */
+.cl-post-item[data-loading] {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Success toast notification */
+.cl-success-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: oklch(0.95 0.05 145);
+    border: 1px solid oklch(0.8 0.1 145);
+    color: oklch(0.4 0.15 145);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10001;
+    max-width: 90vw;
+    font-size: 0.875rem;
+    animation: cl-toast-in 0.2s ease-out;
+}
+
+.cl-success-toast[hidden] {
+    display: none;
+}
+
+:root[data-theme="dark"] .cl-success-toast {
+    background: oklch(0.25 0.05 145);
+    border-color: oklch(0.4 0.1 145);
+    color: oklch(0.8 0.1 145);
+}
+
+@keyframes cl-toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(0.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
 /* Error toast notification */
 .cl-error-toast {
     position: fixed;
@@ -702,5 +769,27 @@
 @keyframes heic-spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .cl-post-list[data-loading]::after,
+    .heic-modal-spinner {
+        animation: none;
+        border-top-color: var(--accent);
+        opacity: 0.7;
+    }
+
+    .cl-success-toast {
+        animation: none;
     }
 }

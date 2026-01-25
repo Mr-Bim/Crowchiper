@@ -20,17 +20,38 @@ import {
 } from "./posts/index.ts";
 import { setupSpellcheck } from "./spellcheck.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
+import { getOptionalElement } from "../../shared/dom.ts";
 
 declare const __TEST_MODE__: boolean;
 declare const API_PATH: string;
 declare const LOGIN_PATH: string;
 
 function setupNewPostButton(): void {
-  const btn = document.getElementById("new-post-btn");
+  const btn = getOptionalElement("new-post-btn");
   if (!btn) return;
 
   btn.addEventListener("click", () => {
     handleNewPost();
+  });
+}
+
+/**
+ * Set up global keyboard shortcuts.
+ * - Ctrl/Cmd+S: Save current post
+ * - Ctrl/Cmd+N: Create new post
+ */
+function setupKeyboardShortcuts(): void {
+  document.addEventListener("keydown", (e) => {
+    const isMod = e.ctrlKey || e.metaKey;
+    if (!isMod) return;
+
+    if (e.key === "s") {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === "n") {
+      e.preventDefault();
+      handleNewPost();
+    }
   });
 }
 
@@ -67,9 +88,9 @@ function setupBfcacheHandler(): void {
 }
 
 function setupSidebarToggle(): void {
-  const sidebar = document.getElementById("sidebar");
-  const toggleBtn = document.getElementById("sidebar-toggle");
-  const editor = document.getElementById("editor");
+  const sidebar = getOptionalElement("sidebar");
+  const toggleBtn = getOptionalElement("sidebar-toggle");
+  const editor = getOptionalElement("editor");
 
   if (!sidebar || !toggleBtn) return;
 
@@ -130,16 +151,18 @@ async function init(): Promise<void> {
 
     // Wire up event handlers
     setupNewPostButton();
-    document.getElementById("save-btn")?.addEventListener("click", handleSave);
-    document
-      .getElementById("delete-btn")
-      ?.addEventListener("click", handleDeletePost);
+    setupKeyboardShortcuts();
+    getOptionalElement("save-btn")?.addEventListener("click", handleSave);
+    getOptionalElement("delete-btn")?.addEventListener(
+      "click",
+      handleDeletePost,
+    );
 
     // If encryption is enabled, show unlock overlay
     if (needsUnlock()) {
       // Create unlock handler that loads posts after unlock
       const handleUnlock = createUnlockHandler(loadPosts);
-      const unnlockBtn = document.getElementById("unlock-btn");
+      const unnlockBtn = getOptionalElement("unlock-btn");
 
       unnlockBtn?.addEventListener("click", handleUnlock);
 
