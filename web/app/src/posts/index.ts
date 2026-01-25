@@ -1,7 +1,11 @@
 /**
  * Posts management - state, UI, and interactions.
  */
-export * from "./state.ts";
+
+// State (re-export from state/ folder)
+export * from "./state/index.ts";
+
+// Drag and drop
 export { initDragAndDrop } from "./drag-and-drop.ts";
 
 // Handler registry
@@ -12,6 +16,9 @@ export { handleSave, saveBeacon } from "./save.ts";
 
 // Rendering
 export { renderPostList } from "./render.ts";
+
+// Editor setup
+export { setupEditor, destroyEditor } from "./editor.ts";
 
 // Selection
 export { selectPost } from "./selection.ts";
@@ -25,3 +32,6 @@ export {
 
 // Loading
 export { loadPosts, loadPostsWithoutSelection } from "./load.ts";
+
+// Reactive subscriptions
+export { initSubscriptions } from "./subscriptions.ts";

@@ -17,38 +17,35 @@ import {
   addPost,
   clearSaveTimeout,
   findPost,
-  getEditor,
   getFirstSelectablePost,
   getLoadedPost,
   getSiblingUuids,
+  isLoading,
   movePostInSiblings,
   movePostToParent,
   removePost,
   setDecryptedTitle,
-  setEditor,
   setExpanded,
   setIsDirty,
   setLoadedDecryptedContent,
   setLoadedPost,
   setPendingEncryptedData,
-} from "./state.ts";
-import {
-  scheduleEncrypt,
-  stopServerSaveInterval,
-  saveToServerNow,
-} from "./save.ts";
+} from "./state/index.ts";
+import { stopServerSaveInterval, saveToServerNow } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
-
-// Preload editor chunk - browser starts downloading immediately
-const editorPromise = import("../editor/setup.ts");
+import { destroyEditor, setupEditor } from "./editor.ts";
 
 /**
  * Create a new post.
+ * Returns early if a post is currently loading.
  */
 export async function handleNewPost(
   parentId: string | null = null,
 ): Promise<void> {
+  // Ignore if currently loading a post
+  if (isLoading()) return;
+
   // Save current post before creating new one (includes attachment refs)
   stopServerSaveInterval();
   await saveToServerNow();
@@ -110,20 +107,7 @@ export async function handleNewPost(
 
     const container = getOptionalElement("editor");
     if (container) {
-      // Destroy existing editor
-      const oldEditor = getEditor();
-      if (oldEditor) {
-        oldEditor.destroy();
-      }
-
-      // Create new editor
-      const { createEditor } = await editorPromise;
-      const newEditor = createEditor(container, displayContent, () => {
-        if (getLoadedPost()) {
-          scheduleEncrypt();
-        }
-      });
-      setEditor(newEditor);
+      await setupEditor(container, displayContent);
     }
 
     const deleteBtn = getOptionalElement("delete-btn", HTMLButtonElement);
@@ -149,11 +133,15 @@ export async function handleDeletePost(): Promise<void> {
 
 /**
  * Delete a post by its node (can be any post, not just the loaded one).
+ * Returns early if a post is currently loading.
  */
 export async function handleDeletePostByNode(
   postNode: PostNode | null,
 ): Promise<void> {
   if (!postNode) return;
+
+  // Ignore if currently loading a post
+  if (isLoading()) return;
 
   // Check for children and show appropriate warning
   const hasChildren = postNode.has_children ?? false;
@@ -188,12 +176,7 @@ export async function handleDeletePostByNode(
     if (isDeletingLoadedPost) {
       setLoadedPost(null);
       setLoadedDecryptedContent(null);
-
-      const editor = getEditor();
-      if (editor) {
-        editor.destroy();
-        setEditor(null);
-      }
+      destroyEditor();
     }
 
     renderPostList();

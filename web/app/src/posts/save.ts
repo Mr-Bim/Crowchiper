@@ -2,11 +2,11 @@
  * Save and encryption logic for posts.
  *
  * Handles debounced encryption, periodic server saves, and beacon saves.
+ * Note: Save button UI updates are handled reactively via isDirtySignal subscription.
  */
 
 import { updatePost, updatePostBeacon } from "../api/posts.ts";
 import { encryptPostData } from "../crypto/post-encryption.ts";
-import { getOptionalElement } from "../../../shared/dom.ts";
 import { callRenderPostList } from "./handlers.ts";
 import { parseAttachmentUuids } from "../shared/attachment-utils.ts";
 import { clearImageCacheExcept } from "../shared/image-cache.ts";
@@ -25,7 +25,14 @@ import {
   setPendingEncryptedData,
   setSaveTimeout,
   setServerSaveInterval,
-} from "./state.ts";
+} from "./state/index.ts";
+
+// --- Constants ---
+
+const ENCRYPT_DEBOUNCE_MS = 1000;
+const SERVER_SAVE_INTERVAL_MS = 60000;
+
+// --- Helpers ---
 
 function extractTitle(content: string): string {
   const firstLine = content.split("\n")[0] || "";
@@ -33,28 +40,39 @@ function extractTitle(content: string): string {
   return title || "Untitled";
 }
 
-// --- Constants ---
-
-const ENCRYPT_DEBOUNCE_MS = 1000;
-const SERVER_SAVE_INTERVAL_MS = 60000;
-
 /**
- * Handle beforeunload event to warn about unsaved changes.
+ * Build the update payload from pending encrypted data.
  */
+function buildUpdatePayload(
+  pendingData: NonNullable<ReturnType<typeof getPendingEncryptedData>>,
+  attachmentUuids?: string[],
+) {
+  return {
+    title: pendingData.title,
+    title_encrypted: pendingData.titleEncrypted,
+    title_iv: pendingData.titleIv ?? undefined,
+    content: pendingData.content,
+    content_encrypted: pendingData.contentEncrypted,
+    iv: pendingData.contentIv ?? undefined,
+    encryption_version: pendingData.encryptionVersion ?? undefined,
+    attachment_uuids: attachmentUuids,
+  };
+}
+
+// --- Beforeunload Warning ---
+
 function handleBeforeUnload(e: BeforeUnloadEvent): void {
   if (getIsDirty()) {
     e.preventDefault();
-    // Modern browsers ignore custom messages, but we still need to set returnValue
     e.returnValue = "";
   }
 }
 
-/**
- * Set up beforeunload handler to warn about unsaved changes.
- */
 export function setupBeforeUnloadWarning(): void {
   window.addEventListener("beforeunload", handleBeforeUnload);
 }
+
+// --- Encryption ---
 
 /**
  * Schedule local encryption after 1 second of inactivity.
@@ -84,7 +102,6 @@ export async function encryptCurrentPost(): Promise<void> {
   try {
     const encrypted = await encryptPostData(title, content);
 
-    // Store encrypted data for later server save or beacon
     setPendingEncryptedData({
       title: encrypted.title,
       titleEncrypted: encrypted.titleEncrypted,
@@ -95,72 +112,99 @@ export async function encryptCurrentPost(): Promise<void> {
       encryptionVersion: encrypted.encryptionVersion ?? null,
     });
 
-    // Update decrypted title for display
     setDecryptedTitle(loadedPost.uuid, title);
-
-    // Mark as dirty (needs server save)
     setIsDirty(true);
-    updateSaveButton(true);
-
     callRenderPostList();
-
-    // Start server save interval if not already running
     startServerSaveInterval();
   } catch (err) {
     console.error("Failed to encrypt:", err);
   }
 }
 
-/**
- * Start the periodic server save interval (every 60 seconds).
- */
+// --- Server Save Interval ---
+
 export function startServerSaveInterval(): void {
-  if (getServerSaveInterval()) return; // Already running
+  if (getServerSaveInterval()) return;
 
   setServerSaveInterval(
     window.setInterval(() => {
-      saveToServer();
+      savePost();
     }, SERVER_SAVE_INTERVAL_MS),
   );
 }
 
-/**
- * Stop the periodic server save interval.
- */
 export function stopServerSaveInterval(): void {
   clearServerSaveInterval();
 }
 
+// --- Core Save Function ---
+
+interface SaveOptions {
+  /** Include attachment UUIDs in the save (parses content for refs) */
+  includeAttachments?: boolean;
+  /** Show success toast after save */
+  showToast?: boolean;
+  /** Clear image cache for deleted images */
+  clearCache?: boolean;
+}
+
 /**
- * Save the pending encrypted data to the server.
+ * Core save function - saves pending encrypted data to server.
+ * Used by all save paths except beacon (which uses sendBeacon).
  */
-export async function saveToServer(): Promise<void> {
+async function savePost(options: SaveOptions = {}): Promise<void> {
   const loadedPost = getLoadedPost();
   const pendingData = getPendingEncryptedData();
 
   if (!loadedPost || !pendingData || !getIsDirty()) return;
 
-  try {
-    await updatePost(loadedPost.uuid, {
-      title: pendingData.title,
-      title_encrypted: pendingData.titleEncrypted,
-      title_iv: pendingData.titleIv ?? undefined,
-      content: pendingData.content,
-      content_encrypted: pendingData.contentEncrypted,
-      iv: pendingData.contentIv ?? undefined,
-      encryption_version: pendingData.encryptionVersion ?? undefined,
-    });
+  const {
+    includeAttachments,
+    showToast: shouldShowToast,
+    clearCache,
+  } = options;
 
+  try {
+    let attachmentUuids: string[] | undefined;
+    if (includeAttachments) {
+      const editor = getEditor();
+      if (editor) {
+        const content = editor.state.doc.toString();
+        attachmentUuids = await parseAttachmentUuids(content);
+      }
+    }
+
+    await updatePost(
+      loadedPost.uuid,
+      buildUpdatePayload(pendingData, attachmentUuids),
+    );
     setIsDirty(false);
-    updateSaveButton(false);
+
+    if (shouldShowToast) {
+      showSuccess("Saved");
+    }
+
+    if (clearCache && attachmentUuids) {
+      clearImageCacheExcept(attachmentUuids);
+    }
   } catch (err) {
     console.error("Failed to save to server:", err);
   }
 }
 
+// --- Public Save APIs ---
+
+/**
+ * Save to server (used by periodic interval).
+ * Minimal save - no attachments, no toast, no cache clear.
+ */
+export async function saveToServer(): Promise<void> {
+  await savePost();
+}
+
 /**
  * Save to server immediately when navigating away from a post.
- * Only saves if content has changed.
+ * Includes attachments and clears cache, but no toast.
  */
 export async function saveToServerNow(): Promise<void> {
   const loadedPost = getLoadedPost();
@@ -172,85 +216,16 @@ export async function saveToServerNow(): Promise<void> {
   const originalContent = getLoadedDecryptedContent();
 
   // Only save if content has actually changed
-  if (currentContent === originalContent) {
-    return;
-  }
+  if (currentContent === originalContent) return;
 
   clearSaveTimeout();
   await encryptCurrentPost();
-
-  const pendingData = getPendingEncryptedData();
-  if (!pendingData) return;
-
-  const attachmentUuids = await parseAttachmentUuids(currentContent);
-
-  try {
-    await updatePost(loadedPost.uuid, {
-      title: pendingData.title,
-      title_encrypted: pendingData.titleEncrypted,
-      title_iv: pendingData.titleIv ?? undefined,
-      content: pendingData.content,
-      content_encrypted: pendingData.contentEncrypted,
-      iv: pendingData.contentIv ?? undefined,
-      encryption_version: pendingData.encryptionVersion ?? undefined,
-      attachment_uuids: attachmentUuids,
-    });
-
-    setIsDirty(false);
-
-    // Clear cache for deleted images
-    clearImageCacheExcept(attachmentUuids);
-  } catch (err) {
-    console.error("Failed to save to server:", err);
-  }
-}
-
-/**
- * Save post and attachment refs via beacon when page is unloading.
- * Only saves if there's pending encrypted data (content changed since load).
- * Called from pagehide handler.
- */
-export function saveBeacon(): void {
-  const loadedPost = getLoadedPost();
-  const editor = getEditor();
-  const pendingData = getPendingEncryptedData();
-
-  // Only send beacon if we have pending changes
-  if (!loadedPost || !editor || !pendingData) return;
-
-  const content = editor.state.doc.toString();
-  const attachmentUuids = parseAttachmentUuids(content);
-
-  updatePostBeacon(loadedPost.uuid, {
-    title: pendingData.title,
-    title_encrypted: pendingData.titleEncrypted,
-    title_iv: pendingData.titleIv ?? undefined,
-    content: pendingData.content,
-    content_encrypted: pendingData.contentEncrypted,
-    iv: pendingData.contentIv ?? undefined,
-    encryption_version: pendingData.encryptionVersion ?? undefined,
-    attachment_uuids: attachmentUuids,
-  });
-}
-
-// --- Save Button ---
-
-/**
- * Update the save button's visual state.
- * @param dirty - Whether there are unsaved changes
- */
-export function updateSaveButton(dirty: boolean): void {
-  const btn = getOptionalElement("save-btn", HTMLButtonElement);
-  if (!btn) return;
-
-  btn.setAttribute("data-dirty", dirty ? "true" : "false");
-  btn.textContent = dirty ? "Save" : "Saved";
-  btn.disabled = !dirty;
+  await savePost({ includeAttachments: true, clearCache: true });
 }
 
 /**
  * Handle manual save button click.
- * Encrypts and saves the current post immediately.
+ * Full save with attachments, toast, and cache clear.
  */
 export async function handleSave(): Promise<void> {
   const loadedPost = getLoadedPost();
@@ -258,37 +233,31 @@ export async function handleSave(): Promise<void> {
 
   if (!loadedPost || !editor) return;
 
-  // Clear any pending debounced encryption
   clearSaveTimeout();
-
-  // Encrypt and save immediately
   await encryptCurrentPost();
+  await savePost({
+    includeAttachments: true,
+    showToast: true,
+    clearCache: true,
+  });
+}
 
+/**
+ * Save post via beacon when page is unloading.
+ * Uses sendBeacon for reliability - cannot be async.
+ */
+export function saveBeacon(): void {
+  const loadedPost = getLoadedPost();
+  const editor = getEditor();
   const pendingData = getPendingEncryptedData();
-  if (!pendingData) return;
+
+  if (!loadedPost || !editor || !pendingData) return;
 
   const content = editor.state.doc.toString();
   const attachmentUuids = parseAttachmentUuids(content);
 
-  try {
-    await updatePost(loadedPost.uuid, {
-      title: pendingData.title,
-      title_encrypted: pendingData.titleEncrypted,
-      title_iv: pendingData.titleIv ?? undefined,
-      content: pendingData.content,
-      content_encrypted: pendingData.contentEncrypted,
-      iv: pendingData.contentIv ?? undefined,
-      encryption_version: pendingData.encryptionVersion ?? undefined,
-      attachment_uuids: attachmentUuids,
-    });
-
-    setIsDirty(false);
-    updateSaveButton(false);
-    showSuccess("Saved");
-
-    // Clear cache for deleted images
-    clearImageCacheExcept(attachmentUuids);
-  } catch (err) {
-    console.error("Failed to save:", err);
-  }
+  updatePostBeacon(
+    loadedPost.uuid,
+    buildUpdatePayload(pendingData, attachmentUuids),
+  );
 }

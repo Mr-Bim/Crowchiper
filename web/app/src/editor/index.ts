@@ -2,7 +2,7 @@
  * CodeMirror editor setup and plugins.
  */
 
-export { createEditor, EditorView } from "./setup.ts";
+export { createEditor, resetEditorContent, EditorView } from "./setup.ts";
 export { attachmentPlugin } from "./attachment-widget/index.ts";
 export {
   parseAttachmentUuids,

@@ -13,7 +13,7 @@ import {
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
-import { getSiblings } from "./state.ts";
+import { getSiblings } from "./state/index.ts";
 
 // UUID v4 regex pattern
 const UUID_PATTERN =

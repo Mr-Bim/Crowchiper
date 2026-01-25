@@ -4,24 +4,29 @@
  * Provides a simple API for reading and writing validated data to localStorage.
  */
 
-import * as v from "valibot";
+import { picklist, boolean, safeParse, type InferOutput } from "valibot";
 
 /**
  * Storage key definitions with their schemas and defaults.
  */
 const storageSchema = {
   theme: {
-    schema: v.picklist(["warm-light", "scandi-dark", "paper-light", "paper-dark"]),
-    defaultValue: "warm-light" as const,
+    schema: picklist([
+      "warm-light",
+      "scandi-dark",
+      "paper-light",
+      "paper-dark",
+    ]),
+    defaultValue: "scandi-dark" as const,
   },
   "spellcheck-enabled": {
-    schema: v.boolean(),
+    schema: boolean(),
     defaultValue: false,
   },
 } as const;
 
 type StorageKey = keyof typeof storageSchema;
-type StorageValue<K extends StorageKey> = v.InferOutput<
+type StorageValue<K extends StorageKey> = InferOutput<
   (typeof storageSchema)[K]["schema"]
 >;
 
@@ -52,7 +57,7 @@ export function getStorage<K extends StorageKey>(key: K): StorageValue<K> {
   }
 
   // Validate with Valibot
-  const result = v.safeParse(config.schema, parsed);
+  const result = safeParse(config.schema, parsed);
   if (result.success) {
     return result.output as StorageValue<K>;
   }

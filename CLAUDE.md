@@ -346,7 +346,64 @@ The app header includes a Save button that:
 - Shows "Save" (clickable, highlighted) when there are unsaved changes
 - Uses `data-dirty` attribute for styling (`data-dirty="true"` or `data-dirty="false"`)
 - Located in `web/app/index.html`, styled in `web/app/css/app.css`
-- Functionality in `web/app/src/posts/ui.ts` (`handleSave`, `updateSaveButton`)
+- Save logic in `web/app/src/posts/save.ts` (`handleSave`)
+- UI updates automatically via reactive subscription to `isDirtySignal`
+
+## Reactive State Management
+
+The app uses a minimal reactive signal primitive for automatic UI updates.
+
+### Signal Primitive (`web/app/src/reactive.ts`)
+A ~50 line reactive primitive providing:
+- `signal<T>(initial)` - Create a reactive value
+- `computed(deps, fn)` - Create a derived value from other signals
+
+```typescript
+import { signal } from "../reactive.ts";
+
+const count = signal(0);
+count.get();              // Read: 0
+count.set(5);             // Write (notifies subscribers)
+count.update(n => n + 1); // Update with function
+
+// Subscribe to changes
+const unsubscribe = count.subscribe((value) => {
+  console.log("Count:", value);
+});
+```
+
+### Exported Signals (`web/app/src/posts/state.ts`)
+- `isDirtySignal` - Whether there are unsaved changes
+- `postsSignal` - Tree structure of posts
+- `loadedPostSignal` - Currently selected post
+- `editorSignal` - Active CodeMirror instance
+
+Backward-compatible getter/setter functions still work (e.g., `getIsDirty()`, `setIsDirty()`).
+
+### Subscriptions (`web/app/src/posts/subscriptions.ts`)
+Reactive subscriptions are initialized in `main.ts` via `initSubscriptions()`:
+- Save button automatically updates when `isDirtySignal` changes
+
+### Adding New Reactive UI
+```typescript
+// In subscriptions.ts
+import { someSignal } from "./state.ts";
+
+export function initSubscriptions(): void {
+  // ... existing subscriptions
+  
+  someSignal.subscribe((value) => {
+    // Update DOM based on value
+  });
+}
+```
+
+### Type Definitions (`web/app/src/posts/types.ts`)
+Formalizes contracts between modules:
+- `PostsState` - Complete state shape
+- `PostHandlers` - Handler registry interface
+- `PendingEncryptedData` - Encrypted data awaiting server save
+- `DragData`, `DropLocation`, `DropAction` - Drag-and-drop types
 
 ## Nested Posts (Hierarchical Structure)
 
@@ -380,9 +437,10 @@ interface PostNode {
 ### State Management (`web/app/src/posts/state.ts`)
 - `posts` is now a tree structure (`PostNode[]`)
 - `expandedPosts: Set<string>` tracks expanded posts
-- Helper functions: `findPost()`, `findParent()`, `getPath()`, `movePostInTree()`
+- Helper functions: `findPost()`, `findParent()`, `movePostInTree()`
+- Uses reactive signals for state that triggers UI updates (see Reactive State section)
 
-### UI Behavior (`web/app/src/posts/ui.ts`)
+### UI Behavior (`web/app/src/posts/render.ts`)
 - Tree rendered with indentation (16px per level)
 - Expand/collapse chevrons for posts with children
 - Click post to select for editing

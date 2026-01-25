@@ -15,6 +15,7 @@ import {
   handleDeletePost,
   handleNewPost,
   handleSave,
+  initSubscriptions,
   loadPosts,
   renderPostList,
 } from "./posts/index.ts";
@@ -126,6 +127,9 @@ function setupSidebarToggle(): void {
 
 async function init(): Promise<void> {
   try {
+    // Initialize reactive subscriptions (must be before any state changes)
+    initSubscriptions();
+
     // Set up bfcache handler to verify auth on page restore
     setupBfcacheHandler();
 

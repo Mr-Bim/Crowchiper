@@ -1,7 +1,8 @@
 /**
- * Post selection and editor lifecycle.
+ * Post selection logic.
  *
- * Handles selecting a post for editing and managing the editor instance.
+ * Handles selecting a post for editing.
+ * Editor setup is delegated to editor.ts.
  */
 
 import { getPost, type PostNode } from "../api/posts.ts";
@@ -14,26 +15,17 @@ import {
   abortAllUploads,
 } from "../shared/attachment-utils.ts";
 import { getOptionalElement } from "../../../shared/dom.ts";
-import { applySpellcheckToEditor } from "../spellcheck.ts";
 import {
-  getEditor,
-  getLoadedPost,
   setDecryptedTitle,
-  setEditor,
   setIsDirty,
   setLoadedDecryptedContent,
   setLoadedPost,
   setPendingEncryptedData,
-} from "./state.ts";
-import {
-  scheduleEncrypt,
-  stopServerSaveInterval,
-  saveToServerNow,
-} from "./save.ts";
+  withLoadingLock,
+} from "./state/index.ts";
+import { stopServerSaveInterval, saveToServerNow } from "./save.ts";
 import { renderPostList } from "./render.ts";
-
-// Preload editor chunk - browser starts downloading immediately
-const editorPromise = import("../editor/setup.ts");
+import { setupEditor } from "./editor.ts";
 
 /**
  * Set loading state on a post item in the sidebar.
@@ -41,7 +33,7 @@ const editorPromise = import("../editor/setup.ts");
 function setPostItemLoading(uuid: string, loading: boolean): void {
   const wrapper = document.querySelector(`[data-uuid="${uuid}"]`);
   const item = wrapper?.querySelector(".cl-post-item");
-  const editor = getOptionalElement("editor");
+  const editorEl = getOptionalElement("editor");
   if (item) {
     if (loading) {
       item.setAttribute("data-loading", "");
@@ -52,77 +44,62 @@ function setPostItemLoading(uuid: string, loading: boolean): void {
     }
   }
   // Also set aria-busy on the editor area during loading
-  if (editor) {
+  if (editorEl) {
     if (loading) {
-      editor.setAttribute("aria-busy", "true");
+      editorEl.setAttribute("aria-busy", "true");
     } else {
-      editor.removeAttribute("aria-busy");
+      editorEl.removeAttribute("aria-busy");
     }
   }
 }
 
 /**
  * Select a post for editing.
+ * Returns early if another post is currently loading.
  */
 export async function selectPost(postNode: PostNode): Promise<void> {
-  // Abort any active uploads before switching
-  abortAllUploads();
+  await withLoadingLock(async () => {
+    // Abort any active uploads before switching
+    abortAllUploads();
 
-  // Show loading state on the post item
-  setPostItemLoading(postNode.uuid, true);
+    // Show loading state on the post item
+    setPostItemLoading(postNode.uuid, true);
 
-  // Save current post to server before switching (includes attachment refs)
-  stopServerSaveInterval();
-  await saveToServerNow();
+    // Save current post to server before switching (includes attachment refs)
+    stopServerSaveInterval();
+    await saveToServerNow();
 
-  // Clear pending data for new post
-  setPendingEncryptedData(null);
-  setIsDirty(false);
+    // Clear pending data for new post
+    setPendingEncryptedData(null);
+    setIsDirty(false);
 
-  const container = getOptionalElement("editor");
-  if (!container) return;
+    const container = getOptionalElement("editor");
+    if (!container) return;
 
-  // Fetch full post data
-  const post = await getPost(postNode.uuid);
-  setLoadedPost(post);
+    // Fetch full post data
+    const post = await getPost(postNode.uuid);
+    setLoadedPost(post);
 
-  // Decrypt content and clean up any interrupted upload placeholders
-  const decryptedContent = await decryptPostContent(post);
-  const displayContent = cleanupPendingUploads(decryptedContent);
-  setLoadedDecryptedContent(displayContent);
+    // Decrypt content and clean up any interrupted upload placeholders
+    const decryptedContent = await decryptPostContent(post);
+    const displayContent = cleanupPendingUploads(decryptedContent);
+    setLoadedDecryptedContent(displayContent);
 
-  // Decrypt title for display (stored separately, post.title stays encrypted)
-  const displayTitle = await decryptPostTitle(post);
-  setDecryptedTitle(post.uuid, displayTitle);
+    // Decrypt title for display (stored separately, post.title stays encrypted)
+    const displayTitle = await decryptPostTitle(post);
+    setDecryptedTitle(post.uuid, displayTitle);
 
-  renderPostList();
+    renderPostList();
 
-  // Destroy existing editor
-  const oldEditor = getEditor();
-  if (oldEditor) {
-    oldEditor.destroy();
-  }
+    // Set up editor with the new content (reuses existing editor if available)
+    await setupEditor(container, displayContent);
 
-  // Clear container (removes empty-state div or any leftover content)
-  container.innerHTML = "";
+    // Clear loading state
+    setPostItemLoading(postNode.uuid, false);
 
-  // Create new editor
-  const { createEditor } = await editorPromise;
-  const newEditor = createEditor(container, displayContent, () => {
-    if (getLoadedPost()) {
-      scheduleEncrypt();
+    const deleteBtn = getOptionalElement("delete-btn", HTMLButtonElement);
+    if (deleteBtn) {
+      deleteBtn.disabled = false;
     }
   });
-  setEditor(newEditor);
-
-  // Apply spellcheck setting to the new editor
-  applySpellcheckToEditor();
-
-  // Clear loading state
-  setPostItemLoading(postNode.uuid, false);
-
-  const deleteBtn = getOptionalElement("delete-btn", HTMLButtonElement);
-  if (deleteBtn) {
-    deleteBtn.disabled = false;
-  }
 }

@@ -23,7 +23,7 @@ import {
   setDecryptedTitles,
   setPostChildren,
   toggleExpanded,
-} from "./state.ts";
+} from "./state/index.ts";
 
 declare const __TEST_MODE__: boolean;
 

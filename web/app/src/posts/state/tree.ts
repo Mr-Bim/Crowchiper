@@ -1,60 +1,12 @@
 /**
- * State management for posts and editor.
+ * Tree operations for posts hierarchy.
  *
- * Centralizes all mutable state for the app, now with tree structure support.
+ * All functions that traverse or mutate the posts tree structure.
+ * Uses postsSignal from signals.ts for the underlying data.
  */
 
-import type { Post, PostNode } from "../api/posts.ts";
-import type { EditorView } from "../editor/setup.ts";
-
-let editor: EditorView | null = null;
-let posts: PostNode[] = [];
-let loadedPost: Post | null = null;
-let loadedDecryptedContent: string | null = null;
-let decryptedTitles: Map<string, string> = new Map();
-let saveTimeout: number | null = null;
-
-// Expanded state for tree nodes
-let expandedPosts: Set<string> = new Set();
-
-// Pending encrypted data (encrypted locally, not yet saved to server)
-export interface PendingEncryptedData {
-  title: string;
-  titleEncrypted: boolean;
-  titleIv: string | null;
-  content: string;
-  contentEncrypted: boolean;
-  contentIv: string | null;
-  encryptionVersion: number | null;
-}
-
-let pendingEncryptedData: PendingEncryptedData | null = null;
-
-// Whether there are unsaved changes since last server sync
-let isDirty = false;
-
-// Timer for periodic server save
-let serverSaveInterval: number | null = null;
-
-// --- Editor ---
-
-export function getEditor(): EditorView | null {
-  return editor;
-}
-
-export function setEditor(e: EditorView | null): void {
-  editor = e;
-}
-
-// --- Posts (Tree Structure) ---
-
-export function getPosts(): PostNode[] {
-  return posts;
-}
-
-export function setPosts(p: PostNode[]): void {
-  posts = p;
-}
+import type { PostNode } from "../../api/posts.ts";
+import { postsSignal, getPosts } from "./signals.ts";
 
 /**
  * Find a post by UUID in the tree.
@@ -70,13 +22,14 @@ export function findPost(uuid: string): PostNode | null {
     }
     return null;
   }
-  return search(posts);
+  return search(getPosts());
 }
 
 /**
  * Find the parent of a post by UUID.
  */
 export function findParent(uuid: string): PostNode | null {
+  const posts = getPosts();
   function search(nodes: PostNode[], parent: PostNode | null): PostNode | null {
     for (const node of nodes) {
       if (node.uuid === uuid) return parent;
@@ -94,6 +47,7 @@ export function findParent(uuid: string): PostNode | null {
  * Get siblings of a post (posts with the same parent).
  */
 export function getSiblings(uuid: string): PostNode[] {
+  const posts = getPosts();
   const parent = findParent(uuid);
   if (parent && parent.children) {
     return parent.children;
@@ -110,6 +64,7 @@ export function getSiblings(uuid: string): PostNode[] {
  * Add a post to the tree at the specified parent (null = root).
  */
 export function addPost(post: PostNode, parentId: string | null = null): void {
+  const posts = getPosts();
   if (parentId === null) {
     posts.unshift(post);
   } else {
@@ -122,12 +77,15 @@ export function addPost(post: PostNode, parentId: string | null = null): void {
       parent.has_children = true;
     }
   }
+  // Trigger reactivity by setting a new array reference
+  postsSignal.set([...posts]);
 }
 
 /**
  * Remove a post from the tree by UUID.
  */
 export function removePost(uuid: string): PostNode | null {
+  const posts = getPosts();
   function removeFromArray(nodes: PostNode[]): PostNode | null {
     const idx = nodes.findIndex((p) => p.uuid === uuid);
     if (idx !== -1) {
@@ -147,7 +105,11 @@ export function removePost(uuid: string): PostNode | null {
     }
     return null;
   }
-  return removeFromArray(posts);
+  const removed = removeFromArray(posts);
+  if (removed) {
+    postsSignal.set([...posts]);
+  }
+  return removed;
 }
 
 /**
@@ -158,6 +120,7 @@ export function movePostInSiblings(
   fromIndex: number,
   toIndex: number,
 ): void {
+  const posts = getPosts();
   const siblings =
     parentId === null ? posts : (findPost(parentId)?.children ?? []);
   if (fromIndex === toIndex) return;
@@ -166,6 +129,7 @@ export function movePostInSiblings(
 
   const [removed] = siblings.splice(fromIndex, 1);
   siblings.splice(toIndex, 0, removed);
+  postsSignal.set([...posts]);
 }
 
 /**
@@ -176,6 +140,7 @@ export function movePostToParent(
   newParentId: string | null,
   position: number,
 ): void {
+  const posts = getPosts();
   const post = removePost(uuid);
   if (!post) return;
 
@@ -193,12 +158,14 @@ export function movePostToParent(
       newParent.has_children = true;
     }
   }
+  postsSignal.set([...posts]);
 }
 
 /**
  * Get UUIDs of siblings under a parent.
  */
 export function getSiblingUuids(parentId: string | null): string[] {
+  const posts = getPosts();
   const siblings =
     parentId === null ? posts : (findPost(parentId)?.children ?? []);
   return siblings.map((p: PostNode) => p.uuid);
@@ -212,6 +179,7 @@ export function setPostChildren(uuid: string, children: PostNode[]): void {
   if (post) {
     post.children = children;
     post.has_children = children.length > 0;
+    postsSignal.set([...getPosts()]);
   }
 }
 
@@ -228,7 +196,7 @@ export function flattenPosts(): PostNode[] {
       }
     }
   }
-  flatten(posts);
+  flatten(getPosts());
   return result;
 }
 
@@ -236,135 +204,9 @@ export function flattenPosts(): PostNode[] {
  * Get the first post in the tree (for initial selection).
  */
 export function getFirstSelectablePost(): PostNode | null {
-  function find(nodes: PostNode[]): PostNode | null {
-    for (const node of nodes) {
-      return node;
-    }
-    return null;
+  const posts = getPosts();
+  for (const node of posts) {
+    return node;
   }
-  return find(posts);
-}
-
-// --- Expanded State ---
-
-export function isExpanded(uuid: string): boolean {
-  return expandedPosts.has(uuid);
-}
-
-export function toggleExpanded(uuid: string): void {
-  if (expandedPosts.has(uuid)) {
-    expandedPosts.delete(uuid);
-  } else {
-    expandedPosts.add(uuid);
-  }
-}
-
-export function setExpanded(uuid: string, expanded: boolean): void {
-  if (expanded) {
-    expandedPosts.add(uuid);
-  } else {
-    expandedPosts.delete(uuid);
-  }
-}
-
-/**
- * Expand all posts up to a certain depth.
- */
-export function expandToDepth(depth: number): void {
-  function expand(nodes: PostNode[], currentDepth: number): void {
-    if (currentDepth >= depth) return;
-    for (const node of nodes) {
-      if (node.has_children) {
-        expandedPosts.add(node.uuid);
-        if (node.children) {
-          expand(node.children, currentDepth + 1);
-        }
-      }
-    }
-  }
-  expand(posts, 0);
-}
-
-// --- Loaded Post ---
-
-export function getLoadedPost(): Post | null {
-  return loadedPost;
-}
-
-export function setLoadedPost(post: Post | null): void {
-  loadedPost = post;
-}
-
-export function getLoadedDecryptedContent(): string | null {
-  return loadedDecryptedContent;
-}
-
-export function setLoadedDecryptedContent(content: string | null): void {
-  loadedDecryptedContent = content;
-}
-
-// --- Decrypted Titles Map (for post list display) ---
-
-export function getDecryptedTitles(): Map<string, string> {
-  return decryptedTitles;
-}
-
-export function setDecryptedTitles(titles: Map<string, string>): void {
-  decryptedTitles = titles;
-}
-
-export function setDecryptedTitle(uuid: string, title: string): void {
-  decryptedTitles.set(uuid, title);
-}
-
-// --- Save Timeout ---
-
-export function setSaveTimeout(timeout: number | null): void {
-  saveTimeout = timeout;
-}
-
-export function clearSaveTimeout(): void {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-    saveTimeout = null;
-  }
-}
-
-// --- Pending Encrypted Data ---
-
-export function getPendingEncryptedData(): PendingEncryptedData | null {
-  return pendingEncryptedData;
-}
-
-export function setPendingEncryptedData(
-  data: PendingEncryptedData | null,
-): void {
-  pendingEncryptedData = data;
-}
-
-// --- Dirty Flag ---
-
-export function getIsDirty(): boolean {
-  return isDirty;
-}
-
-export function setIsDirty(dirty: boolean): void {
-  isDirty = dirty;
-}
-
-// --- Server Save Interval ---
-
-export function getServerSaveInterval(): number | null {
-  return serverSaveInterval;
-}
-
-export function setServerSaveInterval(interval: number | null): void {
-  serverSaveInterval = interval;
-}
-
-export function clearServerSaveInterval(): void {
-  if (serverSaveInterval) {
-    clearInterval(serverSaveInterval);
-    serverSaveInterval = null;
-  }
+  return null;
 }

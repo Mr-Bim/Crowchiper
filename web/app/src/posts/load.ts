@@ -14,7 +14,7 @@ import {
   getFirstSelectablePost,
   setDecryptedTitles,
   setPosts,
-} from "./state.ts";
+} from "./state/index.ts";
 import { handleSave, saveBeacon, setupBeforeUnloadWarning } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";

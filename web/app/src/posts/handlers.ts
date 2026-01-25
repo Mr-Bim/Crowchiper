@@ -6,33 +6,34 @@
  * during initialization, and other modules can call them without direct imports.
  */
 
-import type { PostNode } from "../api/posts.ts";
+import type {
+  PostHandlers,
+  SelectPostHandler,
+  ReorderHandler,
+  ReparentHandler,
+  RenderPostListHandler,
+} from "./types.ts";
 
-/**
- * Handler function types.
- */
-export type SelectPostHandler = (post: PostNode) => void;
-export type ReorderHandler = (
-  parentId: string | null,
-  fromIndex: number,
-  toIndex: number,
-) => Promise<void>;
-export type ReparentHandler = (
-  uuid: string,
-  newParentId: string | null,
-  position: number,
-) => Promise<void>;
-export type RenderPostListHandler = () => void;
+// Re-export handler types for convenience
+export type {
+  SelectPostHandler,
+  ReorderHandler,
+  ReparentHandler,
+  RenderPostListHandler,
+};
 
 let handlersRegistered = false;
+
 /**
  * Handler registry - populated during initialization.
  */
-const handlers = {
-  selectPost: null as SelectPostHandler | null,
-  reorder: null as ReorderHandler | null,
-  reparent: null as ReparentHandler | null,
-  renderPostList: null as RenderPostListHandler | null,
+const handlers: {
+  [K in keyof PostHandlers]: PostHandlers[K] | null;
+} = {
+  selectPost: null,
+  reorder: null,
+  reparent: null,
+  renderPostList: null,
 };
 
 export function isHandlersRegistered() {
@@ -42,12 +43,7 @@ export function isHandlersRegistered() {
 /**
  * Register all handlers at once during initialization.
  */
-export function registerHandlers(config: {
-  selectPost: SelectPostHandler;
-  reorder: ReorderHandler;
-  reparent: ReparentHandler;
-  renderPostList: RenderPostListHandler;
-}): void {
+export function registerHandlers(config: PostHandlers): void {
   handlersRegistered = true;
   handlers.selectPost = config.selectPost;
   handlers.reorder = config.reorder;

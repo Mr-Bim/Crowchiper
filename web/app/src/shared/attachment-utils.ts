@@ -99,8 +99,7 @@ export function parseAttachmentUuids(content: string): string[] {
  */
 export function cleanupPendingUploads(content: string): string {
   // Remove all upload placeholder images:
-  // - Old format: ![uploading...](attachment:pending), ![converting...](attachment:converting)
-  // - New format: ![stage](attachment:upload-N), ![uploading:50](attachment:widget-upload-N)
+  // format: ![stage](attachment:upload-N), ![uploading:50](attachment:widget-upload-N)
   let cleaned = content.replace(
     /!\[[^\]]*\]\(attachment:(pending|converting|upload-\d+|widget-upload-\d+)\)/g,
     "",
