@@ -5,9 +5,6 @@
 // State (re-export from state/ folder)
 export * from "./state/index.ts";
 
-// Drag and drop
-export { initDragAndDrop } from "./drag-and-drop.ts";
-
 // Handler registry
 export { registerHandlers } from "./handlers.ts";
 

@@ -7,7 +7,6 @@
 import { listPostChildren, type PostNode } from "../api/posts.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
 import { getOptionalElement } from "../../../shared/dom.ts";
-import { initDragAndDrop } from "./drag-and-drop.ts";
 import {
   getReorderHandler,
   getReparentHandler,
@@ -142,8 +141,10 @@ export function renderPostList(): void {
   renderLevel(posts, 0);
 
   if (isHandlersRegistered()) {
-    // Initialize drag and drop on the list
-    initDragAndDrop(list, getReorderHandler(), getReparentHandler());
+    // Initialize drag and drop on the list (lazy-loaded)
+    import("./drag-and-drop.ts").then(({ initDragAndDrop }) => {
+      initDragAndDrop(list, getReorderHandler(), getReparentHandler());
+    });
   }
 }
 
