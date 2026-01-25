@@ -1,11 +1,9 @@
-use std::net::SocketAddr;
-
 use clap::Parser;
 use crowchiper::cli::{
     Args, build_config, handle_create_admin, init_logging, load_jwt_secret, open_database,
     validate_rp_origin,
 };
-use crowchiper::create_app;
+use crowchiper::{init_cleanup, run_server};
 use tracing::{error, info};
 
 #[tokio::main]
@@ -53,15 +51,16 @@ async fn main() {
         args.csp_nonce,
         args.ip_header,
     );
-    let app = create_app(&config);
+
+    // Run cleanup on startup and spawn hourly scheduler
+    init_cleanup(&config.db).await;
 
     info!(address = %local_addr, "Listening");
 
     #[cfg(feature = "test-mode")]
     println!("CROWCHIPER_READY port={}", local_addr.port());
 
-    let make_service = app.into_make_service_with_connect_info::<SocketAddr>();
-    if let Err(e) = axum::serve(listener, make_service).await {
+    if let Err(e) = run_server(config, listener).await {
         error!(error = %e, "Server error");
         std::process::exit(1);
     }

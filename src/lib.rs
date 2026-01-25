@@ -1,6 +1,7 @@
 pub mod api;
 pub mod assets;
 pub mod auth;
+pub mod cleanup;
 pub mod cli;
 pub mod db;
 pub mod jwt;
@@ -32,7 +33,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::info;
+
 use url::Url;
 use webauthn_rs::prelude::*;
 
@@ -171,30 +172,37 @@ pub fn create_app(config: &ServerConfig) -> Router {
         .merge(app_routes)
 }
 
-/// Start the server on the given port. Use port 0 to let the OS choose a random port.
+/// Run cleanup tasks and spawn background scheduler.
+/// Call this before starting the server.
+pub async fn init_cleanup(db: &Database) {
+    cleanup::run_cleanup(db).await;
+    cleanup::spawn_cleanup_scheduler(db.clone());
+}
+
+/// Run the server on the given listener. This function blocks until the server exits.
+/// Call `init_cleanup` before this to run cleanup on startup.
+pub async fn run_server(config: ServerConfig, listener: TcpListener) -> Result<(), std::io::Error> {
+    let app = create_app(&config);
+    let make_service = app.into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, make_service).await
+}
+
+/// Start the server on the given port in a background task. Use port 0 to let the OS choose a random port.
 /// Returns the actual address the server is listening on.
+/// Note: For production use, prefer `run_server` directly in main.
 pub async fn start_server(
     config: ServerConfig,
     port: u16,
 ) -> (tokio::task::JoinHandle<()>, SocketAddr) {
-    // Clean up expired tokens on startup
-    match config.db.tokens().delete_expired().await {
-        Ok(count) if count > 0 => info!("Cleaned up {} expired tokens", count),
-        Ok(_) => {}
-        Err(e) => tracing::warn!("Failed to clean up expired tokens: {}", e),
-    }
+    // Run cleanup tasks on startup
+    init_cleanup(&config.db).await;
 
-    let app = create_app(&config);
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await.expect("Failed to bind");
     let local_addr = listener.local_addr().expect("Failed to get local address");
 
     let handle = tokio::spawn(async move {
-        // Use a custom service that injects ConnectInfo as Extension
-        let make_service = app.into_make_service_with_connect_info::<SocketAddr>();
-
-        // Serve with our custom make_service
-        axum::serve(listener, make_service).await.ok();
+        run_server(config, listener).await.ok();
     });
 
     (handle, local_addr)

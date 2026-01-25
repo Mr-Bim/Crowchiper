@@ -1,0 +1,97 @@
+/* Lightbox overlay for full-size image viewing */
+.lightbox-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    cursor: pointer;
+}
+
+.lightbox-image-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.lightbox-loading {
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 400;
+}
+
+.lightbox-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    cursor: default;
+}
+
+.lightbox-nav-btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 50%;
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+    transition: background 0.15s;
+    z-index: 10001;
+}
+
+.lightbox-nav-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.lightbox-nav-btn[data-hidden] {
+    visibility: hidden;
+}
+
+.lightbox-nav-prev {
+    left: 1rem;
+}
+
+.lightbox-nav-next {
+    right: 1rem;
+}
+
+.lightbox-counter {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 0.875rem;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    z-index: 10001;
+}
+
+@media (max-width: 37.5rem) {
+    .lightbox-nav-btn {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+
+    .lightbox-nav-prev {
+        left: 0.5rem;
+    }
+
+    .lightbox-nav-next {
+        right: 0.5rem;
+    }
+}

@@ -9,7 +9,13 @@ import { decryptBinary } from "../../crypto/operations.ts";
 import { getSessionEncryptionKey } from "../../crypto/keystore.ts";
 
 import { fullImageCache } from "./cache.ts";
-import { sanitizeAltText, GALLERY_PATTERN, GALLERY_IMAGE_PATTERN } from "./patterns.ts";
+import {
+  sanitizeAltText,
+  GALLERY_PATTERN,
+  GALLERY_IMAGE_PATTERN,
+} from "./patterns.ts";
+
+import "../../../css/lightbox.css";
 
 /**
  * Get all images from all galleries in the document.
@@ -52,11 +58,11 @@ export function showFullImage(uuid: string, view: EditorView): void {
   if (currentIndex === -1) currentIndex = 0;
 
   const overlay = document.createElement("div");
-  overlay.className = "cm-attachment-overlay";
+  overlay.className = "lightbox-overlay";
 
   // Image container for centering
   const imageContainer = document.createElement("div");
-  imageContainer.className = "cm-attachment-image-container";
+  imageContainer.className = "lightbox-image-container";
 
   // Navigation buttons (only show if multiple images)
   let prevBtn: HTMLButtonElement | null = null;
@@ -65,13 +71,13 @@ export function showFullImage(uuid: string, view: EditorView): void {
   if (allImages.length > 1) {
     prevBtn = document.createElement("button");
     prevBtn.type = "button";
-    prevBtn.className = "cm-attachment-nav-btn cm-attachment-nav-prev";
+    prevBtn.className = "lightbox-nav-btn lightbox-nav-prev";
     prevBtn.setAttribute("aria-label", "Previous image");
     prevBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
 
     nextBtn = document.createElement("button");
     nextBtn.type = "button";
-    nextBtn.className = "cm-attachment-nav-btn cm-attachment-nav-next";
+    nextBtn.className = "lightbox-nav-btn lightbox-nav-next";
     nextBtn.setAttribute("aria-label", "Next image");
     nextBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
 
@@ -81,7 +87,7 @@ export function showFullImage(uuid: string, view: EditorView): void {
 
   // Image counter
   const counter = document.createElement("div");
-  counter.className = "cm-attachment-counter";
+  counter.className = "lightbox-counter";
   overlay.appendChild(counter);
 
   overlay.appendChild(imageContainer);
@@ -115,7 +121,7 @@ export function showFullImage(uuid: string, view: EditorView): void {
       const imgEl = document.createElement("img");
       imgEl.src = cached;
       imgEl.alt = sanitizeAltText(img.alt) || "Attached image";
-      imgEl.className = "cm-attachment-full-image";
+      imgEl.className = "lightbox-image";
       imgEl.addEventListener("click", (e) => e.stopPropagation());
       imageContainer.appendChild(imgEl);
       return;
@@ -123,7 +129,7 @@ export function showFullImage(uuid: string, view: EditorView): void {
 
     // Show loading
     const loading = document.createElement("div");
-    loading.className = "cm-attachment-overlay-loading";
+    loading.className = "lightbox-loading";
     loading.textContent = "Loading...";
     imageContainer.appendChild(loading);
 
@@ -154,7 +160,7 @@ export function showFullImage(uuid: string, view: EditorView): void {
       const imgEl = document.createElement("img");
       imgEl.src = blobUrl;
       imgEl.alt = sanitizeAltText(img.alt) || "Attached image";
-      imgEl.className = "cm-attachment-full-image";
+      imgEl.className = "lightbox-image";
       imgEl.addEventListener("click", (e) => e.stopPropagation());
       imageContainer.appendChild(imgEl);
     } catch (err) {

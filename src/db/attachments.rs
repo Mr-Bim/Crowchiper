@@ -435,6 +435,19 @@ impl AttachmentStore {
             .await?;
         Ok(result.rows_affected() > 0)
     }
+
+    /// Delete orphaned attachments (reference_count = 0) older than the given age.
+    /// Returns the number of deleted attachments.
+    pub async fn cleanup_orphaned(&self, older_than_minutes: i64) -> Result<u64, sqlx::Error> {
+        let modifier = format!("-{} minutes", older_than_minutes);
+        let result = sqlx::query(
+            "DELETE FROM attachments WHERE reference_count = 0 AND created_at < datetime('now', ?)",
+        )
+        .bind(&modifier)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(test)]
