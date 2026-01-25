@@ -176,6 +176,30 @@
             </div>
         </div>
 
+        <!-- HEIC conversion confirmation modal -->
+        <div id="heic-overlay" class="heic-modal-overlay" hidden>
+            <div class="heic-modal">
+                <h3 class="heic-modal-title">HEIC Image Detected</h3>
+                <p id="heic-message" class="heic-modal-message"></p>
+                <div class="heic-modal-buttons">
+                    <button
+                        id="heic-cancel"
+                        type="button"
+                        class="heic-modal-btn heic-modal-btn-cancel"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="heic-confirm"
+                        type="button"
+                        class="heic-modal-btn heic-modal-btn-confirm"
+                    >
+                        Convert
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Hidden file input for image uploads -->
         <input
             type="file"

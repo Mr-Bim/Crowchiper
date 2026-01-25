@@ -716,6 +716,10 @@
     z-index: 10000;
 }
 
+.heic-modal-overlay[hidden] {
+    display: none;
+}
+
 .heic-modal {
     background: var(--bg);
     border: 1px solid var(--border);

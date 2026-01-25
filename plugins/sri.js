@@ -2,7 +2,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { globSync } from "node:fs";
-import { file } from "valibot";
 
 /**
  * Generate SHA-384 integrity hash for content

@@ -6,6 +6,7 @@
  */
 
 import type { WorkerTask, WorkerResult } from "./compress-worker.ts";
+import { getRequiredElement } from "../../../shared/dom.ts";
 
 /** Custom error class for HEIC conversion failures */
 export class HeicConversionError extends Error {
@@ -47,78 +48,54 @@ export function mightBeHeic(file: File): boolean {
  */
 export function showHeicConversionModal(fileCount: number): Promise<boolean> {
   return new Promise((resolve) => {
-    // Create modal overlay
-    const overlay = document.createElement("div");
-    overlay.className = "heic-modal-overlay";
+    const overlay = getRequiredElement("heic-overlay", HTMLDivElement);
+    const message = getRequiredElement("heic-message", HTMLParagraphElement);
+    const cancelBtn = getRequiredElement("heic-cancel", HTMLButtonElement);
+    const confirmBtn = getRequiredElement("heic-confirm", HTMLButtonElement);
 
-    const modal = document.createElement("div");
-    modal.className = "heic-modal";
-
-    const title = document.createElement("h3");
-    title.className = "heic-modal-title";
-    title.textContent = "HEIC Image Detected";
-
-    const message = document.createElement("p");
-    message.className = "heic-modal-message";
     const fileText =
       fileCount === 1 ? "This image is" : `${fileCount} images are`;
     message.textContent = `${fileText} in HEIC format (Apple's image format). Converting to a web-compatible format may take 10-30 seconds per image depending on file size. The page may be less responsive during conversion.`;
 
-    const buttonRow = document.createElement("div");
-    buttonRow.className = "heic-modal-buttons";
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "heic-modal-btn heic-modal-btn-cancel";
-    cancelBtn.textContent = "Cancel";
-
-    const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
-    confirmBtn.className = "heic-modal-btn heic-modal-btn-confirm";
-    confirmBtn.textContent = "Convert";
-
-    buttonRow.appendChild(cancelBtn);
-    buttonRow.appendChild(confirmBtn);
-
-    modal.appendChild(title);
-    modal.appendChild(message);
-    modal.appendChild(buttonRow);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
+    overlay.hidden = false;
 
     const cleanup = () => {
-      overlay.remove();
-      document.removeEventListener("keydown", keyHandler);
+      overlay.hidden = true;
+      cancelBtn.removeEventListener("click", handleCancel);
+      confirmBtn.removeEventListener("click", handleConfirm);
+      overlay.removeEventListener("click", handleOverlayClick);
+      document.removeEventListener("keydown", handleKeydown);
     };
 
-    cancelBtn.addEventListener("click", () => {
+    const handleCancel = () => {
       cleanup();
       resolve(false);
-    });
+    };
 
-    confirmBtn.addEventListener("click", () => {
+    const handleConfirm = () => {
       cleanup();
       resolve(true);
-    });
+    };
 
-    // Close on escape
-    const keyHandler = (e: KeyboardEvent) => {
+    const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         cleanup();
         resolve(false);
       }
     };
-    document.addEventListener("keydown", keyHandler);
 
-    // Close on overlay click
-    overlay.addEventListener("click", (e) => {
+    const handleOverlayClick = (e: MouseEvent) => {
       if (e.target === overlay) {
         cleanup();
         resolve(false);
       }
-    });
+    };
 
-    // Focus confirm button
+    cancelBtn.addEventListener("click", handleCancel);
+    confirmBtn.addEventListener("click", handleConfirm);
+    document.addEventListener("keydown", handleKeydown);
+    overlay.addEventListener("click", handleOverlayClick);
+
     confirmBtn.focus();
   });
 }
