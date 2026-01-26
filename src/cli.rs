@@ -136,51 +136,52 @@ fn parse_forwarded(value: &str) -> Result<String, &'static str> {
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "Crowchiper",
-    about = "Personal posts with passkey authentication"
+    about = "Personal posts with passkey authentication",
+    after_help = "ENVIRONMENT VARIABLES:\n    JWT_SECRET    JWT signing secret (required, min 32 chars)"
 )]
 pub struct Args {
-    #[arg(short, long, value_parser = validate_base_path,
-        help = format!("Base path prefix. Login at {{base}}/login, app at {{base}}{}", env!("CONFIG_APP_ASSETS")))]
+    /// Base path for reverse proxy (e.g., /app)
+    #[arg(short, long, value_parser = validate_base_path)]
     pub base: Option<String>,
 
     /// Port to listen on
     #[arg(short, long, default_value = "7291")]
     pub port: u16,
 
-    /// Path to SQLite database file
+    /// SQLite database path
     #[arg(short, long, default_value = "crowchiper.db")]
     pub database: String,
 
-    /// WebAuthn Relying Party ID (domain name, e.g., "localhost" or "example.com")
+    /// WebAuthn Relying Party ID (domain)
     #[arg(long, default_value = "localhost")]
     pub rp_id: String,
 
-    /// WebAuthn Relying Party Origin (full URL, e.g., "http://localhost:7291")
+    /// WebAuthn origin URL (must be HTTPS for non-localhost)
     #[arg(long, default_value = "http://localhost:7291")]
     pub rp_origin: String,
 
-    /// Path to file containing JWT secret. Prefer using JWT_SECRET env var instead
+    /// Read JWT secret from file instead of JWT_SECRET env var
     #[arg(long)]
     pub jwt_secret_file: Option<String>,
 
-    /// Create a new admin user on startup and print the claim URL
+    /// Create admin user and print claim URL
     #[arg(long)]
     pub create_admin: bool,
 
-    /// Disable new user signups (admin creation via --create-admin still works)
+    /// Disable public registration
     #[arg(long)]
     pub no_signup: bool,
 
-    /// Add a random nonce to CSP headers for each HTML response, does not affect script tags
+    /// Add random nonce to CSP headers (for Cloudflare)
     #[arg(long)]
     pub csp_nonce: bool,
 
-    /// Log output format
-    #[arg(short, long, default_value = "pretty")]
+    /// Log format
+    #[arg(short, long, default_value = "pretty", value_enum)]
     pub log_format: LogFormat,
 
-    /// Derive real ip from header (App must be run behind a proxy)
-    #[arg(short, long)]
+    /// Extract client IP from header (requires reverse proxy)
+    #[arg(short, long, value_enum)]
     pub ip_header: Option<ClientIpHeader>,
 }
 

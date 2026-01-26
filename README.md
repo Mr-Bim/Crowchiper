@@ -40,19 +40,34 @@ Visit `http://localhost:7291` to register and start using the app.
 
 ```bash
 crowchiper [OPTIONS]
-
-Options:
-  --port <PORT>           Server port (default: 7291)
-  --database <PATH>       SQLite database path (default: crowchiper.db)
-  --base <PATH>           Base path for reverse proxy (e.g., /app)
-  --no-signup             Disable public registration
-  --rp-id <DOMAIN>        WebAuthn Relying Party ID (default: localhost)
-  --rp-origin <URL>       WebAuthn origin (default: http://localhost:7291)
-  --create-admin          Create admin account on startup
-  --ip-header <HEADER>    Extract client IP from header (for reverse proxy)
-  --csp-nonce             Add random nonce to CSP headers
-  --log-format <FORMAT>   Log output format: pretty, json, compact (default: pretty)
 ```
+
+### Required
+
+| Option | Description |
+|--------|-------------|
+| `JWT_SECRET` env var | JWT signing secret (min 32 characters). Set as environment variable. |
+
+### Optional with Defaults
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --port <PORT>` | `7291` | Server port to listen on |
+| `-d, --database <PATH>` | `crowchiper.db` | SQLite database path (created if missing) |
+| `--rp-id <DOMAIN>` | `localhost` | WebAuthn Relying Party ID (domain name) |
+| `--rp-origin <URL>` | `http://localhost:7291` | WebAuthn origin (must use HTTPS for non-localhost) |
+| `-l, --log-format <FORMAT>` | `pretty` | Log format: `pretty`, `json`, `compact` |
+
+### Optional Flags
+
+| Option | Description |
+|--------|-------------|
+| `-b, --base <PATH>` | Base path prefix for reverse proxy (e.g., `/app`) |
+| `--no-signup` | Disable public user registration |
+| `--create-admin` | Create admin account on startup and print claim URL |
+| `-i, --ip-header <HEADER>` | Extract client IP from header (requires reverse proxy) |
+| `--csp-nonce` | Add random nonce to CSP headers (for Cloudflare compatibility) |
+| `--jwt-secret-file <PATH>` | Read JWT secret from file instead of env var |
 
 ### Examples
 
