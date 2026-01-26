@@ -82,17 +82,50 @@ Users without PRF support can skip encryption and use plaintext storage.
 ## Development
 
 ```bash
-# Build frontend
+# Install dependencies
+npm install
+
+# Build frontend for production
 npm run build-all
 
-# Run Rust browser tests (single-threaded due to shared browser)
-cargo test --tests -- --test-threads=1
+# Run the server (JWT_SECRET must be 32+ characters)
+JWT_SECRET=your-32-character-secret-here cargo run
+```
+
+### Common Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run build-all` | Build frontend for production |
+| `npm run build-all-test` | Build frontend with test mode |
+| `npm run lint:fix` | TypeScript type check and lint fix |
+| `cargo run -- --port 7291` | Run server on port 7291 |
+| `cargo build --release` | Build release binary |
+
+## Testing
+
+```bash
+# Install dependencies (if not already done)
+npm install
+
+# Build frontend and Rust in test mode
+npm run prepare-test
+
+# Run Rust tests
+npm run test:rust
 
 # Run Playwright e2e tests
-npx playwright test
+npm run test:web
 
-# Type check frontend
-npm run lint
+# Run all tests
+npm run test:all
+```
+
+### First-Time Setup for E2E Tests
+
+```bash
+# Install Playwright browser
+npx playwright install chromium
 ```
 
 ## License
