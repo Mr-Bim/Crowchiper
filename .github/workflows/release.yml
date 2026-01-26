@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  check-branch:
+    name: Check Branch
+    runs-on: ubuntu-latest
+    outputs:
+      is_main: ${{ steps.check.outputs.is_main }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check if tag is on main branch
+        id: check
+        run: |
+          if git merge-base --is-ancestor ${{ github.sha }} origin/main; then
+            echo "is_main=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_main=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-release:
+    name: Build Release Binary
+    runs-on: ubuntu-latest
+    needs: [test, check-branch]
+    if: needs.check-branch.outputs.is_main == 'true'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: "npm"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Build frontend (production)
+        run: npm run build-all
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Create tarball
+        run: |
+          cd target/release
+          tar -czvf crowchiper-linux-x86_64.tar.gz crowchiper
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/release/crowchiper-linux-x86_64.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

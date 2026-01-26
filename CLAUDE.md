@@ -723,3 +723,29 @@ Login and app pages have different script hashes, so they get different CSP head
 E2E tests located in `e2e/` folder. See `e2e/CLAUDE.md` for details.
 
 **First-time setup**: Run `npx playwright install chromium` to download the browser.
+
+## GitHub Actions CI/CD
+
+Workflows located in `.github/workflows/`:
+
+### CI Workflow (`ci.yml`)
+Runs on push to `main` and pull requests. Jobs:
+
+1. **Lint** - Runs `npm run lint:fix` and checks for uncommitted changes
+2. **Rust Tests** - Builds frontend and Rust in test mode, runs `npm run test:rust`
+3. **Playwright Tests** - Builds in test mode, runs Playwright tests, uploads report artifact
+4. **Build Linux** - Builds production frontend and release binary, uploads as artifact
+
+### Release Workflow (`release.yml`)
+Triggered by pushing a version tag (e.g., `v1.0.0`):
+
+1. Builds production frontend
+2. Builds release binary
+3. Creates tarball (`crowchiper-linux-x86_64.tar.gz`)
+4. Creates GitHub release with the binary attached
+
+**Creating a release:**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```

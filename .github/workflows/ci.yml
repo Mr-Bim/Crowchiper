@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: "npm"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Build frontend (production)
+        run: npm run build-all
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: crowchiper-linux-x86_64
+          path: target/release/crowchiper
+          retention-days: 7
