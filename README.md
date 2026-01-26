@@ -49,6 +49,9 @@ Options:
   --rp-id <DOMAIN>        WebAuthn Relying Party ID (default: localhost)
   --rp-origin <URL>       WebAuthn origin (default: http://localhost:7291)
   --create-admin          Create admin account on startup
+  --ip-header <HEADER>    Extract client IP from header (for reverse proxy)
+  --csp-nonce             Add random nonce to CSP headers
+  --log-format <FORMAT>   Log output format: pretty, json, compact (default: pretty)
 ```
 
 ### Examples
@@ -62,7 +65,42 @@ cargo run -- --base /app --rp-id example.com --rp-origin https://example.com
 
 # Disable public signups
 cargo run -- --no-signup --create-admin
+
+# Behind nginx with X-Forwarded-For
+cargo run -- --ip-header x-forward-for --rp-origin https://example.com
+
+# Behind Cloudflare
+cargo run -- --ip-header cf-connecting-ip --rp-origin https://example.com
 ```
+
+## Reverse Proxy Configuration
+
+When running behind a reverse proxy, configure the `--ip-header` option to extract the real client IP address. This is important for security features like rate limiting and session validation.
+
+### Supported IP Headers
+
+| Option | Header | Description |
+|--------|--------|-------------|
+| `x-forward-for` | `X-Forwarded-For` | Standard proxy header (uses first IP in chain) |
+| `cf-connecting-ip` | `CF-Connecting-IP` | Cloudflare's client IP header |
+| `x-real-ip` | `X-Real-IP` | Nginx real IP header |
+| `forward` | `Forwarded` | RFC 7239 standard header |
+
+### Example Configurations
+
+**Nginx:**
+```nginx
+location /app {
+    proxy_pass http://127.0.0.1:7291;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Host $host;
+}
+```
+```bash
+crowchiper --base /app --ip-header x-forward-for --rp-origin https://example.com
+```
+
+**Important:** Only use `--ip-header` when running behind a trusted reverse proxy. If exposed directly to the internet, clients could spoof their IP address by setting the header themselves.
 
 ## End-to-End Encryption
 
