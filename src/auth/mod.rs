@@ -27,8 +27,9 @@ mod types;
 pub use cookie::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
 pub use errors::{ApiAuthError, AssetAuthError};
 pub use extractors::{
-    ActivatedApiAuth, ApiAuth, AssetAuth, MaybeAuth, NEW_ACCESS_TOKEN_COOKIE, NewAccessTokenCookie,
+    ActivatedApiAuth, ActivatedApiAuthWithJti, ApiAuth, AssetAuth, MaybeAuth,
+    NEW_ACCESS_TOKEN_COOKIE, NewAccessTokenCookie,
 };
 pub use ip::{HasHeadersAndExtensions, extract_client_ip};
 pub use state::{HasAssetAuthState, HasAuthState};
-pub use types::{ActivatedAuthenticatedUser, AuthenticatedUser};
+pub use types::{ActivatedAuthenticatedUser, ActivatedAuthenticatedUserWithJti, AuthenticatedUser};

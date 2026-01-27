@@ -1,17 +1,12 @@
 # Crowchiper
 
 **Warning:** 
-!Red flag begins here!
-
 This is just a test project for me to see how far Claude Code could take me.
 
-There are probably some glaring security holes in this app, and there's a lot of stuff to look into.
-
-I have never written rust before, I am no security expert, so I feel the most bad about the frontend security atm.
+There are might be some security holes in this app, and there's a lot of stuff to look into.
+I have never written rust before.
 
 I needed a notes app that could be served from a base-url, and I wanted to use the prf extension to encrypt my notes. 
-
-!Red flag ends here!
 
 A secure notes app with passkey authentication and optional end-to-end encryption. Ships as a single binary with an embedded frontend.
 

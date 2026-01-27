@@ -88,6 +88,34 @@ function setupBfcacheHandler(): void {
   });
 }
 
+/**
+ * Set up the trigger for the settings panel.
+ * The actual panel module is lazy-loaded when first opened.
+ */
+function setupSettingsPanelTrigger(): void {
+  const manageSessionsBtn = getOptionalElement("manage-sessions-btn");
+  const settingsMenu = getOptionalElement("settings-menu");
+  const settingsBtn = getOptionalElement("settings-btn");
+
+  if (manageSessionsBtn) {
+    manageSessionsBtn.addEventListener("click", async () => {
+      // Close the settings dropdown menu
+      if (settingsMenu) {
+        settingsMenu.hidden = true;
+      }
+      if (settingsBtn) {
+        settingsBtn.setAttribute("aria-expanded", "false");
+      }
+
+      // Lazy-load and open the settings panel
+      const { openSettingsPanel, setupSettingsPanel } =
+        await import("./settings-panel.ts");
+      setupSettingsPanel();
+      openSettingsPanel();
+    });
+  }
+}
+
 function setupSidebarToggle(): void {
   const sidebar = getOptionalElement("sidebar");
   const toggleBtn = getOptionalElement("sidebar-toggle");
@@ -138,6 +166,9 @@ async function init(): Promise<void> {
 
     // Set up spellcheck toggle
     setupSpellcheck();
+
+    // Set up settings panel (lazy-loaded on first open)
+    setupSettingsPanelTrigger();
 
     // Check encryption settings first
     const settings = await getEncryptionSettings();

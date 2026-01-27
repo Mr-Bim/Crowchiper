@@ -192,8 +192,11 @@ function minifyJsClassNames(js, classMap) {
   let minifiedJs = js;
   for (const [original, minified] of classMap) {
     minifiedJs = minifiedJs.replaceAll(`"${original}"`, `"${minified}"`);
+    minifiedJs = minifiedJs.replaceAll(`".${original}"`, `".${minified}"`);
     minifiedJs = minifiedJs.replaceAll(`'${original}'`, `'${minified}'`);
+    minifiedJs = minifiedJs.replaceAll(`'.${original}'`, `'.${minified}'`);
     minifiedJs = minifiedJs.replaceAll(`\`${original}\``, `\`${minified}\``);
+    minifiedJs = minifiedJs.replaceAll(`\`.${original}\``, `\`.${minified}\``);
 
     minifiedJs = minifiedJs.replace(/(["'`])(?:(?=(\\?))\2.)*?\1/g, (match) => {
       const quote = match[0];

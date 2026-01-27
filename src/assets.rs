@@ -261,14 +261,14 @@ fn serve_asset<T: Embed>(path: &str) -> Response {
 
 /// Serve an HTML response with CSP header
 #[inline]
-fn html_response_with_csp(body: &'static str, csp: &'static str) -> Response {
+fn html_response_with_csp(body: &str, csp: &'static str) -> Response {
     (
         [
             (header::CONTENT_TYPE, "text/html"),
             (header::CACHE_CONTROL, NO_CACHE),
             (CSP_HEADER, csp),
         ],
-        body,
+        body.to_owned(),
     )
         .into_response()
 }
@@ -285,8 +285,7 @@ pub async fn login_handler_direct(
             if state.csp_nonce {
                 return html_response_with_csp_nonce(&html, LOGIN_CSP_HEADER);
             }
-            let html: &'static str = Box::leak(html.into_owned().into_boxed_str());
-            return html_response_with_csp(html, LOGIN_CSP_HEADER);
+            return html_response_with_csp(&html, LOGIN_CSP_HEADER);
         }
     }
     serve_asset::<LoginAssets>(path)
@@ -303,9 +302,21 @@ pub async fn login_index_handler(
             return Redirect::temporary(state.app_path).into_response();
         }
     }
+    // For refresh tokens, also check database to ensure token wasn't revoked
     if let Some(token) = get_cookie(&headers, REFRESH_COOKIE_NAME) {
-        if state.jwt.validate_refresh_token(token).is_ok() {
-            return Redirect::temporary(state.app_path).into_response();
+        if let Ok(claims) = state.jwt.validate_refresh_token(token) {
+            // Check if token is still in database (not revoked)
+            if state
+                .db
+                .tokens()
+                .get_by_jti(&claims.jti)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                return Redirect::temporary(state.app_path).into_response();
+            }
         }
     }
     if state.csp_nonce {
@@ -344,8 +355,7 @@ pub async fn app_handler_direct(
             if state.csp_nonce {
                 return html_response_with_csp_nonce(&html, APP_CSP_HEADER);
             }
-            let html: &'static str = Box::leak(html.into_owned().into_boxed_str());
-            return html_response_with_csp(html, APP_CSP_HEADER);
+            return html_response_with_csp(&html, APP_CSP_HEADER);
         }
     }
     serve_asset::<AppAssets>(path)

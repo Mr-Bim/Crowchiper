@@ -1,0 +1,159 @@
+/* Settings panel overlay */
+.cl-settings-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg);
+    z-index: 200;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+}
+
+.cl-settings-panel[hidden] {
+    display: none;
+}
+
+.settings-panel-content {
+    width: 100%;
+    max-width: 40rem;
+    padding: 2rem;
+}
+
+.settings-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-panel-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.settings-panel-close-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+}
+
+.settings-panel-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-section {
+    margin-bottom: 2rem;
+}
+
+.settings-section-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.settings-section-desc {
+    margin: 0 0 1rem 0;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+/* Sessions list */
+.cl-sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sessions-loading,
+.sessions-error {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.sessions-error {
+    color: oklch(0.55 0.2 25);
+}
+
+.session-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+}
+
+.session-item[data-current="true"] {
+    border-color: var(--accent);
+}
+
+.session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.session-ip {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.session-current-badge {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: var(--accent);
+    color: white;
+    border-radius: 0.25rem;
+}
+
+.session-details {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.session-revoke-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: 0.375rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s,
+        color 0.15s;
+}
+
+.session-revoke-btn:hover {
+    background: oklch(0.95 0.05 25);
+    border-color: oklch(0.7 0.15 25);
+    color: oklch(0.55 0.2 25);
+}
+
+:root[data-theme="dark"] .session-revoke-btn:hover {
+    background: oklch(0.25 0.05 25);
+}
+
+.session-revoke-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

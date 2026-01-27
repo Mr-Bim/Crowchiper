@@ -20,3 +20,15 @@ pub struct ActivatedAuthenticatedUser {
     /// Database user ID
     pub user_id: i64,
 }
+
+/// Authenticated user with refresh token JTI.
+/// Used for endpoints that need to identify the current session.
+#[derive(Debug, Clone)]
+pub struct ActivatedAuthenticatedUserWithJti {
+    /// JWT claims from the access token
+    pub claims: AccessClaims,
+    /// Database user ID
+    pub user_id: i64,
+    /// Refresh token JTI
+    pub refresh_jti: String,
+}

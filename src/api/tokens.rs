@@ -16,7 +16,10 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{ACCESS_COOKIE_NAME, ActivatedApiAuth, ApiAuth, REFRESH_COOKIE_NAME, get_cookie};
+use crate::auth::{
+    ACCESS_COOKIE_NAME, ActivatedApiAuth, ActivatedApiAuthWithJti, ApiAuth, REFRESH_COOKIE_NAME,
+    get_cookie,
+};
 use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
 use crate::impl_has_auth_state;
@@ -63,9 +66,10 @@ async fn verify_token(ApiAuth(_auth): ApiAuth) -> impl IntoResponse {
 }
 
 /// List all active refresh tokens for the current user.
+/// Marks the current session's token based on the refresh token JTI.
 async fn list_tokens(
     State(state): State<TokensState>,
-    ActivatedApiAuth(auth): ActivatedApiAuth,
+    ActivatedApiAuthWithJti(auth): ActivatedApiAuthWithJti,
 ) -> Result<impl IntoResponse, ApiError> {
     let tokens = state
         .db
@@ -74,14 +78,10 @@ async fn list_tokens(
         .await
         .db_err("Failed to list tokens")?;
 
-    // Get current refresh token JTI from cookie to mark as current
-    // Note: We don't have access to the refresh token here since ApiAuth uses access token
-    // So we'll mark based on the access token's JTI (which won't match refresh tokens)
-    // This is intentional - refresh tokens are a separate concern
     let token_infos: Vec<TokenInfo> = tokens
         .into_iter()
         .map(|t| TokenInfo {
-            is_current: false, // Will be updated by frontend based on context
+            is_current: t.jti == auth.refresh_jti,
             jti: t.jti,
             last_ip: t.last_ip,
             issued_at: t.issued_at,

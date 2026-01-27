@@ -6,6 +6,7 @@
         <title>Crowchiper</title>
         <link rel="stylesheet" href="./css/app.css" />
         <link rel="stylesheet" href="./css/unlock.css" />
+        <link rel="stylesheet" href="./css/settings-panel.css" />
     </head>
     <body>
         <div class="app-container">
@@ -42,6 +43,15 @@
                                 <span class="settings-label">Theme</span>
                                 <div id="theme-toggle"></div>
                             </div>
+                            <button
+                                class="settings-menu-item settings-menu-btn"
+                                id="manage-sessions-btn"
+                                type="button"
+                            >
+                                <span class="settings-label"
+                                    >Manage Sessions</span
+                                >
+                            </button>
                             <button
                                 class="settings-menu-item settings-menu-btn"
                                 id="logout-btn"
@@ -208,6 +218,57 @@
             multiple
             hidden
         />
+
+        <!-- Settings panel overlay -->
+        <div
+            id="settings-panel"
+            class="cl-settings-panel"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-panel-title"
+        >
+            <div class="settings-panel-content">
+                <div class="settings-panel-header">
+                    <h2 id="settings-panel-title">Settings</h2>
+                    <button
+                        id="settings-panel-close"
+                        class="ghost settings-panel-close-btn"
+                        type="button"
+                        aria-label="Close settings"
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                        >
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="settings-panel-body">
+                    <section class="settings-section">
+                        <h3 class="settings-section-title">Active Sessions</h3>
+                        <p class="settings-section-desc">
+                            These are the devices currently logged into your
+                            account. Revoke any session you don't recognize.
+                        </p>
+                        <div id="sessions-list" class="cl-sessions-list">
+                            <div class="sessions-loading">
+                                Loading sessions...
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
 
         <!-- Success toast notification -->
         <div

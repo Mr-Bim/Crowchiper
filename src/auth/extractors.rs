@@ -8,7 +8,9 @@ use super::cookie::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
 use super::errors::{ApiAuthError, AssetAuthError, AuthErrorKind};
 use super::ip::extract_client_ip;
 use super::state::{HasAssetAuthState, HasAuthState};
-use super::types::{ActivatedAuthenticatedUser, AuthenticatedUser};
+use super::types::{
+    ActivatedAuthenticatedUser, ActivatedAuthenticatedUserWithJti, AuthenticatedUser,
+};
 
 tokio::task_local! {
     /// Task-local storage for the new access token cookie.
@@ -189,6 +191,49 @@ where
             claims: user.claims,
             user_id: id,
         }))
+    }
+}
+
+/// Extractor for API endpoints that need the current session's refresh token JTI.
+/// Validates both access token (or refreshes it) AND the refresh token.
+/// Use this when you need to identify which session is making the request.
+pub struct ActivatedApiAuthWithJti(pub ActivatedAuthenticatedUserWithJti);
+
+impl<S> FromRequestParts<S> for ActivatedApiAuthWithJti
+where
+    S: HasAuthState + Send + Sync,
+{
+    type Rejection = ApiAuthError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // First, do normal authentication
+        let ActivatedApiAuth(user) = ActivatedApiAuth::from_request_parts(parts, state).await?;
+
+        // Then validate the refresh token to get the JTI
+        let refresh_token = get_cookie(&parts.headers, REFRESH_COOKIE_NAME)
+            .ok_or(ApiAuthError(AuthErrorKind::NotAuthenticated))?;
+
+        let refresh_claims = state
+            .jwt()
+            .validate_refresh_token(refresh_token)
+            .map_err(|_| ApiAuthError(AuthErrorKind::InvalidToken))?;
+
+        // Verify the refresh token is still in the database (not revoked)
+        state
+            .db()
+            .tokens()
+            .get_by_jti(&refresh_claims.jti)
+            .await
+            .map_err(|_| ApiAuthError(AuthErrorKind::DatabaseError))?
+            .ok_or(ApiAuthError(AuthErrorKind::TokenRevoked))?;
+
+        Ok(ActivatedApiAuthWithJti(
+            super::types::ActivatedAuthenticatedUserWithJti {
+                claims: user.claims,
+                user_id: user.user_id,
+                refresh_jti: refresh_claims.jti,
+            },
+        ))
     }
 }
 
