@@ -54,7 +54,10 @@ fn main() {
     let login_style_hashes = format_hashes(&csp_json["login"]["styles"]);
     let login_csp = build_csp(&[
         ("default-src", "'none'"),
-        ("script-src", &login_script_hashes),
+        (
+            "script-src",
+            &format!("'strict-dynamic' {}", login_script_hashes),
+        ),
         ("style-src", &format!("'self' {}", login_style_hashes)),
         ("img-src", "'self' data:"),
         ("connect-src", "'self'"),
