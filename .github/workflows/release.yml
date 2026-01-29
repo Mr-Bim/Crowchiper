@@ -92,6 +92,10 @@ jobs:
           echo "Timed out waiting for CI to complete (30 minutes)"
           exit 1
 
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download binary from CI
         uses: actions/download-artifact@v7
         with:
@@ -105,10 +109,6 @@ jobs:
         run: |
           chmod +x ./binary/crowchiper
           tar -czvf crowchiper-linux-x86_64.tar.gz -C ./binary crowchiper
-
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Generate release notes with git-cliff
         uses: orhun/git-cliff-action@v4
