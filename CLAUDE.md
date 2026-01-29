@@ -30,6 +30,37 @@ iery-sparrow/*` - JWT-protected app
 
 With `--base /app`, all paths are prefixed.
 
+## Conventional Commits
+
+All commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+
+**Format:** `<type>[optional scope]: <description>`
+
+**Valid types:**
+- `feat` - A new feature
+- `fix` - A bug fix
+- `docs` - Documentation only changes
+- `style` - Changes that do not affect the meaning of the code
+- `refactor` - A code change that neither fixes a bug nor adds a feature
+- `perf` - A code change that improves performance
+- `test` - Adding missing tests or correcting existing tests
+- `build` - Changes that affect the build system or dependencies
+- `ci` - Changes to CI configuration files and scripts
+- `chore` - Other changes that don't modify src or test files
+- `revert` - Reverts a previous commit
+
+**Examples:**
+```
+feat: add user authentication
+fix(auth): resolve login timeout issue
+docs: update API documentation
+feat!: breaking change to API
+```
+
+**Setup:** Run `git config core.hooksPath .githooks` to enable the commit-msg hook that validates messages locally.
+
+**Release notes:** Generated automatically from conventional commits using [git-cliff](https://git-cliff.org/) (configured in `cliff.toml`).
+
 ## Development Rules
 
 - Run `cargo build` when finished with new functionality
@@ -739,10 +770,11 @@ Runs on push to `main` and pull requests. Jobs:
 ### Release Workflow (`release.yml`)
 Triggered by pushing a version tag (e.g., `v1.0.0`):
 
-1. Builds production frontend
-2. Builds release binary
+1. Waits for CI to pass
+2. Downloads compiled binary from CI artifacts
 3. Creates tarball (`crowchiper-linux-x86_64.tar.gz`)
-4. Creates GitHub release with the binary attached
+4. Generates release notes from conventional commits using git-cliff
+5. Creates GitHub release with the binary and changelog
 
 **Creating a release:**
 ```bash

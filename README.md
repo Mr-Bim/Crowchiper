@@ -127,6 +127,32 @@ Users without PRF support can skip encryption and use plaintext storage.
 
 **Warning:** Losing your passkey means losing access to encrypted data. There is no recovery mechanism. (Yet)
 
+## Contributing
+
+### Commit Messages
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/). All commits must follow the format:
+
+```
+<type>[optional scope]: <description>
+```
+
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+
+**Examples:**
+```
+feat: add user authentication
+fix(auth): resolve login timeout issue
+docs: update API documentation
+```
+
+Non-conventional commits will be rejected by CI.
+
+**Optional local validation:** To validate commits locally before pushing, run:
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Development
 
 ### Dev Server (Hot Reload)
