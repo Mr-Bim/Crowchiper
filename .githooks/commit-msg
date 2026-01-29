@@ -14,10 +14,6 @@ if echo "$commit_msg" | grep -qE "^Merge "; then
     exit 0
 fi
 
-# Skip fixup/squash commits (used during interactive rebase)
-if echo "$commit_msg" | grep -qE "^(fixup|squash)! "; then
-    exit 0
-fi
 
 # Conventional commit pattern
 # Format: type(scope): description  OR  type: description
