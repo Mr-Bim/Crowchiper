@@ -7,14 +7,41 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  commits:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          # Get the base ref for comparison
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+
+          # Check each commit (excluding merges) using the git hook
+          git log --no-merges --format=%s "$base"..HEAD | while read -r msg; do
+            tmpfile=$(mktemp)
+            echo "$msg" > "$tmpfile"
+            ./.githooks/commit-msg "$tmpfile" || exit 1
+            rm "$tmpfile"
+          done
+
+          echo "All commit messages are valid"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "25"
           cache: "npm"
@@ -33,47 +60,8 @@ jobs:
             exit 1
           fi
 
-  rust-tests:
-    name: Rust Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: "npm"
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Build frontend (test mode)
-        run: npm run build-all-test
-
-      - name: Build Rust (test mode)
-        run: cargo build --features test-mode
-
-      - name: Run Rust tests
-        run: npm run test:rust
-
-  playwright-tests:
-    name: Playwright Tests
+  test:
+    name: Tests
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.58.0-noble
@@ -83,10 +71,10 @@ jobs:
           apt-get update
           apt-get install -y build-essential
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "25"
           cache: "npm"
@@ -105,9 +93,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-test-
 
       - name: Build frontend (test mode)
         run: npm run build-all-test
@@ -115,11 +103,14 @@ jobs:
       - name: Build Rust (test mode)
         run: cargo build --features test-mode
 
+      - name: Run Rust tests
+        run: cargo test --features test-mode --tests -- --test-threads=1
+
       - name: Run Playwright tests
         run: npm run test:web
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
           name: playwright-report

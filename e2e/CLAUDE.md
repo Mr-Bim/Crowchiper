@@ -9,6 +9,10 @@ npx playwright test        # Run all e2e tests
 npx playwright test --ui   # Run with UI mode
 ```
 
+## Environment Variables
+
+- `CROWCHIPER_BIN` - Path to the crowchiper binary. Defaults to `target/debug/crowchiper`.
+
 ## Important: Use .ts Extensions
 
 All relative imports MUST include the `.ts` extension:

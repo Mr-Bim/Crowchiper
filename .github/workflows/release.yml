@@ -12,7 +12,7 @@ jobs:
     outputs:
       is_main: ${{ steps.check.outputs.is_main }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -93,7 +93,7 @@ jobs:
           exit 1
 
       - name: Download binary from CI
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: crowchiper-linux-x86_64
           path: ./binary
@@ -106,10 +106,23 @@ jobs:
           chmod +x ./binary/crowchiper
           tar -czvf crowchiper-linux-x86_64.tar.gz -C ./binary crowchiper
 
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes with git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: crowchiper-linux-x86_64.tar.gz
-          generate_release_notes: true
+          body: ${{ steps.cliff.outputs.content }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

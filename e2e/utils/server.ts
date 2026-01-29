@@ -49,7 +49,9 @@ export async function getServer(
 }
 
 async function spawnServer(options: ServerOptions): Promise<ServerInstance> {
-  const binaryPath = path.resolve(__dirname, "../../target/debug/crowchiper");
+  const binaryPath =
+    process.env.CROWCHIPER_BIN ||
+    path.resolve(__dirname, "../../target/debug/crowchiper");
 
   const args = [
     "--port",

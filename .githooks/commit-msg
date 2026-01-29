@@ -1,0 +1,60 @@
+#!/bin/sh
+#
+# Git commit-msg hook to validate conventional commits format.
+# Install with: git config core.hooksPath .githooks
+#
+# Conventional Commits format: <type>[optional scope]: <description>
+# Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+
+commit_msg_file="$1"
+commit_msg=$(cat "$commit_msg_file")
+
+# Skip merge commits
+if echo "$commit_msg" | grep -qE "^Merge "; then
+    exit 0
+fi
+
+
+# Conventional commit pattern
+# Format: type(scope): description  OR  type: description
+# - type: lowercase word (feat, fix, docs, etc.)
+# - scope: optional, in parentheses
+# - breaking: optional ! before colon
+# - description: starts with lowercase or number, non-empty
+pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_-]+\))?!?: .+$"
+
+# Get the first line (subject) of the commit message
+first_line=$(echo "$commit_msg" | sed -n '1p')
+
+if ! echo "$first_line" | grep -qE "$pattern"; then
+    echo ""
+    echo "ERROR: Commit message does not follow Conventional Commits format."
+    echo ""
+    echo "Expected format: <type>[optional scope]: <description>"
+    echo ""
+    echo "Valid types:"
+    echo "  feat     - A new feature"
+    echo "  fix      - A bug fix"
+    echo "  docs     - Documentation only changes"
+    echo "  style    - Changes that do not affect the meaning of the code"
+    echo "  refactor - A code change that neither fixes a bug nor adds a feature"
+    echo "  perf     - A code change that improves performance"
+    echo "  test     - Adding missing tests or correcting existing tests"
+    echo "  build    - Changes that affect the build system or dependencies"
+    echo "  ci       - Changes to CI configuration files and scripts"
+    echo "  chore    - Other changes that don't modify src or test files"
+    echo "  revert   - Reverts a previous commit"
+    echo ""
+    echo "Examples:"
+    echo "  feat: add user authentication"
+    echo "  fix(auth): resolve login timeout issue"
+    echo "  docs: update API documentation"
+    echo "  feat!: breaking change to API"
+    echo ""
+    echo "Your commit message:"
+    echo "  $first_line"
+    echo ""
+    exit 1
+fi
+
+exit 0
