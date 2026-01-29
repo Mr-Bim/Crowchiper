@@ -11,7 +11,7 @@ jobs:
     name: Conventional Commits
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -38,10 +38,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "25"
           cache: "npm"
@@ -60,14 +60,21 @@ jobs:
             exit 1
           fi
 
-  build-test:
-    name: Build (Test Mode)
+  test:
+    name: Tests
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.0-noble
     steps:
-      - uses: actions/checkout@v6
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential
+
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: "25"
           cache: "npm"
@@ -94,90 +101,16 @@ jobs:
         run: npm run build-all-test
 
       - name: Build Rust (test mode)
-        run: |
-          # Force recompile to embed fresh assets (cache may have stale binary)
-          touch src/assets.rs
-          cargo build --features test-mode
-
-      - name: Upload test binary
-        uses: actions/upload-artifact@v5
-        with:
-          name: test-binary
-          path: target/debug/crowchiper
-          retention-days: 1
-
-      - name: Upload frontend dist
-        uses: actions/upload-artifact@v5
-        with:
-          name: test-dist
-          path: dist/
-          retention-days: 1
-
-  rust-tests:
-    name: Rust Tests
-    runs-on: ubuntu-latest
-    needs: build-test
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-test-
-
-      - name: Download frontend dist
-        uses: actions/download-artifact@v5
-        with:
-          name: test-dist
-          path: dist/
+        run: cargo build --features test-mode
 
       - name: Run Rust tests
         run: cargo test --features test-mode --tests -- --test-threads=1
 
-  playwright-tests:
-    name: Playwright Tests
-    runs-on: ubuntu-latest
-    needs: build-test
-    container:
-      image: mcr.microsoft.com/playwright:v1.58.0-noble
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: "npm"
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Download test binary
-        uses: actions/download-artifact@v7
-        with:
-          name: test-binary
-          path: ./bin
-
-      - name: Make binary executable
-        run: chmod +x ./bin/crowchiper
-
       - name: Run Playwright tests
         run: npm run test:web
-        env:
-          CROWCHIPER_BIN: ./bin/crowchiper
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v5
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
