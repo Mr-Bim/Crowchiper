@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "dev": "vite",
     "build-login": "BUILD=login vite build",
     "build-app": "BUILD=app vite build",
     "build-app-test": "BUILD=app TEST_MODE=1 vite build",
@@ -23,11 +24,11 @@
     "@codemirror/view": "^6.39.11",
     "@playwright/test": "^1.58.0",
     "@simplewebauthn/browser": "^13.2.2",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.1.0",
     "codemirror": "^6.0.2",
     "heic-to": "^1.3.0",
     "lightningcss": "^1.31.1",
-    "oxlint": "^1.41.0",
+    "oxlint": "^1.42.0",
     "typescript": "^5.9.3",
     "valibot": "^1.2.0",
     "vite": "8.0.0-beta.10"

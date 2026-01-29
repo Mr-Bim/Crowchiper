@@ -110,7 +110,8 @@ export function injectSharedStylesLink(html, assetsPath, stylesFilename) {
 export function replaceAssetPlaceholders(html, assetsPath) {
   return html
     .replaceAll("/__APP_ASSETS__/", `${assetsPath}/`)
-    .replaceAll("/__APP_ASSETS__", `${assetsPath}`);
+    .replaceAll("/__APP_ASSETS__", `${assetsPath}`)
+    .replaceAll("__APP_ASSETS__", `${assetsPath}`);
 }
 
 /**

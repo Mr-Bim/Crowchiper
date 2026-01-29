@@ -162,7 +162,7 @@ export function createUnlockHandler(
       }
 
       const key = await deriveEncryptionKeyFromPrf(prfOutput);
-      setSessionEncryptionKey(key);
+      await setSessionEncryptionKey(key);
 
       // Hide overlay and run success callback
       hideUnlockOverlay();

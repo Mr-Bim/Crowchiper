@@ -129,6 +129,28 @@ Users without PRF support can skip encryption and use plaintext storage.
 
 ## Development
 
+### Dev Server (Hot Reload)
+
+Run the Vite dev server and Rust backend in separate terminals:
+
+```bash
+# Terminal 1: Start Rust backend (use port 5173 for WebAuthn origin)
+JWT_SECRET=dev-secret-do-not-use-in-production cargo run -- --rp-origin http://localhost:5173
+
+# Terminal 2: Start Vite dev server
+npm run dev
+```
+
+Visit `http://localhost:5173/login` to use the app with hot reload.
+
+The dev server:
+- Serves both login (`/login`) and app (`/fiery-sparrow`) from a single server
+- Proxies `/api/*` requests to the Rust backend
+- Auto-reloads on file changes in `web/`
+- Caches encryption key in sessionStorage to skip unlock on reload
+
+### Production Build
+
 ```bash
 # Install dependencies
 npm install
@@ -144,6 +166,7 @@ JWT_SECRET=your-32-character-secret-here cargo run
 
 | Command | Description |
 |---------|-------------|
+| `npm run dev` | Start Vite dev server (port 5173) |
 | `npm run build-all` | Build frontend for production |
 | `npm run build-all-test` | Build frontend with test mode |
 | `npm run lint:fix` | TypeScript type check and lint fix |

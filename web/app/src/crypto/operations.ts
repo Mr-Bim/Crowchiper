@@ -58,7 +58,7 @@ export async function deriveEncryptionKeyFromPrf(
         name: "AES-GCM",
         length: 256,
       },
-      false, // not extractable
+      import.meta.env.DEV, // extractable in dev mode only (for key caching)
       ["encrypt", "decrypt"],
     );
   } finally {

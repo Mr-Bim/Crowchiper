@@ -10,6 +10,7 @@ import {
   disableEncryption,
   initEncryption,
   needsUnlock,
+  tryRestoreDevKey,
 } from "./crypto/keystore.ts";
 import {
   handleDeletePost,
@@ -193,8 +194,11 @@ async function init(): Promise<void> {
       handleDeletePost,
     );
 
-    // If encryption is enabled, show unlock overlay
-    if (needsUnlock()) {
+    // Try to restore dev key from sessionStorage (dev mode only, no-op in prod)
+    const devKeyRestored = await tryRestoreDevKey();
+
+    // If encryption is enabled, show unlock overlay (unless dev key was restored)
+    if (needsUnlock() && !devKeyRestored) {
       // Create unlock handler that loads posts after unlock
       const handleUnlock = createUnlockHandler(loadPosts);
       const unnlockBtn = getOptionalElement("unlock-btn");

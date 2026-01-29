@@ -10,6 +10,11 @@
  * - prfSalt: Salt used for PRF during passkey auth
  */
 
+const DEV_KEY_STORAGE_KEY = "dev-encryption-key";
+
+// Vite sets import.meta.env.DEV to true in dev mode
+const IS_DEV = import.meta.env.DEV;
+
 let sessionEncryptionKey: CryptoKey | null = null;
 let prfSalt: string | null = null;
 let encryptionEnabled = true;
@@ -38,9 +43,21 @@ export function disableEncryption(): void {
 
 /**
  * Store the derived encryption key for this session.
+ * In test mode, also caches the key in sessionStorage for dev hot-reload.
  */
-export function setSessionEncryptionKey(key: CryptoKey): void {
+export async function setSessionEncryptionKey(key: CryptoKey): Promise<void> {
   sessionEncryptionKey = key;
+
+  // In dev mode, cache the key in sessionStorage to persist across reloads
+  if (IS_DEV) {
+    try {
+      const exported = await crypto.subtle.exportKey("raw", key);
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+      sessionStorage.setItem(DEV_KEY_STORAGE_KEY, base64);
+    } catch {
+      // Key might not be extractable, ignore
+    }
+  }
 }
 
 /**
@@ -52,10 +69,40 @@ export function getSessionEncryptionKey(): CryptoKey | null {
 }
 
 /**
+ * Try to restore the encryption key from sessionStorage (test mode only).
+ * Returns true if key was restored successfully.
+ */
+export async function tryRestoreDevKey(): Promise<boolean> {
+  if (!IS_DEV) return false;
+
+  const cached = sessionStorage.getItem(DEV_KEY_STORAGE_KEY);
+  if (!cached) return false;
+
+  try {
+    const bytes = Uint8Array.from(atob(cached), (c) => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey(
+      "raw",
+      bytes,
+      { name: "AES-GCM", length: 256 },
+      true, // extractable for dev caching
+      ["encrypt", "decrypt"],
+    );
+    sessionEncryptionKey = key;
+    return true;
+  } catch {
+    sessionStorage.removeItem(DEV_KEY_STORAGE_KEY);
+    return false;
+  }
+}
+
+/**
  * Clear the session encryption key (on logout).
  */
 export function clearSessionEncryptionKey(): void {
   sessionEncryptionKey = null;
+  if (IS_DEV) {
+    sessionStorage.removeItem(DEV_KEY_STORAGE_KEY);
+  }
 }
 
 // --- PRF Salt ---

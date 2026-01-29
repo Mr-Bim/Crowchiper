@@ -3,7 +3,7 @@
   const path = window.location.pathname;
   let base = "";
 
-  const assets = "/__APP_ASSETS__";
+  const assets = "__APP_ASSETS__";
   // If we're on a /login page, remove /login and everything after
   if (path.includes("/login")) {
     const loginIndex = path.indexOf("/login");

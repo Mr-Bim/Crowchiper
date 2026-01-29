@@ -3,6 +3,7 @@ import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { buildPlugin } from "./plugins/index.js";
+import { devServerPlugin } from "./plugins/dev-server.js";
 
 const config = JSON.parse(readFileSync("./config.json", "utf-8"));
 
@@ -18,17 +19,63 @@ if (config.assets.length > 1 && config.assets.endsWith("/")) {
   );
 }
 
-// Login build: web/public/ -> dist/login/ with base /login
-const loginHtmlFiles = globSync("web/public/**/*.html");
+// Default Rust server port for API proxy
+const RUST_SERVER_PORT = process.env.RUST_PORT || 7291;
+
+// App definitions for dev server
+// Add new apps here to serve them from the unified dev server
+const devApps = [
+  {
+    name: "login",
+    base: "/login",
+    srcDir: "web/login",
+    iifeConfig: true, // Login pages need config IIFE for redirect check
+  },
+  {
+    name: "app",
+    base: config.assets,
+    srcDir: "web/app",
+    iifeConfig: false,
+  },
+];
+
+// Unified dev server configuration
+const dev = defineConfig({
+  root: ".",
+  server: {
+    port: 5173,
+  },
+  define: {
+    __TEST_MODE__: JSON.stringify(!!process.env.TEST_MODE),
+  },
+  css: {
+    transformer: "lightningcss",
+    lightningcss: {
+      drafts: {
+        customMedia: true,
+      },
+    },
+  },
+  plugins: [
+    devServerPlugin({
+      apps: devApps,
+      assetsPath: config.assets,
+      rustPort: RUST_SERVER_PORT,
+    }),
+  ],
+});
+
+// Login build: web/login/ -> dist/login/ with base /login
+const loginHtmlFiles = globSync("web/login/**/*.html");
 const loginInput = Object.fromEntries(
   loginHtmlFiles.map((file) => {
-    const name = file.replace("web/public/", "").replace(".html", "");
+    const name = file.replace("web/login/", "").replace(".html", "");
     return [name, resolve(__dirname, file)];
   }),
 );
 
 const login = defineConfig({
-  root: "web/public/",
+  root: "web/login/",
   base: "/login/",
   build: {
     outDir: "../../dist/login",
@@ -47,7 +94,7 @@ const login = defineConfig({
       },
     },
   },
-  plugins: [buildPlugin({ assetsPath: "/login", sourceDir: "web/public" })],
+  plugins: [buildPlugin({ assetsPath: "/login", sourceDir: "web/login" })],
 });
 
 // App build: web/app/ -> dist/app/ with base from config.assets
@@ -104,15 +151,17 @@ const app = defineConfig({
   },
 });
 
-// Select build based on environment variable
+// Select config based on BUILD environment variable
+// - BUILD=login: Production build for login pages
+// - BUILD=app: Production build for app pages
+// - No BUILD (dev): Unified dev server serving all apps
 let out;
 if (process.env.BUILD === "login") {
   out = login;
 } else if (process.env.BUILD === "app") {
   out = app;
 } else {
-  // Default to login build
-  out = login;
+  out = dev;
 }
 
 export default out;
