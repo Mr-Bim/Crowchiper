@@ -16,12 +16,23 @@ jobs:
           fetch-depth: 0
 
       - name: Validate commit messages
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --unreleased
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the base ref for comparison
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+
+          # Check each commit (excluding merges) using the git hook
+          git log --no-merges --format=%s "$base"..HEAD | while read -r msg; do
+            tmpfile=$(mktemp)
+            echo "$msg" > "$tmpfile"
+            ./.githooks/commit-msg "$tmpfile" || exit 1
+            rm "$tmpfile"
+          done
+
+          echo "All commit messages are valid"
 
   lint:
     name: Lint

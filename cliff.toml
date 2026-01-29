@@ -27,8 +27,7 @@ trim = true
 
 [git]
 conventional_commits = true
-filter_unconventional = false
-require_conventional = true
+filter_unconventional = true
 split_commits = false
 commit_parsers = [
   { message = "^feat", group = "Features" },
