@@ -94,7 +94,10 @@ jobs:
         run: npm run build-all-test
 
       - name: Build Rust (test mode)
-        run: cargo build --features test-mode
+        run: |
+          # Force recompile to embed fresh assets (cache may have stale binary)
+          touch src/assets.rs
+          cargo build --features test-mode
 
       - name: Upload test binary
         uses: actions/upload-artifact@v5
