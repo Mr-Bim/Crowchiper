@@ -6,9 +6,6 @@ on:
       - "v*"
 
 jobs:
-  test:
-    uses: ./.github/workflows/test.yml
-
   check-branch:
     name: Check Branch
     runs-on: ubuntu-latest
@@ -28,53 +25,91 @@ jobs:
             echo "is_main=false" >> $GITHUB_OUTPUT
           fi
 
-  build-release:
-    name: Build Release Binary
+  create-release:
+    name: Create Release
     runs-on: ubuntu-latest
-    needs: [test, check-branch]
+    needs: check-branch
     if: needs.check-branch.outputs.is_main == 'true'
+    permissions:
+      contents: "write"
+      actions: "read"
     steps:
-      - uses: actions/checkout@v5
+      - name: Wait for CI and get run ID
+        id: find-ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Looking for CI workflow run for commit ${{ github.sha }}"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+          for i in {1..60}; do
+            # Check for successful run first
+            RUN_ID=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty')
+
+            if [ -n "$RUN_ID" ]; then
+              echo "Found successful CI run: $RUN_ID"
+              echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # Check if CI is still running
+            IN_PROGRESS=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&per_page=1" \
+              --jq '.workflow_runs[0] | select(.status == "in_progress" or .status == "queued" or .status == "waiting") | .id // empty')
+
+            if [ -n "$IN_PROGRESS" ]; then
+              echo "CI run $IN_PROGRESS is still in progress, waiting 30s... (attempt $i/60)"
+              sleep 30
+              continue
+            fi
+
+            # Check if CI failed
+            FAILED=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=failure&per_page=1" \
+              --jq '.workflow_runs[0].id // empty')
+
+            if [ -n "$FAILED" ]; then
+              echo "CI run $FAILED failed. Cannot create release."
+              exit 1
+            fi
+
+            # No CI run found at all - wait a bit in case it's just starting
+            if [ $i -lt 5 ]; then
+              echo "No CI run found yet, waiting 30s... (attempt $i/60)"
+              sleep 30
+              continue
+            fi
+
+            echo "No CI run found for commit ${{ github.sha }}"
+            echo "Make sure CI has run on main before pushing a tag"
+            exit 1
+          done
+
+          echo "Timed out waiting for CI to complete (30 minutes)"
+          exit 1
+
+      - name: Download binary from CI
+        uses: actions/download-artifact@v5
         with:
-          node-version: "25"
-          cache: "npm"
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-release-
-
-      - name: Build frontend (production)
-        run: npm run build-all
-
-      - name: Build release binary
-        run: cargo build --release
+          name: crowchiper-linux-x86_64
+          path: ./binary
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find-ci.outputs.run_id }}
 
       - name: Create tarball
         run: |
-          cd target/release
-          tar -czvf crowchiper-linux-x86_64.tar.gz crowchiper
+          chmod +x ./binary/crowchiper
+          tar -czvf crowchiper-linux-x86_64.tar.gz -C ./binary crowchiper
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/release/crowchiper-linux-x86_64.tar.gz
+          files: crowchiper-linux-x86_64.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
