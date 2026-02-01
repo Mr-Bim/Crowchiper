@@ -9,6 +9,11 @@ import type { Post, PostNode } from "../../api/posts.ts";
 import type { EditorView } from "../../editor/setup.ts";
 import { signal, type Signal } from "../../reactive.ts";
 
+// --- Sync State Types ---
+
+/** Sync status for autosave indicator */
+export type SyncStatus = "idle" | "pending" | "syncing" | "synced" | "error";
+
 // --- Reactive Signals ---
 
 /** Active CodeMirror editor instance */
@@ -25,6 +30,9 @@ export const loadedDecryptedContentSignal: Signal<string | null> = signal(null);
 
 /** Whether there are unsaved changes */
 export const isDirtySignal: Signal<boolean> = signal(false);
+
+/** Current sync status for UI indicator */
+export const syncStatusSignal: Signal<SyncStatus> = signal("idle");
 
 // --- Simple Accessors ---
 
@@ -66,4 +74,12 @@ export function getIsDirty(): boolean {
 
 export function setIsDirty(dirty: boolean): void {
   isDirtySignal.set(dirty);
+}
+
+export function getSyncStatus(): SyncStatus {
+  return syncStatusSignal.get();
+}
+
+export function setSyncStatus(status: SyncStatus): void {
+  syncStatusSignal.set(status);
 }

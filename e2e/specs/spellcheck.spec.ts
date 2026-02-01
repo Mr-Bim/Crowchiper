@@ -125,7 +125,7 @@ test.describe("Spellcheck toggle", () => {
 
     const sidebar = page.locator("#sidebar");
     const deleteBtn = page.locator("#delete-btn");
-    const saveBtn = page.locator("#save-btn");
+    const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
     const spellcheckBtn = page.locator("#spellcheck-btn");
     const toggleBtn = page.locator("#sidebar-toggle");
 
@@ -139,8 +139,8 @@ test.describe("Spellcheck toggle", () => {
     await expect(deleteBtn).toBeHidden();
     await expect(spellcheckBtn).toBeHidden();
 
-    // Save button should still be visible
-    await expect(saveBtn).toBeVisible();
+    // Sync indicator should still be visible
+    await expect(syncIndicator).toBeVisible();
 
     // Collapse sidebar
     await toggleBtn.click();
@@ -148,7 +148,7 @@ test.describe("Spellcheck toggle", () => {
 
     // Now all buttons should be visible
     await expect(deleteBtn).toBeVisible();
-    await expect(saveBtn).toBeVisible();
+    await expect(syncIndicator).toBeVisible();
     await expect(spellcheckBtn).toBeVisible();
   });
 });

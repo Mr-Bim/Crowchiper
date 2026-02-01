@@ -114,14 +114,57 @@
                             </svg>
                             <span>Abc</span>
                         </button>
-                        <button
-                            id="save-btn"
-                            class="info cl-save-btn"
-                            disabled
-                            data-dirty="false"
+                        <div
+                            id="sync-indicator"
+                            class="cl-sync-indicator"
+                            data-status="idle"
+                            data-testid="test-sync-indicator"
                         >
-                            Saved
-                        </button>
+                            <svg
+                                class="sync-icon sync-icon-check"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <svg
+                                class="sync-icon sync-icon-spinner"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                            </svg>
+                            <svg
+                                class="sync-icon sync-icon-error"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                        </div>
                         <button
                             id="delete-btn"
                             class="warning cl-save-btn"

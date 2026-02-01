@@ -6,20 +6,18 @@
  */
 
 import { getOptionalElement } from "../../../shared/dom.ts";
-import { isDirtySignal } from "./state/index.ts";
+import { syncStatusSignal, type SyncStatus } from "./state/index.ts";
 
 let initialized = false;
 
 /**
- * Update the save button based on dirty state.
+ * Update the sync indicator based on sync status.
  */
-function updateSaveButton(dirty: boolean): void {
-  const btn = getOptionalElement("save-btn", HTMLButtonElement);
-  if (!btn) return;
+function updateSyncIndicator(status: SyncStatus): void {
+  const indicator = getOptionalElement("sync-indicator");
+  if (!indicator) return;
 
-  btn.setAttribute("data-dirty", dirty ? "true" : "false");
-  btn.textContent = dirty ? "Save" : "Saved";
-  btn.disabled = !dirty;
+  indicator.setAttribute("data-status", status);
 }
 
 /**
@@ -30,9 +28,9 @@ export function initSubscriptions(): void {
   if (initialized) return;
   initialized = true;
 
-  // Auto-update save button when dirty state changes
-  isDirtySignal.subscribe(updateSaveButton);
+  // Auto-update sync indicator when sync status changes
+  syncStatusSignal.subscribe(updateSyncIndicator);
 
   // Set initial state
-  updateSaveButton(isDirtySignal.get());
+  updateSyncIndicator(syncStatusSignal.get());
 }

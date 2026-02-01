@@ -9,6 +9,34 @@ import type { PostNode } from "../../api/posts.ts";
 import type { PendingEncryptedData } from "../types.ts";
 import { getPosts } from "./signals.ts";
 
+// --- Last Selected Post (persisted to localStorage) ---
+
+const LAST_POST_KEY = "crowchiper_last_post";
+
+export function getLastSelectedPostUuid(): string | null {
+  try {
+    return localStorage.getItem(LAST_POST_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLastSelectedPostUuid(uuid: string): void {
+  try {
+    localStorage.setItem(LAST_POST_KEY, uuid);
+  } catch {
+    // Ignore storage errors (e.g., private browsing)
+  }
+}
+
+export function clearLastSelectedPostUuid(): void {
+  try {
+    localStorage.removeItem(LAST_POST_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 // Re-export for convenience
 export type { PendingEncryptedData } from "../types.ts";
 
@@ -92,7 +120,6 @@ export function setPendingEncryptedData(
 // --- Save Timers ---
 
 let saveTimeout: number | null = null;
-let serverSaveInterval: number | null = null;
 
 export function setSaveTimeout(timeout: number | null): void {
   saveTimeout = timeout;
@@ -102,20 +129,5 @@ export function clearSaveTimeout(): void {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
     saveTimeout = null;
-  }
-}
-
-export function getServerSaveInterval(): number | null {
-  return serverSaveInterval;
-}
-
-export function setServerSaveInterval(interval: number | null): void {
-  serverSaveInterval = interval;
-}
-
-export function clearServerSaveInterval(): void {
-  if (serverSaveInterval) {
-    clearInterval(serverSaveInterval);
-    serverSaveInterval = null;
   }
 }

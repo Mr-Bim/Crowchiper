@@ -43,10 +43,8 @@ export interface PostsState {
   pendingEncryptedData: PendingEncryptedData | null;
   /** Whether there are unsaved changes */
   isDirty: boolean;
-  /** Debounce timer for encryption */
+  /** Debounce timer for autosave */
   saveTimeout: number | null;
-  /** Interval timer for periodic server saves */
-  serverSaveInterval: number | null;
 }
 
 // --- Handler Types ---
@@ -136,8 +134,18 @@ export interface DropLocation {
  * Result of determining where to drop.
  */
 export type DropAction =
-  | { type: "reorder"; parentId: string | null; fromIndex: number; toIndex: number }
-  | { type: "reparent"; uuid: string; newParentId: string | null; position: number }
+  | {
+      type: "reorder";
+      parentId: string | null;
+      fromIndex: number;
+      toIndex: number;
+    }
+  | {
+      type: "reparent";
+      uuid: string;
+      newParentId: string | null;
+      position: number;
+    }
   | { type: "none" };
 
 // --- Save Operations ---

@@ -331,15 +331,75 @@
     font-size: 0.875rem;
 }
 
-.cl-save-btn[data-dirty="true"] {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-    cursor: pointer;
+/* Sync indicator */
+.cl-sync-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+    color: var(--text-muted);
+    transition: color 0.2s;
 }
 
-.cl-save-btn[data-dirty="true"]:hover {
-    opacity: 0.9;
+.cl-sync-indicator .sync-icon {
+    display: none;
+}
+
+/* Idle state - show muted check */
+.cl-sync-indicator[data-status="idle"] .sync-icon-check {
+    display: block;
+}
+
+/* Pending state - show muted check (same as idle, waiting for debounce) */
+.cl-sync-indicator[data-status="pending"] .sync-icon-check {
+    display: block;
+}
+
+/* Syncing state - show spinner */
+.cl-sync-indicator[data-status="syncing"] .sync-icon-spinner {
+    display: block;
+    animation: sync-spin 1s linear infinite;
+}
+
+/* Synced state - show green check with animation */
+.cl-sync-indicator[data-status="synced"] {
+    color: oklch(0.6 0.15 145);
+}
+
+.cl-sync-indicator[data-status="synced"] .sync-icon-check {
+    display: block;
+    animation: sync-check-pop 0.3s ease-out;
+}
+
+/* Error state - show error icon */
+.cl-sync-indicator[data-status="error"] {
+    color: oklch(0.6 0.2 25);
+}
+
+.cl-sync-indicator[data-status="error"] .sync-icon-error {
+    display: block;
+}
+
+@keyframes sync-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes sync-check-pop {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* Spellcheck toggle button */

@@ -8,6 +8,22 @@ import {
 import { getServer, Server } from "../utils/server.ts";
 import { BrowserContext } from "@playwright/test";
 
+/**
+ * Helper to save the current post using force save button.
+ */
+async function forceSave(page: import("@playwright/test").Page): Promise<void> {
+  const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
+  const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
+
+  const status = await syncIndicator.getAttribute("data-status");
+  if (status === "pending") {
+    await forceSaveBtn.click();
+    await expect(syncIndicator).toHaveAttribute("data-status", "synced", {
+      timeout: 5000,
+    });
+  }
+}
+
 test.describe("Post reorder functionality", () => {
   let context: BrowserContext;
   let userResult: CreateUserResult;
@@ -36,24 +52,22 @@ test.describe("Post reorder functionality", () => {
     // Page is already at the app and unlocked from createUser
     // Wait for initial post (created automatically on first visit)
     const postList = page.locator("#post-list");
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      1,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(1, {
+      timeout: 10000,
+    });
 
     // Create a second post by clicking the new post button
     const newPostBtn = page.locator("#new-post-btn");
     await newPostBtn.click();
 
     // Wait for second post to appear
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      2,
-      {
-        timeout: 5000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(2, {
+      timeout: 5000,
+    });
 
     // Type content in the second post to give it a title
     const editor = page.locator("#editor .cm-content");
@@ -67,14 +81,16 @@ test.describe("Post reorder functionality", () => {
         .filter({ hasText: "Second Post" }),
     ).toBeVisible({ timeout: 5000 });
 
+    // Save before creating next post
+    await forceSave(page);
+
     // Create a third post
     await newPostBtn.click();
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      3,
-      {
-        timeout: 5000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(3, {
+      timeout: 5000,
+    });
 
     // Type content in the third post
     await editor.click();
@@ -86,6 +102,9 @@ test.describe("Post reorder functionality", () => {
         .locator('[data-testid="test-post-item"]')
         .filter({ hasText: "Third Post" }),
     ).toBeVisible({ timeout: 5000 });
+
+    // Save before checking order
+    await forceSave(page);
 
     // Get the initial order - newest posts are at the top
     // Order should be: Third Post, Second Post, Untitled
@@ -135,8 +154,10 @@ test.describe("Post reorder functionality", () => {
 
     await page.mouse.up();
 
-    // Wait a bit for the reorder to complete
-    await page.waitForTimeout(500);
+    // Wait for reorder to complete by checking the new order
+    await expect(
+      postWrappers.nth(0).locator('[data-testid="test-post-item"]'),
+    ).toHaveText("Second Post", { timeout: 5000 });
 
     // Verify the new order: Second Post, Third Post, Untitled
     const newFirstPost = await postWrappers
@@ -169,12 +190,11 @@ test.describe("Post reorder functionality", () => {
     await unlockOverlay.waitFor({ state: "hidden", timeout: 10000 });
 
     // Wait for posts to load
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      3,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(3, {
+      timeout: 10000,
+    });
 
     // Verify the order persisted after reload
     const reloadedFirstPost = await postWrappers

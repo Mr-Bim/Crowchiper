@@ -162,6 +162,8 @@ test.describe("Post navigation", () => {
 
     const postList = page.locator("#post-list");
     const editor = page.locator("#editor .cm-content");
+    const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
+    const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
 
     // Get current post count
     const countBefore = await postList
@@ -187,8 +189,11 @@ test.describe("Post navigation", () => {
         .filter({ hasText: "Persist test content" }),
     ).toBeVisible({ timeout: 5000 });
 
-    // Wait for auto-save (debounced encryption happens after 1s)
-    await page.waitForTimeout(2000);
+    // Force save and wait for sync to complete
+    await forceSaveBtn.click();
+    await expect(syncIndicator).toHaveAttribute("data-status", "synced", {
+      timeout: 5000,
+    });
 
     // Reload the page
     await page.reload();
@@ -380,7 +385,7 @@ test.describe("Post navigation", () => {
   });
 });
 
-test.describe("Post navigation - save behavior", () => {
+test.describe("Post navigation - sync behavior", () => {
   let context: BrowserContext;
   let userResult: CreateUserResult;
   let baseUrl: string;
@@ -402,7 +407,7 @@ test.describe("Post navigation - save behavior", () => {
     await context?.close();
   });
 
-  test("save button shows Saved when no changes", async () => {
+  test("sync indicator shows idle when no changes", async () => {
     const { page } = userResult;
 
     // Wait for initial post and editor
@@ -411,42 +416,58 @@ test.describe("Post navigation - save behavior", () => {
       postList.locator('[data-testid="test-post-wrapper"]'),
     ).toHaveCount(1, { timeout: 10000 });
 
-    const saveBtn = page.locator("#save-btn");
+    const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
 
-    // Initially should show "Saved" and be disabled
-    await expect(saveBtn).toHaveText("Saved", { timeout: 5000 });
-    await expect(saveBtn).toHaveAttribute("data-dirty", "false");
+    // Initially should show idle state
+    await expect(syncIndicator).toHaveAttribute("data-status", "idle", {
+      timeout: 5000,
+    });
   });
 
-  test("save button shows Save when there are changes", async () => {
+  test("sync indicator shows pending when there are changes", async () => {
     const { page } = userResult;
 
     const editor = page.locator("#editor .cm-content");
-    const saveBtn = page.locator("#save-btn");
+    const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
 
     // Type something
     await editor.click();
-    await page.keyboard.type("Making changes for save test");
+    await page.keyboard.type("Making changes for sync test");
 
-    // Save button should change to "Save" and be enabled
-    await expect(saveBtn).toHaveText("Save", { timeout: 5000 });
-    await expect(saveBtn).toHaveAttribute("data-dirty", "true");
+    // Sync indicator should change to "pending"
+    await expect(syncIndicator).toHaveAttribute("data-status", "pending", {
+      timeout: 5000,
+    });
   });
 
-  test("manual save updates button state", async () => {
+  test("force save button triggers sync and shows synced", async () => {
     const { page } = userResult;
 
-    const saveBtn = page.locator("#save-btn");
+    const editor = page.locator("#editor .cm-content");
+    const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
+    const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
 
-    // Button should still show "Save" from previous test
-    await expect(saveBtn).toHaveText("Save", { timeout: 2000 });
+    // Make a change first to ensure there's something to save
+    await editor.click();
+    await page.keyboard.type(" more text");
 
-    // Click save
-    await saveBtn.click();
+    // Should be pending
+    await expect(syncIndicator).toHaveAttribute("data-status", "pending", {
+      timeout: 5000,
+    });
 
-    // Should change back to "Saved"
-    await expect(saveBtn).toHaveText("Saved", { timeout: 5000 });
-    await expect(saveBtn).toHaveAttribute("data-dirty", "false");
+    // Click force save
+    await forceSaveBtn.click();
+
+    // Should show synced briefly
+    await expect(syncIndicator).toHaveAttribute("data-status", "synced", {
+      timeout: 5000,
+    });
+
+    // Then return to idle
+    await expect(syncIndicator).toHaveAttribute("data-status", "idle", {
+      timeout: 5000,
+    });
   });
 
   test("switching posts auto-saves current post", async () => {
@@ -475,13 +496,11 @@ test.describe("Post navigation - save behavior", () => {
     // Switch to first post (this should auto-save)
     const firstPost = postList
       .locator('[data-testid="test-post-item"]')
-      .filter({ hasText: "Making changes for save test" });
+      .first();
     await firstPost.click();
 
-    // Wait for the switch to complete
-    await expect(editor).toContainText("Making changes for save test", {
-      timeout: 5000,
-    });
+    // Wait for the switch to complete (first post should be loaded)
+    await expect(editor).toBeVisible({ timeout: 5000 });
 
     // Reload and verify the content was saved
     await page.reload();

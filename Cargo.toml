@@ -1,6 +1,6 @@
 [package]
 name = "crowchiper"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2024"
 
 [features]
@@ -17,7 +17,6 @@ axum = { version = "0.8.8", features = ["ws", "multipart"] }
 futures = "0.3"
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive", "env"] }
-
 sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "1dd526a2ed67fa763766e670c30b1ce3b152a42e", features = [
   "runtime-tokio",
   "sqlite",

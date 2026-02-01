@@ -412,15 +412,35 @@ import { parseAttachmentUuids } from "../editor/attachment-widget/utils.ts";
 
 The `editor/attachment-widget/utils.ts` and `cache.ts` files re-export from shared for backward compatibility within the editor chunk.
 
-## Save Button
+## Autosave and Sync Indicator
 
-The app header includes a Save button that:
-- Shows "Saved" (disabled) when there are no unsaved changes
-- Shows "Save" (clickable, highlighted) when there are unsaved changes
-- Uses `data-dirty` attribute for styling (`data-dirty="true"` or `data-dirty="false"`)
-- Located in `web/app/index.html`, styled in `web/app/css/app.css`
-- Save logic in `web/app/src/posts/save.ts` (`handleSave`)
-- UI updates automatically via reactive subscription to `isDirtySignal`
+The app automatically saves content after 5 seconds of inactivity (autosave with debounce). The header shows a sync indicator instead of a save button:
+
+### Sync States (`SyncStatus` in `web/app/src/posts/state/signals.ts`)
+- **idle** - No pending changes, indicator hidden
+- **pending** - Changes waiting to be saved (faded checkmark)
+- **syncing** - Save in progress (spinning indicator)
+- **synced** - Save completed successfully (green checkmark with pop animation, returns to idle after 2s)
+- **error** - Save failed (red X icon)
+
+### Key Files
+- **State**: `web/app/src/posts/state/signals.ts` - `syncStatusSignal`, `SyncStatus` type
+- **Save logic**: `web/app/src/posts/save.ts` - `scheduleAutosave()`, `forceSave()`, `saveToServerNow()`
+- **UI updates**: `web/app/src/posts/subscriptions.ts` - Subscribes to `syncStatusSignal`
+- **HTML**: `web/app/index.html` - `#sync-indicator` with `data-status` attribute
+- **CSS**: `web/app/css/app.css` - `.cl-sync-indicator` styles and animations
+
+### Test Mode Force Save Button
+In test mode (`__TEST_MODE__`), a "Save" button is dynamically added next to the sync indicator for testing purposes. This allows tests to trigger immediate saves instead of waiting for the 5-second debounce.
+
+```typescript
+// In tests, use the force save button instead of waitForTimeout
+const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
+const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
+
+await forceSaveBtn.click();
+await expect(syncIndicator).toHaveAttribute("data-status", "synced", { timeout: 5000 });
+```
 
 ## Reactive State Management
 

@@ -19,20 +19,24 @@ export async function createPostWithTitle(
   // Wait for title to appear in sidebar
   const postList = page.locator("#post-list");
   await expect(
-    postList.locator('[data-testid="test-post-item"]').filter({ hasText: title }),
+    postList
+      .locator('[data-testid="test-post-item"]')
+      .filter({ hasText: title }),
   ).toBeVisible({ timeout: 5000 });
 }
 
 /**
- * Helper to save the current post.
+ * Helper to save the current post using the force save button.
  */
 export async function savePost(page: Page): Promise<void> {
-  const saveBtn = page.locator("#save-btn");
-  // Wait for dirty state if there are unsaved changes
-  const isDirty = await saveBtn.getAttribute("data-dirty");
-  if (isDirty === "true") {
-    await saveBtn.click();
-    await expect(saveBtn).toHaveAttribute("data-dirty", "false", {
+  const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
+  const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
+
+  // Check if there are pending changes
+  const status = await syncIndicator.getAttribute("data-status");
+  if (status === "pending") {
+    await forceSaveBtn.click();
+    await expect(syncIndicator).toHaveAttribute("data-status", "synced", {
       timeout: 5000,
     });
   }

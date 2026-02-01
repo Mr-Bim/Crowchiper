@@ -18,12 +18,13 @@ import { getOptionalElement } from "../../../shared/dom.ts";
 import {
   setDecryptedTitle,
   setIsDirty,
+  setLastSelectedPostUuid,
   setLoadedDecryptedContent,
   setLoadedPost,
   setPendingEncryptedData,
   withLoadingLock,
 } from "./state/index.ts";
-import { stopServerSaveInterval, saveToServerNow } from "./save.ts";
+import { saveToServerNow } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { setupEditor } from "./editor.ts";
 
@@ -66,7 +67,6 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     setPostItemLoading(postNode.uuid, true);
 
     // Save current post to server before switching (includes attachment refs)
-    stopServerSaveInterval();
     await saveToServerNow();
 
     // Clear pending data for new post
@@ -79,6 +79,9 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     // Fetch full post data
     const post = await getPost(postNode.uuid);
     setLoadedPost(post);
+
+    // Remember this post for next session
+    setLastSelectedPostUuid(post.uuid);
 
     // Decrypt content and clean up any interrupted upload placeholders
     const decryptedContent = await decryptPostContent(post);

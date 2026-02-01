@@ -156,25 +156,29 @@ test.describe("Encryption usage", () => {
     await editorContent.click();
     await page.keyboard.type("# My Secret Note\n\nThis is encrypted content.");
 
-    // Save the post
-    const saveBtn = page.locator("#save-btn");
-    await expect(saveBtn).toHaveAttribute("data-dirty", "true", {
+    // Save the post using force save button
+    const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
+    const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
+
+    // Should show pending after typing
+    await expect(syncIndicator).toHaveAttribute("data-status", "pending", {
       timeout: 5000,
     });
-    await saveBtn.click();
 
-    // Wait for save to complete
-    await expect(saveBtn).toHaveAttribute("data-dirty", "false", {
+    // Click force save
+    await forceSaveBtn.click();
+
+    // Wait for save to complete (synced then idle)
+    await expect(syncIndicator).toHaveAttribute("data-status", "synced", {
       timeout: 5000,
     });
 
     // Post should appear in the list
     const postList = page.locator("#post-list");
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      2,
-      {
-        timeout: 5000,
-      },
-    ); // 1 new post + 1 default "Untitled"
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(2, {
+      timeout: 5000,
+    }); // 1 new post + 1 default "Untitled"
   });
 });

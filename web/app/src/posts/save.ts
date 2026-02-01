@@ -1,8 +1,8 @@
 /**
  * Save and encryption logic for posts.
  *
- * Handles debounced encryption, periodic server saves, and beacon saves.
- * Note: Save button UI updates are handled reactively via isDirtySignal subscription.
+ * Handles debounced autosave with sync status indicator.
+ * Autosave triggers 5 seconds after the last edit.
  */
 
 import { updatePost, updatePostBeacon } from "../api/posts.ts";
@@ -10,27 +10,23 @@ import { encryptPostData } from "../crypto/post-encryption.ts";
 import { callRenderPostList } from "./handlers.ts";
 import { parseAttachmentUuids } from "../shared/attachment-utils.ts";
 import { clearImageCacheExcept } from "../shared/image-cache.ts";
-import { showSuccess } from "../toast.ts";
 import {
   clearSaveTimeout,
-  clearServerSaveInterval,
   getEditor,
-  getIsDirty,
   getLoadedDecryptedContent,
   getLoadedPost,
   getPendingEncryptedData,
-  getServerSaveInterval,
   setDecryptedTitle,
   setIsDirty,
   setPendingEncryptedData,
   setSaveTimeout,
-  setServerSaveInterval,
+  setSyncStatus,
 } from "./state/index.ts";
 
 // --- Constants ---
 
-const ENCRYPT_DEBOUNCE_MS = 1000;
-const SERVER_SAVE_INTERVAL_MS = 60000;
+const AUTOSAVE_DEBOUNCE_MS = 5000;
+const SYNCED_INDICATOR_MS = 2000;
 
 // --- Helpers ---
 
@@ -59,10 +55,22 @@ function buildUpdatePayload(
   };
 }
 
+// --- Synced indicator timer ---
+
+let syncedTimeout: number | null = null;
+
+function clearSyncedTimeout(): void {
+  if (syncedTimeout) {
+    clearTimeout(syncedTimeout);
+    syncedTimeout = null;
+  }
+}
+
 // --- Beforeunload Warning ---
 
 function handleBeforeUnload(e: BeforeUnloadEvent): void {
-  if (getIsDirty()) {
+  // Check if there's pending data that hasn't been saved
+  if (getPendingEncryptedData()) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -72,18 +80,40 @@ export function setupBeforeUnloadWarning(): void {
   window.addEventListener("beforeunload", handleBeforeUnload);
 }
 
-// --- Encryption ---
+// --- Autosave ---
 
 /**
- * Schedule local encryption after 1 second of inactivity.
+ * Schedule autosave after 5 seconds of inactivity.
+ * Updates the title in the sidebar immediately, sets sync status to "pending".
  */
-export function scheduleEncrypt(): void {
+export function scheduleAutosave(): void {
   clearSaveTimeout();
+  clearSyncedTimeout();
+  setSyncStatus("pending");
+
+  // Update title immediately for responsive UI
+  const loadedPost = getLoadedPost();
+  const editor = getEditor();
+  if (loadedPost && editor) {
+    const content = editor.state.doc.toString();
+    const title = extractTitle(content);
+    setDecryptedTitle(loadedPost.uuid, title);
+    callRenderPostList();
+  }
+
   setSaveTimeout(
     window.setTimeout(() => {
-      encryptCurrentPost();
-    }, ENCRYPT_DEBOUNCE_MS),
+      autosave();
+    }, AUTOSAVE_DEBOUNCE_MS),
   );
+}
+
+/**
+ * Autosave: encrypt and save to server.
+ */
+async function autosave(): Promise<void> {
+  await encryptCurrentPost();
+  await savePost({ includeAttachments: true, clearCache: true });
 }
 
 /**
@@ -115,26 +145,10 @@ export async function encryptCurrentPost(): Promise<void> {
     setDecryptedTitle(loadedPost.uuid, title);
     setIsDirty(true);
     callRenderPostList();
-    startServerSaveInterval();
   } catch (err) {
     console.error("Failed to encrypt:", err);
+    setSyncStatus("error");
   }
-}
-
-// --- Server Save Interval ---
-
-export function startServerSaveInterval(): void {
-  if (getServerSaveInterval()) return;
-
-  setServerSaveInterval(
-    window.setInterval(() => {
-      savePost();
-    }, SERVER_SAVE_INTERVAL_MS),
-  );
-}
-
-export function stopServerSaveInterval(): void {
-  clearServerSaveInterval();
 }
 
 // --- Core Save Function ---
@@ -142,8 +156,6 @@ export function stopServerSaveInterval(): void {
 interface SaveOptions {
   /** Include attachment UUIDs in the save (parses content for refs) */
   includeAttachments?: boolean;
-  /** Show success toast after save */
-  showToast?: boolean;
   /** Clear image cache for deleted images */
   clearCache?: boolean;
 }
@@ -156,13 +168,11 @@ async function savePost(options: SaveOptions = {}): Promise<void> {
   const loadedPost = getLoadedPost();
   const pendingData = getPendingEncryptedData();
 
-  if (!loadedPost || !pendingData || !getIsDirty()) return;
+  if (!loadedPost || !pendingData) return;
 
-  const {
-    includeAttachments,
-    showToast: shouldShowToast,
-    clearCache,
-  } = options;
+  const { includeAttachments, clearCache } = options;
+
+  setSyncStatus("syncing");
 
   try {
     let attachmentUuids: string[] | undefined;
@@ -178,33 +188,32 @@ async function savePost(options: SaveOptions = {}): Promise<void> {
       loadedPost.uuid,
       buildUpdatePayload(pendingData, attachmentUuids),
     );
+
+    // Clear pending data after successful save
+    setPendingEncryptedData(null);
     setIsDirty(false);
 
-    if (shouldShowToast) {
-      showSuccess("Saved");
-    }
+    // Show synced indicator briefly, then return to idle
+    setSyncStatus("synced");
+    clearSyncedTimeout();
+    syncedTimeout = window.setTimeout(() => {
+      setSyncStatus("idle");
+    }, SYNCED_INDICATOR_MS);
 
     if (clearCache && attachmentUuids) {
       clearImageCacheExcept(attachmentUuids);
     }
   } catch (err) {
     console.error("Failed to save to server:", err);
+    setSyncStatus("error");
   }
 }
 
 // --- Public Save APIs ---
 
 /**
- * Save to server (used by periodic interval).
- * Minimal save - no attachments, no toast, no cache clear.
- */
-export async function saveToServer(): Promise<void> {
-  await savePost();
-}
-
-/**
  * Save to server immediately when navigating away from a post.
- * Includes attachments and clears cache, but no toast.
+ * Includes attachments and clears cache.
  */
 export async function saveToServerNow(): Promise<void> {
   const loadedPost = getLoadedPost();
@@ -224,22 +233,19 @@ export async function saveToServerNow(): Promise<void> {
 }
 
 /**
- * Handle manual save button click.
- * Full save with attachments, toast, and cache clear.
+ * Force save for testing purposes.
+ * Immediately encrypts and saves the current post.
  */
-export async function handleSave(): Promise<void> {
+export async function forceSave(): Promise<void> {
   const loadedPost = getLoadedPost();
   const editor = getEditor();
 
   if (!loadedPost || !editor) return;
 
   clearSaveTimeout();
+  clearSyncedTimeout();
   await encryptCurrentPost();
-  await savePost({
-    includeAttachments: true,
-    showToast: true,
-    clearCache: true,
-  });
+  await savePost({ includeAttachments: true, clearCache: true });
 }
 
 /**

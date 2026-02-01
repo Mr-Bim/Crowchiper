@@ -31,7 +31,7 @@ import {
   setLoadedPost,
   setPendingEncryptedData,
 } from "./state/index.ts";
-import { stopServerSaveInterval, saveToServerNow } from "./save.ts";
+import { saveToServerNow } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
 import { destroyEditor, setupEditor } from "./editor.ts";
@@ -47,7 +47,6 @@ export async function handleNewPost(
   if (isLoading()) return;
 
   // Save current post before creating new one (includes attachment refs)
-  stopServerSaveInterval();
   await saveToServerNow();
 
   // Clear pending data
@@ -155,9 +154,8 @@ export async function handleDeletePostByNode(
   const loadedPost = getLoadedPost();
   const isDeletingLoadedPost = loadedPost?.uuid === postNode.uuid;
 
-  // If deleting the currently loaded post, stop saves
+  // If deleting the currently loaded post, clear pending saves
   if (isDeletingLoadedPost) {
-    stopServerSaveInterval();
     clearSaveTimeout();
     setPendingEncryptedData(null);
     setIsDirty(false);

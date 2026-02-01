@@ -7,7 +7,7 @@
 
 import { applySpellcheckToEditor } from "../spellcheck.ts";
 import { getEditor, getLoadedPost, setEditor } from "./state/index.ts";
-import { scheduleEncrypt } from "./save.ts";
+import { scheduleAutosave } from "./save.ts";
 
 // Lazy-load editor chunk - only starts when setupEditor is first called
 let editorPromise: Promise<typeof import("../editor/setup.ts")> | null = null;
@@ -32,7 +32,7 @@ export async function setupEditor(
 
   const onDocChange = () => {
     if (getLoadedPost()) {
-      scheduleEncrypt();
+      scheduleAutosave();
     }
   };
 

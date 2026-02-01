@@ -10,11 +10,13 @@
 
 // Reactive signals and their accessors
 export {
+  type SyncStatus,
   editorSignal,
   postsSignal,
   loadedPostSignal,
   loadedDecryptedContentSignal,
   isDirtySignal,
+  syncStatusSignal,
   getEditor,
   setEditor,
   getPosts,
@@ -25,6 +27,8 @@ export {
   setLoadedDecryptedContent,
   getIsDirty,
   setIsDirty,
+  getSyncStatus,
+  setSyncStatus,
 } from "./signals.ts";
 
 // Tree operations
@@ -45,6 +49,9 @@ export {
 // Non-reactive UI state
 export {
   type PendingEncryptedData,
+  getLastSelectedPostUuid,
+  setLastSelectedPostUuid,
+  clearLastSelectedPostUuid,
   getDecryptedTitles,
   setDecryptedTitles,
   setDecryptedTitle,
@@ -57,9 +64,6 @@ export {
   setPendingEncryptedData,
   setSaveTimeout,
   clearSaveTimeout,
-  getServerSaveInterval,
-  setServerSaveInterval,
-  clearServerSaveInterval,
 } from "./ui-state.ts";
 
 // Loading state

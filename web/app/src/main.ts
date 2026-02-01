@@ -15,7 +15,7 @@ import {
 import {
   handleDeletePost,
   handleNewPost,
-  handleSave,
+  forceSave,
   initSubscriptions,
   loadPosts,
   renderPostList,
@@ -49,7 +49,7 @@ function setupKeyboardShortcuts(): void {
 
     if (e.key === "s") {
       e.preventDefault();
-      handleSave();
+      forceSave();
     } else if (e.key === "n") {
       e.preventDefault();
       handleNewPost();
@@ -188,7 +188,19 @@ async function init(): Promise<void> {
     // Wire up event handlers
     setupNewPostButton();
     setupKeyboardShortcuts();
-    getOptionalElement("save-btn")?.addEventListener("click", handleSave);
+    // Add force save button only in test mode
+    if (__TEST_MODE__) {
+      const syncIndicator = getOptionalElement("sync-indicator");
+      if (syncIndicator) {
+        const forceSaveBtn = document.createElement("button");
+        forceSaveBtn.id = "force-save-btn";
+        forceSaveBtn.className = "info cl-save-btn";
+        forceSaveBtn.textContent = "Save";
+        forceSaveBtn.setAttribute("data-testid", "test-force-save-btn");
+        syncIndicator.insertAdjacentElement("afterend", forceSaveBtn);
+        forceSaveBtn.addEventListener("click", forceSave);
+      }
+    }
     getOptionalElement("delete-btn")?.addEventListener(
       "click",
       handleDeletePost,
