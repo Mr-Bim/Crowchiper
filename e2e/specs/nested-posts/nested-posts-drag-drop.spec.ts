@@ -44,30 +44,27 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial auto-created post
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      1,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(1, {
+      timeout: 10000,
+    });
 
     // Create parent post
     await createPostWithTitle(page, "DnD Parent");
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      2,
-      {
-        timeout: 5000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(2, {
+      timeout: 5000,
+    });
 
     // Create child post
     await createPostWithTitle(page, "DnD Child");
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      3,
-      {
-        timeout: 5000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(3, {
+      timeout: 5000,
+    });
 
     // Save the current post to ensure changes are persisted
     await savePost(page);
@@ -93,14 +90,14 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
     await expect(parentExpandBtn).toBeVisible({ timeout: 5000 });
 
     // Parent should be expanded by default after reparenting
-    await expect(parentExpandBtn).toHaveAttribute("data-expanded", "true");
+    await expect(parentExpandBtn).toHaveAttribute("data-post-expanded", "true");
 
     // Child should now be at depth 1
     const childPostUpdated = getPostByTitle(page, "DnD Child");
     await expect(childPostUpdated).toHaveAttribute("data-depth", "1");
 
     // Child should have the parent's UUID as parent-id
-    const parentUuid = await parentPost.getAttribute("data-uuid");
+    const parentUuid = await parentPost.getAttribute("data-post-uuid");
     await expect(childPostUpdated).toHaveAttribute(
       "data-parent-id",
       parentUuid!,
@@ -116,12 +113,11 @@ test.describe("Nested posts - Drag and drop reparenting", () => {
     await reloadAndUnlock(page);
 
     // Wait for posts to load
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      3,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(3, {
+      timeout: 10000,
+    });
 
     // Verify DnD Child is still nested under DnD Parent
     const childPost = getPostByTitle(page, "DnD Child");

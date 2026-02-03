@@ -248,7 +248,7 @@ button.secondary:hover {
 button.ghost {
     background: transparent;
     color: var(--text-muted);
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 0.5rem;
     font-weight: 400;
 }
 

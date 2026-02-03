@@ -7,6 +7,7 @@
 
 import type { PostNode } from "../../api/posts.ts";
 import type { PendingEncryptedData } from "../types.ts";
+import { signal } from "../../reactive.ts";
 import { getPosts } from "./signals.ts";
 
 // --- Last Selected Post (persisted to localStorage) ---
@@ -64,6 +65,12 @@ export function getDecryptedTitle(uuid: string): string | undefined {
 
 let expandedPosts: Set<string> = new Set();
 
+/** Signal that emits {uuid, expanded} when a post's expanded state changes */
+export const expandedChangedSignal = signal<{
+  uuid: string;
+  expanded: boolean;
+} | null>(null);
+
 export function isExpanded(uuid: string): boolean {
   return expandedPosts.has(uuid);
 }
@@ -71,8 +78,10 @@ export function isExpanded(uuid: string): boolean {
 export function toggleExpanded(uuid: string): void {
   if (expandedPosts.has(uuid)) {
     expandedPosts.delete(uuid);
+    expandedChangedSignal.set({ uuid, expanded: false });
   } else {
     expandedPosts.add(uuid);
+    expandedChangedSignal.set({ uuid, expanded: true });
   }
 }
 

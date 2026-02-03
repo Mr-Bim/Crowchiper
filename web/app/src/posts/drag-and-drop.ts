@@ -80,11 +80,11 @@ export function initDragAndDrop(
   cleanupFns = [];
 
   const items = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-uuid]"),
+    container.querySelectorAll<HTMLElement>("[data-post-uuid]"),
   );
 
   for (const item of items) {
-    const uuid = item.getAttribute("data-uuid") ?? "";
+    const uuid = item.getAttribute("data-post-uuid") ?? "";
     const parentId = item.getAttribute("data-parent-id") || null;
 
     // Validate UUID before using
@@ -125,7 +125,7 @@ export function initDragAndDrop(
     const dropCleanup = dropTargetForElements({
       element: item,
       getData: ({ input, element }) => {
-        const targetUuid = element.getAttribute("data-uuid") ?? "";
+        const targetUuid = element.getAttribute("data-post-uuid") ?? "";
         const targetParentId = element.getAttribute("data-parent-id") || null;
 
         // Validate UUIDs
@@ -153,7 +153,7 @@ export function initDragAndDrop(
       },
       canDrop: ({ source }) => {
         // Cannot drop on self
-        return source.data.uuid !== item.getAttribute("data-uuid");
+        return source.data.uuid !== item.getAttribute("data-post-uuid");
       },
       onDragEnter: ({ location }) => {
         const mode = getDropMode(item, location.current.input.clientY);

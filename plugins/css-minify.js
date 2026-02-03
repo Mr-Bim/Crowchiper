@@ -21,9 +21,12 @@ function* generateClassNames() {
  * Matches class selectors like .class-name
  */
 export function extractClassNames(css) {
+  // First, remove url(...) content to avoid matching .w3 in www.w3.org etc.
+  const cssWithoutUrls = css.replace(/url\([^)]*\)/g, "url()");
+
   const classRegex = /\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g;
   const classes = new Set();
-  for (const match of css.matchAll(classRegex)) {
+  for (const match of cssWithoutUrls.matchAll(classRegex)) {
     classes.add(match[1]);
   }
   return classes;
@@ -189,35 +192,78 @@ function minifyClassNames(css, html, excludeClasses = new Set()) {
  * @returns {string} Minified JS content
  */
 function minifyJsClassNames(js, classMap) {
-  let minifiedJs = js;
-  for (const [original, minified] of classMap) {
-    minifiedJs = minifiedJs.replaceAll(`"${original}"`, `"${minified}"`);
-    minifiedJs = minifiedJs.replaceAll(`".${original}"`, `".${minified}"`);
-    minifiedJs = minifiedJs.replaceAll(`'${original}'`, `'${minified}'`);
-    minifiedJs = minifiedJs.replaceAll(`'.${original}'`, `'.${minified}'`);
-    minifiedJs = minifiedJs.replaceAll(`\`${original}\``, `\`${minified}\``);
-    minifiedJs = minifiedJs.replaceAll(`\`.${original}\``, `\`.${minified}\``);
+  // Build a regex that matches all class names in quoted strings
+  // Pattern: (quote)(optional dot)(className)(quote) where quotes must match
+  const escapedNames = [...classMap.keys()].map((name) =>
+    name.replace(/[-]/g, "\\-"),
+  );
+  const namesPattern = escapedNames.join("|");
+  // Match: "className", ".className", 'className', '.className', `className`, `.className`
+  const exactMatchRegex = new RegExp(`(["'\`])(\\.?)(${namesPattern})\\1`, "g");
 
-    minifiedJs = minifiedJs.replace(/(["'`])(?:(?=(\\?))\2.)*?\1/g, (match) => {
-      const quote = match[0];
-      const content = match.slice(1, -1);
+  let minifiedJs = js.replace(exactMatchRegex, (_, quote, dot, className) => {
+    const minified = classMap.get(className);
+    return minified ? `${quote}${dot}${minified}${quote}` : _;
+  });
 
-      const parts = content.split(/(\s+)/);
-      let changed = false;
-      const newParts = parts.map((part) => {
-        if (classMap.has(part)) {
-          changed = true;
-          return classMap.get(part);
-        }
-        return part;
-      });
+  // Helper to replace class names in space-separated content
+  // Only process content that looks like CSS class names (no URLs, paths, etc.)
+  function replaceInContent(content) {
+    if (!/\s/.test(content)) {
+      return null; // No whitespace, skip
+    }
 
-      if (changed) {
-        return `${quote}${newParts.join("")}${quote}`;
+    // Skip if it looks like a URL, path, or other non-class content
+    if (
+      content.includes("://") ||
+      content.includes("/") ||
+      content.includes("\\") ||
+      content.includes("@") ||
+      content.includes("=") ||
+      content.includes(":") ||
+      content.includes("(") ||
+      content.includes(")")
+    ) {
+      return null;
+    }
+
+    const parts = content.split(/(\s+)/);
+    let changed = false;
+    const newParts = parts.map((part) => {
+      if (part.startsWith(".") && classMap.has(part.slice(1))) {
+        changed = true;
+        return "." + classMap.get(part.slice(1));
       }
-      return match;
+      if (classMap.has(part)) {
+        changed = true;
+        return classMap.get(part);
+      }
+      return part;
     });
+
+    return changed ? newParts.join("") : null;
   }
+
+  // Second pass: handle space-separated class names in strings
+  // Process each quote type separately to avoid cross-matching issues
+  // Double quotes
+  minifiedJs = minifiedJs.replace(/"([^"]*)"/g, (match, content) => {
+    const replaced = replaceInContent(content);
+    return replaced !== null ? `"${replaced}"` : match;
+  });
+
+  // Single quotes
+  minifiedJs = minifiedJs.replace(/'([^']*)'/g, (match, content) => {
+    const replaced = replaceInContent(content);
+    return replaced !== null ? `'${replaced}'` : match;
+  });
+
+  // Backticks (template literals without interpolation)
+  minifiedJs = minifiedJs.replace(/`([^`]*)`/g, (match, content) => {
+    const replaced = replaceInContent(content);
+    return replaced !== null ? `\`${replaced}\`` : match;
+  });
+
   return minifiedJs;
 }
 

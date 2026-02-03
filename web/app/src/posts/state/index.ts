@@ -60,6 +60,7 @@ export {
   toggleExpanded,
   setExpanded,
   expandToDepth,
+  expandedChangedSignal,
   getPendingEncryptedData,
   setPendingEncryptedData,
   setSaveTimeout,

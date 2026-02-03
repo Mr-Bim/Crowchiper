@@ -42,12 +42,11 @@ test.describe("Nested posts - Expand/Collapse", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial post
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      1,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(1, {
+      timeout: 10000,
+    });
 
     // Create parent and child
     await createPostWithTitle(page, "Expand Parent");
@@ -60,9 +59,11 @@ test.describe("Nested posts - Expand/Collapse", () => {
 
     // Parent should be expanded after reparenting
     const parentPost = getPostByTitle(page, "Expand Parent");
-    const expandBtn = parentPost.locator('[data-testid="test-post-expand-btn"]');
+    const expandBtn = parentPost.locator(
+      '[data-testid="test-post-expand-btn"]',
+    );
     await expect(expandBtn).toBeVisible();
-    await expect(expandBtn).toHaveAttribute("data-expanded", "true");
+    await expect(expandBtn).toHaveAttribute("data-post-expanded", "true");
 
     // Child should be visible
     const childUpdated = getPostByTitle(page, "Expand Child");
@@ -73,7 +74,7 @@ test.describe("Nested posts - Expand/Collapse", () => {
     await page.waitForTimeout(300);
 
     // Expand button should now show collapsed state
-    await expect(expandBtn).toHaveAttribute("data-expanded", "false");
+    await expect(expandBtn).toHaveAttribute("data-post-expanded", "false");
 
     // Child should be hidden (not visible in DOM)
     await expect(childUpdated).not.toBeVisible();
@@ -83,7 +84,7 @@ test.describe("Nested posts - Expand/Collapse", () => {
     await page.waitForTimeout(300);
 
     // Child should be visible again
-    await expect(expandBtn).toHaveAttribute("data-expanded", "true");
+    await expect(expandBtn).toHaveAttribute("data-post-expanded", "true");
     const childVisible = getPostByTitle(page, "Expand Child");
     await expect(childVisible).toBeVisible();
   });
@@ -112,8 +113,12 @@ test.describe("Nested posts - Expand/Collapse", () => {
     await expect(level3).toHaveAttribute("data-depth", "2");
 
     // Both Level 1 and Level 2 should have expand buttons
-    const level1ExpandBtn = level1.locator('[data-testid="test-post-expand-btn"]');
-    const level2ExpandBtn = level2.locator('[data-testid="test-post-expand-btn"]');
+    const level1ExpandBtn = level1.locator(
+      '[data-testid="test-post-expand-btn"]',
+    );
+    const level2ExpandBtn = level2.locator(
+      '[data-testid="test-post-expand-btn"]',
+    );
 
     await expect(level1ExpandBtn).toBeVisible();
     await expect(level2ExpandBtn).toBeVisible();
@@ -138,7 +143,7 @@ test.describe("Nested posts - Expand/Collapse", () => {
       '[data-testid="test-post-expand-btn"]',
     );
     await expect(level2ExpandBtnAgain).toHaveAttribute(
-      "data-expanded",
+      "data-post-expanded",
       "false",
     );
   });

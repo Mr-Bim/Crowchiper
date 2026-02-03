@@ -32,7 +32,7 @@ import { setupEditor } from "./editor.ts";
  * Set loading state on a post item in the sidebar.
  */
 function setPostItemLoading(uuid: string, loading: boolean): void {
-  const wrapper = document.querySelector(`[data-uuid="${uuid}"]`);
+  const wrapper = document.querySelector(`[data-post-uuid="${uuid}"]`);
   const item = wrapper?.querySelector(".cl-post-item");
   const editorEl = getOptionalElement("editor");
   if (item) {

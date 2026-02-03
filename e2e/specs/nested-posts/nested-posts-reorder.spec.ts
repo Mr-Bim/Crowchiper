@@ -42,24 +42,22 @@ test.describe("Nested posts - Reordering", () => {
     const postList = page.locator("#post-list");
 
     // Wait for initial post
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      1,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(1, {
+      timeout: 10000,
+    });
 
     // Create posts: Post A, Post B, Post C
     await createPostWithTitle(page, "Post A");
     await createPostWithTitle(page, "Post B");
     await createPostWithTitle(page, "Post C");
 
-    await expect(postList.locator('[data-testid="test-post-wrapper"]')).toHaveCount(
-      4,
-      {
-        timeout: 5000,
-      },
-    );
+    await expect(
+      postList.locator('[data-testid="test-post-wrapper"]'),
+    ).toHaveCount(4, {
+      timeout: 5000,
+    });
 
     // Order should be: Post C, Post B, Post A, Untitled (newest first)
     const wrappers = postList.locator('[data-testid="test-post-wrapper"]');
@@ -116,7 +114,7 @@ test.describe("Nested posts - Reordering", () => {
 
     // Verify they have the same parent
     const parentPost = getPostByTitle(page, "Reorder Parent");
-    const parentUuid = await parentPost.getAttribute("data-uuid");
+    const parentUuid = await parentPost.getAttribute("data-post-uuid");
     await expect(child1).toHaveAttribute("data-parent-id", parentUuid!);
     await expect(child2).toHaveAttribute("data-parent-id", parentUuid!);
 

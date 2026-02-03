@@ -7,6 +7,7 @@
 import { listPostChildren, type PostNode } from "../api/posts.ts";
 import { decryptPostTitles } from "../crypto/post-encryption.ts";
 import { getOptionalElement } from "../../../shared/dom.ts";
+import { chevron } from "../../../shared/icons/chevron-down.ts";
 import {
   getReorderHandler,
   getReparentHandler,
@@ -29,7 +30,7 @@ declare const __TEST_MODE__: boolean;
 /**
  * Render a single post node and its children recursively.
  */
-function renderPostNode(
+export function renderPostNode(
   post: PostNode,
   depth: number,
   index: number,
@@ -44,7 +45,7 @@ function renderPostNode(
   if (__TEST_MODE__) {
     wrapper.setAttribute("data-testid", "test-post-wrapper");
   }
-  wrapper.setAttribute("data-uuid", post.uuid);
+  wrapper.setAttribute("data-post-uuid", post.uuid);
   wrapper.setAttribute("data-index", String(index));
   wrapper.setAttribute("data-depth", String(Math.min(3, depth)));
   wrapper.setAttribute("data-parent-id", post.parent_id ?? "");
@@ -64,9 +65,8 @@ function renderPostNode(
     if (__TEST_MODE__) {
       expandBtn.setAttribute("data-testid", "test-post-expand-btn");
     }
-    expandBtn.setAttribute("data-expanded", String(expanded));
-    expandBtn.innerHTML =
-      '<span class="chevron" data-testid="test-chevron">&#9654;</span>';
+    expandBtn.setAttribute("data-post-expanded", String(expanded));
+    expandBtn.innerHTML = `<span class="chevron-expand" data-testid="test-chevron">${chevron}</span>`;
     expandBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       handleToggleExpand(post);
@@ -149,10 +149,21 @@ export function renderPostList(): void {
 }
 
 /**
+ * Re-initialize drag and drop on the post list.
+ */
+export function reinitDragAndDrop(list: HTMLElement): void {
+  if (isHandlersRegistered()) {
+    import("./drag-and-drop.ts").then(({ initDragAndDrop }) => {
+      initDragAndDrop(list, getReorderHandler(), getReparentHandler());
+    });
+  }
+}
+
+/**
  * Handle expand/collapse toggle for a post.
  */
 export async function handleToggleExpand(post: PostNode): Promise<void> {
-  // If children not loaded yet, fetch them
+  // If children not loaded yet, fetch them first
   if (post.has_children && post.children === null) {
     try {
       const children = await listPostChildren(post.uuid);
@@ -168,6 +179,6 @@ export async function handleToggleExpand(post: PostNode): Promise<void> {
     }
   }
 
+  // Toggle expanded state - the signal subscription handles the chevron animation
   toggleExpanded(post.uuid);
-  renderPostList();
 }

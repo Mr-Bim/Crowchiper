@@ -94,9 +94,6 @@
 }
 
 .post-expand-btn {
-    width: 1.25rem;
-    height: 1.25rem;
-    min-width: 1.25rem;
     padding: 0;
     display: flex;
     align-items: center;
@@ -112,13 +109,23 @@
     color: var(--text);
 }
 
-.post-expand-btn .chevron {
-    display: inline-block;
+.chevron-expand {
+    display: block;
+    width: 0.75rem;
+    height: 0.75rem;
     transition: transform 0.15s ease;
+    transform: rotate(-90deg);
+    color: var(--text);
 }
 
-.post-expand-btn[data-expanded="true"] .chevron {
-    transform: rotate(90deg);
+.chevron-expand svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+[data-post-expanded="true"] .chevron-expand {
+    transform: rotate(0deg);
 }
 
 .post-expand-spacer {
@@ -371,6 +378,74 @@
 .cl-sync-indicator[data-status="synced"] .sync-icon-check {
     display: block;
     animation: sync-check-pop 0.3s ease-out;
+}
+
+/* Particle container for synced animation */
+.cl-sync-indicator {
+    position: relative;
+}
+
+.sync-particles {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.sync-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: oklch(0.6 0.15 145);
+    opacity: 0;
+}
+
+.cl-sync-indicator[data-status="synced"] .sync-particle {
+    animation: sync-particle-burst 0.4s ease-out forwards;
+}
+
+.sync-particle:nth-child(1) {
+    --particle-x: -8px;
+    --particle-y: -10px;
+}
+.sync-particle:nth-child(2) {
+    --particle-x: 8px;
+    --particle-y: -10px;
+    animation-delay: 0.02s;
+}
+.sync-particle:nth-child(3) {
+    --particle-x: -10px;
+    --particle-y: 0px;
+    animation-delay: 0.04s;
+}
+.sync-particle:nth-child(4) {
+    --particle-x: 10px;
+    --particle-y: 0px;
+    animation-delay: 0.06s;
+}
+.sync-particle:nth-child(5) {
+    --particle-x: -8px;
+    --particle-y: 10px;
+    animation-delay: 0.08s;
+}
+.sync-particle:nth-child(6) {
+    --particle-x: 8px;
+    --particle-y: 10px;
+    animation-delay: 0.1s;
+}
+
+@keyframes sync-particle-burst {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--particle-x), var(--particle-y)) scale(0.5);
+    }
 }
 
 /* Error state - show error icon */
@@ -875,5 +950,9 @@ button.ghost.version-modal-close-btn {
 
     .cl-success-toast {
         animation: none;
+    }
+
+    .sync-particle {
+        display: none;
     }
 }

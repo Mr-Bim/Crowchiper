@@ -118,14 +118,14 @@ test.describe("Nested posts - Visual hierarchy", () => {
     await expect(chevron).toBeVisible();
 
     // Ensure expanded initially
-    await expect(expandBtn).toHaveAttribute("data-expanded", "true");
+    await expect(expandBtn).toHaveAttribute("data-post-expanded", "true");
 
     // Collapse
     await expandBtn.click();
-    await expect(expandBtn).toHaveAttribute("data-expanded", "false");
+    await expect(expandBtn).toHaveAttribute("data-post-expanded", "false");
 
     // Expand again
     await expandBtn.click();
-    await expect(expandBtn).toHaveAttribute("data-expanded", "true");
+    await expect(expandBtn).toHaveAttribute("data-post-expanded", "true");
   });
 });
