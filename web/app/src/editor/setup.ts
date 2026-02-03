@@ -15,12 +15,14 @@ import { slashCommands } from "./slash-commands.ts";
 import "../../css/cm-editor.css";
 import "../../css/cm-slash-commands.css";
 
+declare const __TEST_MODE__: boolean;
+
 /**
  * Build the extensions array for the editor.
  * Extracted so it can be reused when resetting editor state.
  */
 function buildExtensions(onDocChange: () => void): Extension[] {
-  return [
+  const extensions: Extension[] = [
     history(),
     drawSelection(),
     syntaxHighlighting(defaultHighlightStyle),
@@ -37,6 +39,12 @@ function buildExtensions(onDocChange: () => void): Extension[] {
       }
     }),
   ];
+  if (__TEST_MODE__) {
+    extensions.push(
+      EditorView.contentAttributes.of({ "data-testid": "test-editor-content" }),
+    );
+  }
+  return extensions;
 }
 
 // Store the onDocChange callback so we can rebuild extensions when resetting

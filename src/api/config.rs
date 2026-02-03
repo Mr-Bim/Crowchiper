@@ -10,6 +10,12 @@ use crate::db::Database;
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
+/// Version embedded at compile time from Cargo.toml
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Git commit hash embedded at compile time
+const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
+
 #[derive(Clone)]
 pub struct ConfigState {
     pub no_signup: bool,
@@ -25,6 +31,8 @@ impl_has_auth_state!(ConfigState);
 struct ConfigResponse {
     no_signup: bool,
     authenticated: bool,
+    version: &'static str,
+    git_hash: &'static str,
 }
 
 pub fn router(state: ConfigState) -> Router {
@@ -38,5 +46,7 @@ async fn get_config(
     Json(ConfigResponse {
         no_signup: state.no_signup,
         authenticated: user.is_some(),
+        version: VERSION,
+        git_hash: GIT_COMMIT_HASH,
     })
 }

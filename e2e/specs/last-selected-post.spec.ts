@@ -34,7 +34,7 @@ async function createPostWithTitle(
   const newPostBtn = page.locator("#new-post-btn");
   await newPostBtn.click();
 
-  const editor = page.locator("#editor .cm-content");
+  const editor = page.locator('[data-testid="test-editor-content"]');
   await editor.click();
   await page.keyboard.type(title);
 
@@ -130,7 +130,7 @@ test.describe("Last selected post persistence", () => {
   test("remembers last selected post after page reload", async () => {
     const { page } = userResult;
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Wait for initial post
     await expect(
@@ -177,7 +177,7 @@ test.describe("Last selected post persistence", () => {
   test("remembers nested child post after reload", async () => {
     const { page } = userResult;
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Create parent and child posts
     await createPostWithTitle(page, "Parent Post");
@@ -197,11 +197,6 @@ test.describe("Last selected post persistence", () => {
 
     // Create nested structure: Child under Parent
     await dragPostToPost(page, "Child Post", "Parent Post");
-
-    // Expand Parent to see Child
-    const parentExpand = getPostByTitle(page, "Parent Post").locator(
-      '[data-testid="test-post-expand-btn"]',
-    );
 
     // Verify Child is at depth 1 (nested under parent)
     const childWrapper = getPostByTitle(page, "Child Post");
@@ -245,7 +240,7 @@ test.describe("Last selected post persistence", () => {
   test("falls back to first post if last selected was deleted", async () => {
     const { page } = userResult;
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Create a post that we'll delete
     await createPostWithTitle(page, "Will Be Deleted");

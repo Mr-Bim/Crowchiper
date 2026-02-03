@@ -611,10 +611,11 @@ Refresh tokens include additional `jti` field for database tracking.
 
 ### Frontend Settings Menu
 The sidebar footer has a settings menu (gear icon) with:
-- Theme selector dropdown
+- Theme selector dropdown (logic in `web/inline/inline.ts`, shared between login and app)
 - Logout button (calls `/api/tokens/logout`, redirects to login)
+- Version button (opens version modal)
 
-Located in `web/app/index.html`, styled in `web/app/css/app.css`, logic in `web/inline/inline.ts`.
+Located in `web/app/index.html`, styled in `web/app/css/app.css`, app-specific logic (settings menu toggle, logout, version modal) in `web/app/src/main.ts`.
 
 ### Token Cleanup
 Expired tokens are deleted on server startup via `db.tokens().delete_expired()`.
@@ -801,3 +802,31 @@ Triggered by pushing a version tag (e.g., `v1.0.0`):
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+**Version Validation:**
+The release workflow validates that the tag version matches `Cargo.toml` version before creating the release. If they don't match, the release fails.
+
+## Version Information
+
+Version and git commit hash are embedded at compile time and exposed via the `/api/config` endpoint and the settings menu.
+
+### Compile-Time Embedding (`build.rs`)
+- `CARGO_PKG_VERSION` - Version from Cargo.toml (built-in)
+- `GIT_COMMIT_HASH` - Full git commit hash
+
+### API Response (`GET /api/config`)
+```json
+{
+  "no_signup": false,
+  "authenticated": true,
+  "version": "0.0.3",
+  "git_hash": "7a90bed..."
+}
+```
+
+### Frontend Display
+- Settings menu shows version number as button label (e.g., "v0.0.3")
+- Clicking version opens modal with version and short build hash (first 7 chars)
+- Version info is fetched once on page load and cached
+- Modal: `web/app/index.html` (`#version-modal`)
+- Logic: `web/app/src/main.ts` (fetches from `/api/config`, app-only feature)

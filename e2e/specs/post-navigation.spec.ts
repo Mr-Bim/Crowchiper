@@ -34,7 +34,7 @@ test.describe("Post navigation", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Wait for initial post
     await expect(
@@ -94,7 +94,7 @@ test.describe("Post navigation", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Get the two posts from previous test
     const firstPost = postList
@@ -161,7 +161,7 @@ test.describe("Post navigation", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
     const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
     const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
 
@@ -272,7 +272,7 @@ test.describe("Post navigation", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
     const deleteBtn = page.locator("#delete-btn");
 
     // Create a new post with specific content
@@ -324,7 +324,7 @@ test.describe("Post navigation", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Ensure we have at least 2 posts
     let postCount = await postList
@@ -427,7 +427,7 @@ test.describe("Post navigation - sync behavior", () => {
   test("sync indicator shows pending when there are changes", async () => {
     const { page } = userResult;
 
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
     const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
 
     // Type something
@@ -443,7 +443,7 @@ test.describe("Post navigation - sync behavior", () => {
   test("force save button triggers sync and shows synced", async () => {
     const { page } = userResult;
 
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
     const syncIndicator = page.locator('[data-testid="test-sync-indicator"]');
     const forceSaveBtn = page.locator('[data-testid="test-force-save-btn"]');
 
@@ -474,7 +474,7 @@ test.describe("Post navigation - sync behavior", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Create a new post
     await page.locator("#new-post-btn").click();
@@ -557,7 +557,7 @@ test.describe("Post navigation - editor state", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Wait for initial post
     await expect(
@@ -579,7 +579,7 @@ test.describe("Post navigation - editor state", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Create second post
     await page.locator("#new-post-btn").click();
@@ -616,7 +616,7 @@ test.describe("Post navigation - editor state", () => {
     const { page } = userResult;
 
     const postList = page.locator("#post-list");
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
 
     // Get the two posts
     const firstPost = postList

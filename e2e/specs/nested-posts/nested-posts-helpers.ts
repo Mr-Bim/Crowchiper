@@ -12,7 +12,7 @@ export async function createPostWithTitle(
   await newPostBtn.click();
 
   // Wait for new post to be created and editor to be ready
-  const editor = page.locator("#editor .cm-content");
+  const editor = page.locator('[data-testid="test-editor-content"]');
   await editor.click();
   await page.keyboard.type(title);
 

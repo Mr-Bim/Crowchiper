@@ -98,7 +98,7 @@ test.describe("Spellcheck toggle", () => {
     await newPostBtn.click();
 
     // Wait for editor to be ready
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
     await expect(editor).toBeVisible({ timeout: 5000 });
 
     // Enable spellcheck

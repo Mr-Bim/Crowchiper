@@ -38,10 +38,10 @@
     font-weight: 600;
 }
 
-.settings-panel-close-btn {
+button.ghost.settings-panel-close-btn {
     width: 2.5rem;
     height: 2.5rem;
-    padding: 0;
+    padding: 0.25rem;
     display: flex;
     align-items: center;
     justify-content: center;

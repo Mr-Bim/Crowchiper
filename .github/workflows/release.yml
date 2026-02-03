@@ -96,6 +96,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate version matches Cargo.toml
+        run: |
+          TAG_VERSION="${{ github.ref_name }}"
+          # Remove 'v' prefix from tag (v1.0.0 -> 1.0.0)
+          TAG_VERSION="${TAG_VERSION#v}"
+
+          # Extract version from Cargo.toml
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+          echo "Tag version: $TAG_VERSION"
+          echo "Cargo.toml version: $CARGO_VERSION"
+
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "ERROR: Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
+            echo "Please update Cargo.toml version before tagging."
+            exit 1
+          fi
+
+          echo "Version validation passed!"
+
       - name: Download binary from CI
         uses: actions/download-artifact@v7
         with:

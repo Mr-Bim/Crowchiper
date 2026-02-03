@@ -70,7 +70,7 @@ test.describe("Post reorder functionality", () => {
     });
 
     // Type content in the second post to give it a title
-    const editor = page.locator("#editor .cm-content");
+    const editor = page.locator('[data-testid="test-editor-content"]');
     await editor.click();
     await page.keyboard.type("Second Post");
 

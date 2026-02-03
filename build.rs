@@ -1,4 +1,5 @@
 use std::fs;
+use std::process::Command;
 
 /// Format hashes from JSON array into CSP format: 'hash1' 'hash2' ...
 fn format_hashes(hashes: &serde_json::Value) -> String {
@@ -23,6 +24,29 @@ fn build_csp(directives: &[(&str, &str)]) -> String {
 fn main() {
     println!("cargo:rerun-if-changed=config.json");
     println!("cargo:rerun-if-changed=dist/csp-hashes.json");
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/refs/heads");
+
+    // Embed version from Cargo.toml (already available as CARGO_PKG_VERSION)
+    // Embed git commit hash
+    let git_hash = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    println!("cargo:rustc-env=GIT_COMMIT_HASH={}", git_hash);
+
+    // Get short hash for display
+    let git_hash_short = if git_hash.len() >= 7 {
+        &git_hash[..7]
+    } else {
+        &git_hash
+    };
+    println!("cargo:rustc-env=GIT_COMMIT_HASH_SHORT={}", git_hash_short);
 
     let config = fs::read_to_string("config.json").expect("Failed to read config.json");
     let json: serde_json::Value =

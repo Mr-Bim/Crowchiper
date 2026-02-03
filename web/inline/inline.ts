@@ -98,7 +98,7 @@ const changeTheme = (themeId: (typeof themes)[number]["id"]) => {
 // Initialize theme on page load
 const currentTheme = initTheme();
 
-// Create and attach theme dropdown and settings menu
+// Create and attach theme dropdown
 document.addEventListener("DOMContentLoaded", () => {
   const container = document.getElementById("theme-toggle");
   if (container) {
@@ -126,56 +126,5 @@ document.addEventListener("DOMContentLoaded", () => {
     // Replace container content with select
     container.innerHTML = "";
     container.appendChild(select);
-  }
-
-  // Settings menu toggle
-  const settingsBtn = document.getElementById("settings-btn");
-  const settingsMenu = document.getElementById("settings-menu");
-
-  if (settingsBtn && settingsMenu) {
-    settingsBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const isOpen = !settingsMenu.hidden;
-      settingsMenu.hidden = isOpen;
-      settingsBtn.setAttribute("aria-expanded", String(!isOpen));
-    });
-
-    // Close menu when clicking outside
-    document.addEventListener("click", (e) => {
-      if (
-        !settingsMenu.hidden &&
-        !settingsMenu.contains(e.target as Node) &&
-        !settingsBtn.contains(e.target as Node)
-      ) {
-        settingsMenu.hidden = true;
-        settingsBtn.setAttribute("aria-expanded", "false");
-      }
-    });
-
-    // Close menu on Escape
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !settingsMenu.hidden) {
-        settingsMenu.hidden = true;
-        settingsBtn.setAttribute("aria-expanded", "false");
-      }
-    });
-  }
-
-  // Logout button
-  const logoutBtn = document.getElementById("logout-btn");
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", async () => {
-      try {
-        const apiPath = (window as unknown as Record<string, string>).API_PATH;
-        const loginPath = (window as unknown as Record<string, string>)
-          .LOGIN_PATH;
-        await fetch(`${apiPath}/tokens/logout`, {
-          method: "POST",
-          credentials: "include",
-        });
-        window.location.href = loginPath;
-        window.location.href = loginPath;
-      } catch {}
-    });
   }
 });

@@ -762,6 +762,100 @@
     }
 }
 
+/* Version modal */
+.cl-version-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.cl-version-modal-overlay[hidden] {
+    display: none;
+}
+
+.cl-version-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    max-width: 28rem;
+    width: 90%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.version-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.version-modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+button.ghost.version-modal-close-btn {
+    width: 2rem;
+    height: 2rem;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    color: var(--text-muted);
+}
+
+.version-modal-close-btn:hover {
+    color: var(--text);
+    background: var(--hover-bg);
+}
+
+.version-modal-body {
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.version-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.version-item-label {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.version-item-value {
+    font-size: 0.875rem;
+    color: var(--text);
+    font-family:
+        ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    text-align: right;
+    word-break: break-all;
+}
+
+/* Version button in settings menu */
+.settings-version-btn {
+    border-top: 1px solid var(--border);
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+}
+
 /* Respect prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
     *,
