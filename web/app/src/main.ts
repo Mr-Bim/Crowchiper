@@ -19,6 +19,7 @@ import {
   initSubscriptions,
   loadPosts,
   renderPostList,
+  loadedPostSignal,
 } from "./posts/index.ts";
 import { setupSpellcheck } from "./spellcheck.ts";
 import { createUnlockHandler, showUnlockOverlay } from "./unlock/index.ts";
@@ -178,19 +179,29 @@ function setupVersionModal(): void {
   });
 }
 
+/**
+ * Create a new post as a sibling below the currently selected post.
+ * If no post is selected, creates at root level.
+ */
+function createNewPostAsSibling(): void {
+  const loadedPost = loadedPostSignal.get();
+  // Create as sibling (same parent as current post), inserted after current post
+  const parentId = loadedPost?.parent_id ?? null;
+  const afterUuid = loadedPost?.uuid;
+  handleNewPost(parentId, afterUuid);
+}
+
 function setupNewPostButton(): void {
   const btn = getOptionalElement("new-post-btn");
   if (!btn) return;
 
-  btn.addEventListener("click", () => {
-    handleNewPost();
-  });
+  btn.addEventListener("click", createNewPostAsSibling);
 }
 
 /**
  * Set up global keyboard shortcuts.
  * - Ctrl/Cmd+S: Save current post
- * - Ctrl/Cmd+N: Create new post
+ * - Ctrl/Cmd+N: Create new post as sibling
  */
 function setupKeyboardShortcuts(): void {
   document.addEventListener("keydown", (e) => {
@@ -202,7 +213,7 @@ function setupKeyboardShortcuts(): void {
       forceSave();
     } else if (e.key === "n") {
       e.preventDefault();
-      handleNewPost();
+      createNewPostAsSibling();
     }
   });
 }

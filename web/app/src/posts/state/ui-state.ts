@@ -6,9 +6,14 @@
  */
 
 import type { PostNode } from "../../api/posts.ts";
-import type { PendingEncryptedData } from "../types.ts";
-import { signal } from "../../reactive.ts";
-import { getPosts } from "./signals.ts";
+import {
+  postsSignal,
+  expandedPostsSignal,
+  expandedChangedSignal,
+} from "./signals.ts";
+
+// Re-export for convenience
+export type { PendingEncryptedData } from "../types.ts";
 
 // --- Last Selected Post (persisted to localStorage) ---
 
@@ -38,71 +43,49 @@ export function clearLastSelectedPostUuid(): void {
   }
 }
 
-// Re-export for convenience
-export type { PendingEncryptedData } from "../types.ts";
-
-// --- Decrypted Titles (for display in post list) ---
-
-let decryptedTitles: Map<string, string> = new Map();
-
-export function getDecryptedTitles(): Map<string, string> {
-  return decryptedTitles;
-}
-
-export function setDecryptedTitles(titles: Map<string, string>): void {
-  decryptedTitles = titles;
-}
-
-export function setDecryptedTitle(uuid: string, title: string): void {
-  decryptedTitles.set(uuid, title);
-}
-
-export function getDecryptedTitle(uuid: string): string | undefined {
-  return decryptedTitles.get(uuid);
-}
-
-// --- Expanded Posts (tree collapse/expand state) ---
-
-let expandedPosts: Set<string> = new Set();
-
-/** Signal that emits {uuid, expanded} when a post's expanded state changes */
-export const expandedChangedSignal = signal<{
-  uuid: string;
-  expanded: boolean;
-} | null>(null);
+// --- Expanded Posts Helper Functions ---
 
 export function isExpanded(uuid: string): boolean {
-  return expandedPosts.has(uuid);
+  return expandedPostsSignal.get().has(uuid);
 }
 
 export function toggleExpanded(uuid: string): void {
-  if (expandedPosts.has(uuid)) {
-    expandedPosts.delete(uuid);
+  const expanded = expandedPostsSignal.get();
+  const newExpanded = new Set(expanded);
+  if (newExpanded.has(uuid)) {
+    newExpanded.delete(uuid);
+    expandedPostsSignal.set(newExpanded);
     expandedChangedSignal.set({ uuid, expanded: false });
   } else {
-    expandedPosts.add(uuid);
+    newExpanded.add(uuid);
+    expandedPostsSignal.set(newExpanded);
     expandedChangedSignal.set({ uuid, expanded: true });
   }
 }
 
 export function setExpanded(uuid: string, expanded: boolean): void {
+  const current = expandedPostsSignal.get();
+  const newSet = new Set(current);
   if (expanded) {
-    expandedPosts.add(uuid);
+    newSet.add(uuid);
   } else {
-    expandedPosts.delete(uuid);
+    newSet.delete(uuid);
   }
+  expandedPostsSignal.set(newSet);
 }
 
 /**
  * Expand all posts up to a certain depth.
  */
 export function expandToDepth(depth: number): void {
-  const posts = getPosts();
+  const posts = postsSignal.get();
+  const expanded = new Set(expandedPostsSignal.get());
+
   function expand(nodes: PostNode[], currentDepth: number): void {
     if (currentDepth >= depth) return;
     for (const node of nodes) {
       if (node.has_children) {
-        expandedPosts.add(node.uuid);
+        expanded.add(node.uuid);
         if (node.children) {
           expand(node.children, currentDepth + 1);
         }
@@ -110,20 +93,7 @@ export function expandToDepth(depth: number): void {
     }
   }
   expand(posts, 0);
-}
-
-// --- Pending Encrypted Data (for save operations) ---
-
-let pendingEncryptedData: PendingEncryptedData | null = null;
-
-export function getPendingEncryptedData(): PendingEncryptedData | null {
-  return pendingEncryptedData;
-}
-
-export function setPendingEncryptedData(
-  data: PendingEncryptedData | null,
-): void {
-  pendingEncryptedData = data;
+  expandedPostsSignal.set(expanded);
 }
 
 // --- Save Timers ---

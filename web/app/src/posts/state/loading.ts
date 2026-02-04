@@ -5,7 +5,7 @@
  * and ensure the editor isn't edited during post transitions.
  */
 
-import { getEditor } from "./signals.ts";
+import { editorSignal } from "./signals.ts";
 
 // Loading lock - prevents concurrent post selections and edits during load
 let isLoadingPost = false;
@@ -25,7 +25,7 @@ export function setLoading(loading: boolean): void {
   isLoadingPost = loading;
 
   // Update editor editability based on loading state
-  const editor = getEditor();
+  const editor = editorSignal.get();
   if (editor) {
     editor.contentDOM.contentEditable = loading ? "false" : "true";
   }

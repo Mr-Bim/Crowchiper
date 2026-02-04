@@ -6,7 +6,7 @@
  */
 
 import type { PostNode } from "../../api/posts.ts";
-import { postsSignal, getPosts } from "./signals.ts";
+import { postsSignal } from "./signals.ts";
 
 // --- Memoization cache for findPost ---
 
@@ -20,7 +20,7 @@ let cachedPostsRef: PostNode[] | null = null;
  * Cache is invalidated when postsSignal changes (detected by reference check).
  */
 function getPostLookupCache(): Map<string, PostNode> {
-  const currentPosts = getPosts();
+  const currentPosts = postsSignal.get();
 
   // Invalidate cache if posts array reference changed
   if (postLookupCache === null || cachedPostsRef !== currentPosts) {
@@ -54,7 +54,7 @@ export function findPost(uuid: string): PostNode | null {
  * Find the parent of a post by UUID.
  */
 export function findParent(uuid: string): PostNode | null {
-  const posts = getPosts();
+  const posts = postsSignal.get();
   function search(nodes: PostNode[], parent: PostNode | null): PostNode | null {
     for (const node of nodes) {
       if (node.uuid === uuid) return parent;
@@ -72,7 +72,7 @@ export function findParent(uuid: string): PostNode | null {
  * Get siblings of a post (posts with the same parent).
  */
 export function getSiblings(uuid: string): PostNode[] {
-  const posts = getPosts();
+  const posts = postsSignal.get();
   const parent = findParent(uuid);
   if (parent && parent.children) {
     return parent.children;
@@ -87,21 +87,39 @@ export function getSiblings(uuid: string): PostNode[] {
 
 /**
  * Add a post to the tree at the specified parent (null = root).
+ * If afterUuid is provided, insert after that sibling; otherwise insert at beginning.
  */
-export function addPost(post: PostNode, parentId: string | null = null): void {
-  const posts = getPosts();
-  if (parentId === null) {
-    posts.unshift(post);
-  } else {
+export function addPost(
+  post: PostNode,
+  parentId: string | null = null,
+  afterUuid?: string,
+): void {
+  const posts = postsSignal.get();
+
+  if (parentId !== null) {
     const parent = findPost(parentId);
+    if (parent && !parent.children) {
+      parent.children = [];
+    }
     if (parent) {
-      if (!parent.children) {
-        parent.children = [];
-      }
-      parent.children.unshift(post);
       parent.has_children = true;
     }
   }
+
+  const targetArray = parentId === null ? posts : findPost(parentId)?.children;
+  if (!targetArray) return;
+
+  if (afterUuid) {
+    const afterIndex = targetArray.findIndex((p) => p.uuid === afterUuid);
+    if (afterIndex !== -1) {
+      targetArray.splice(afterIndex + 1, 0, post);
+    } else {
+      targetArray.unshift(post);
+    }
+  } else {
+    targetArray.unshift(post);
+  }
+
   // Trigger reactivity by setting a new array reference
   postsSignal.set([...posts]);
 }
@@ -110,7 +128,7 @@ export function addPost(post: PostNode, parentId: string | null = null): void {
  * Remove a post from the tree by UUID.
  */
 export function removePost(uuid: string): PostNode | null {
-  const posts = getPosts();
+  const posts = postsSignal.get();
   function removeFromArray(nodes: PostNode[]): PostNode | null {
     const idx = nodes.findIndex((p) => p.uuid === uuid);
     if (idx !== -1) {
@@ -145,7 +163,7 @@ export function movePostInSiblings(
   fromIndex: number,
   toIndex: number,
 ): void {
-  const posts = getPosts();
+  const posts = postsSignal.get();
   const siblings =
     parentId === null ? posts : (findPost(parentId)?.children ?? []);
   if (fromIndex === toIndex) return;
@@ -165,7 +183,7 @@ export function movePostToParent(
   newParentId: string | null,
   position: number,
 ): void {
-  const posts = getPosts();
+  const posts = postsSignal.get();
   const post = removePost(uuid);
   if (!post) return;
 
@@ -190,7 +208,7 @@ export function movePostToParent(
  * Get UUIDs of siblings under a parent.
  */
 export function getSiblingUuids(parentId: string | null): string[] {
-  const posts = getPosts();
+  const posts = postsSignal.get();
   const siblings =
     parentId === null ? posts : (findPost(parentId)?.children ?? []);
   return siblings.map((p: PostNode) => p.uuid);
@@ -204,7 +222,7 @@ export function setPostChildren(uuid: string, children: PostNode[]): void {
   if (post) {
     post.children = children;
     post.has_children = children.length > 0;
-    postsSignal.set([...getPosts()]);
+    postsSignal.set([...postsSignal.get()]);
   }
 }
 
@@ -221,7 +239,7 @@ export function flattenPosts(): PostNode[] {
       }
     }
   }
-  flatten(getPosts());
+  flatten(postsSignal.get());
   return result;
 }
 
@@ -229,9 +247,6 @@ export function flattenPosts(): PostNode[] {
  * Get the first post in the tree (for initial selection).
  */
 export function getFirstSelectablePost(): PostNode | null {
-  const posts = getPosts();
-  for (const node of posts) {
-    return node;
-  }
-  return null;
+  const posts = postsSignal.get();
+  return posts[0] ?? null;
 }

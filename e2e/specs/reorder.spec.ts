@@ -106,8 +106,8 @@ test.describe("Post reorder functionality", () => {
     // Save before checking order
     await forceSave(page);
 
-    // Get the initial order - newest posts are at the top
-    // Order should be: Third Post, Second Post, Untitled
+    // Get the initial order - new posts are inserted after the current post
+    // Order should be: Untitled, Second Post, Third Post
     const postWrappers = postList.locator('[data-testid="test-post-wrapper"]');
     const initialFirstPost = await postWrappers
       .nth(0)
@@ -122,12 +122,12 @@ test.describe("Post reorder functionality", () => {
       .locator('[data-testid="test-post-item"]')
       .textContent();
 
-    expect(initialFirstPost).toBe("Third Post");
+    expect(initialFirstPost).toBe("Untitled");
     expect(initialSecondPost).toBe("Second Post");
-    expect(initialThirdPost).toBe("Untitled");
+    expect(initialThirdPost).toBe("Third Post");
 
-    // Perform drag and drop: move Third Post (index 0) to after Second Post (index 1)
-    const sourcePost = postWrappers.nth(0);
+    // Perform drag and drop: move Third Post (index 2) above Second Post (index 1)
+    const sourcePost = postWrappers.nth(2);
     const targetPost = postWrappers.nth(1);
 
     // Get bounding boxes
@@ -138,17 +138,17 @@ test.describe("Post reorder functionality", () => {
       throw new Error("Could not get bounding boxes for drag and drop");
     }
 
-    // Drag from center of source to bottom edge of target
+    // Drag from center of source to top edge of target
     await page.mouse.move(
       sourceBox.x + sourceBox.width / 2,
       sourceBox.y + sourceBox.height / 2,
     );
     await page.mouse.down();
 
-    // Move to bottom half of target post
+    // Move to top half of target post
     await page.mouse.move(
       targetBox.x + targetBox.width / 2,
-      targetBox.y + targetBox.height * 0.75,
+      targetBox.y + targetBox.height * 0.25,
       { steps: 10 },
     );
 
@@ -156,10 +156,10 @@ test.describe("Post reorder functionality", () => {
 
     // Wait for reorder to complete by checking the new order
     await expect(
-      postWrappers.nth(0).locator('[data-testid="test-post-item"]'),
-    ).toHaveText("Second Post", { timeout: 5000 });
+      postWrappers.nth(1).locator('[data-testid="test-post-item"]'),
+    ).toHaveText("Third Post", { timeout: 5000 });
 
-    // Verify the new order: Second Post, Third Post, Untitled
+    // Verify the new order: Untitled, Third Post, Second Post
     const newFirstPost = await postWrappers
       .nth(0)
       .locator('[data-testid="test-post-item"]')
@@ -173,9 +173,9 @@ test.describe("Post reorder functionality", () => {
       .locator('[data-testid="test-post-item"]')
       .textContent();
 
-    expect(newFirstPost).toBe("Second Post");
+    expect(newFirstPost).toBe("Untitled");
     expect(newSecondPost).toBe("Third Post");
-    expect(newThirdPost).toBe("Untitled");
+    expect(newThirdPost).toBe("Second Post");
 
     // Reload the page to verify persistence
     await page.reload();
@@ -210,8 +210,8 @@ test.describe("Post reorder functionality", () => {
       .locator('[data-testid="test-post-item"]')
       .textContent();
 
-    expect(reloadedFirstPost).toBe("Second Post");
+    expect(reloadedFirstPost).toBe("Untitled");
     expect(reloadedSecondPost).toBe("Third Post");
-    expect(reloadedThirdPost).toBe("Untitled");
+    expect(reloadedThirdPost).toBe("Second Post");
   });
 });

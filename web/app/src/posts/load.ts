@@ -14,10 +14,9 @@ import {
   flattenPosts,
   getFirstSelectablePost,
   getLastSelectedPostUuid,
-  setDecryptedTitle,
-  setDecryptedTitles,
+  decryptedTitlesSignal,
   setExpanded,
-  setPosts,
+  postsSignal,
   setPostChildren,
 } from "./state/index.ts";
 import {
@@ -79,7 +78,9 @@ async function expandAncestors(uuid: string): Promise<PostNode | null> {
           // Decrypt titles for newly loaded children
           for (const child of children) {
             const title = await decryptPostTitle(child);
-            setDecryptedTitle(child.uuid, title);
+            decryptedTitlesSignal.update((m) =>
+              new Map(m).set(child.uuid, title),
+            );
           }
         }
         setExpanded(ancestor.uuid, true);
@@ -116,7 +117,7 @@ async function expandAncestorChain(post: PostNode): Promise<void> {
       // Decrypt titles for newly loaded children
       for (const child of children) {
         const title = await decryptPostTitle(child);
-        setDecryptedTitle(child.uuid, title);
+        decryptedTitlesSignal.update((m) => new Map(m).set(child.uuid, title));
       }
     }
     setExpanded(parent.uuid, true);
@@ -174,7 +175,7 @@ export async function loadPosts(): Promise<void> {
     // Auto-save when attachments are uploaded or deleted
 
     const posts = await listPosts();
-    setPosts(posts);
+    postsSignal.set(posts);
 
     // Expand all posts to 1 levels by default
     expandToDepth(1);
@@ -182,7 +183,7 @@ export async function loadPosts(): Promise<void> {
     // Decrypt titles for all loaded posts
     const allPosts = flattenPosts();
     const titles = await decryptPostTitles(allPosts);
-    setDecryptedTitles(titles);
+    decryptedTitlesSignal.set(titles);
 
     // Clear loading state and render
     setPostListLoading(false);
@@ -230,7 +231,7 @@ export async function loadPostsWithoutSelection(): Promise<void> {
     initHandlers();
 
     const posts = await listPosts();
-    setPosts(posts);
+    postsSignal.set(posts);
 
     // Expand all posts to 1 levels by default
     expandToDepth(1);

@@ -16,11 +16,10 @@ import {
 } from "./handlers.ts";
 import {
   flattenPosts,
-  getDecryptedTitles,
-  getLoadedPost,
-  getPosts,
+  decryptedTitlesSignal,
+  loadedPostSignal,
+  postsSignal,
   isExpanded,
-  setDecryptedTitles,
   setPostChildren,
   toggleExpanded,
 } from "./state/index.ts";
@@ -35,8 +34,8 @@ export function renderPostNode(
   depth: number,
   index: number,
 ): HTMLElement {
-  const loadedPost = getLoadedPost();
-  const decryptedTitles = getDecryptedTitles();
+  const loadedPost = loadedPostSignal.get();
+  const decryptedTitles = decryptedTitlesSignal.get();
   const expanded = isExpanded(post.uuid);
 
   // Wrapper div for drag and drop
@@ -62,15 +61,17 @@ export function renderPostNode(
   if (post.has_children) {
     const expandBtn = document.createElement("button");
     expandBtn.className = "ghost post-expand-btn";
-    if (__TEST_MODE__) {
-      expandBtn.setAttribute("data-testid", "test-post-expand-btn");
-    }
     expandBtn.setAttribute("data-post-expanded", String(expanded));
-    expandBtn.innerHTML = `<span class="chevron-expand" data-testid="test-chevron">${chevron}</span>`;
     expandBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       handleToggleExpand(post);
     });
+    if (__TEST_MODE__) {
+      expandBtn.setAttribute("data-testid", "test-post-expand-btn");
+      expandBtn.innerHTML = `<span class="chevron-expand" data-testid="test-chevron">${chevron}</span>`;
+    } else {
+      expandBtn.innerHTML = `<span class="chevron-expand">${chevron}</span>`;
+    }
     itemContainer.appendChild(expandBtn);
   } else {
     // Spacer for alignment
@@ -120,7 +121,7 @@ export function renderPostList(): void {
   const list = getOptionalElement("post-list");
   if (!list) return;
 
-  const posts = getPosts();
+  const posts = postsSignal.get();
   list.innerHTML = "";
 
   // Render tree recursively
@@ -172,7 +173,7 @@ export async function handleToggleExpand(post: PostNode): Promise<void> {
       // Decrypt titles for the new children
       const allPosts = flattenPosts();
       const titles = await decryptPostTitles(allPosts);
-      setDecryptedTitles(titles);
+      decryptedTitlesSignal.set(titles);
     } catch (err) {
       console.error("Failed to load children:", err);
       return;

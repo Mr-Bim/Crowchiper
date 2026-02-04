@@ -9,6 +9,8 @@ import { getServer, Server } from "../utils/server.ts";
 import { BrowserContext } from "@playwright/test";
 
 test.describe("Post navigation", () => {
+  test.describe.configure({ mode: "serial" });
+
   let context: BrowserContext;
   let userResult: CreateUserResult;
   let baseUrl: string;
@@ -386,6 +388,8 @@ test.describe("Post navigation", () => {
 });
 
 test.describe("Post navigation - sync behavior", () => {
+  test.describe.configure({ mode: "serial" });
+
   let context: BrowserContext;
   let userResult: CreateUserResult;
   let baseUrl: string;
@@ -532,6 +536,8 @@ test.describe("Post navigation - sync behavior", () => {
 });
 
 test.describe("Post navigation - editor state", () => {
+  test.describe.configure({ mode: "serial" });
+
   let context: BrowserContext;
   let userResult: CreateUserResult;
   let baseUrl: string;

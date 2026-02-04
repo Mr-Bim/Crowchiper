@@ -12,15 +12,14 @@ import { parseAttachmentUuids } from "../shared/attachment-utils.ts";
 import { clearImageCacheExcept } from "../shared/image-cache.ts";
 import {
   clearSaveTimeout,
-  getEditor,
-  getLoadedDecryptedContent,
-  getLoadedPost,
-  getPendingEncryptedData,
-  setDecryptedTitle,
-  setIsDirty,
-  setPendingEncryptedData,
+  editorSignal,
+  loadedDecryptedContentSignal,
+  loadedPostSignal,
+  pendingEncryptedDataSignal,
+  decryptedTitlesSignal,
+  isDirtySignal,
   setSaveTimeout,
-  setSyncStatus,
+  syncStatusSignal,
 } from "./state/index.ts";
 
 // --- Constants ---
@@ -40,7 +39,7 @@ function extractTitle(content: string): string {
  * Build the update payload from pending encrypted data.
  */
 function buildUpdatePayload(
-  pendingData: NonNullable<ReturnType<typeof getPendingEncryptedData>>,
+  pendingData: NonNullable<ReturnType<typeof pendingEncryptedDataSignal.get>>,
   attachmentUuids?: string[],
 ) {
   return {
@@ -70,7 +69,7 @@ function clearSyncedTimeout(): void {
 
 function handleBeforeUnload(e: BeforeUnloadEvent): void {
   // Check if there's pending data that hasn't been saved
-  if (getPendingEncryptedData()) {
+  if (pendingEncryptedDataSignal.get()) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -89,15 +88,15 @@ export function setupBeforeUnloadWarning(): void {
 export function scheduleAutosave(): void {
   clearSaveTimeout();
   clearSyncedTimeout();
-  setSyncStatus("pending");
+  syncStatusSignal.set("pending");
 
   // Update title immediately for responsive UI
-  const loadedPost = getLoadedPost();
-  const editor = getEditor();
+  const loadedPost = loadedPostSignal.get();
+  const editor = editorSignal.get();
   if (loadedPost && editor) {
     const content = editor.state.doc.toString();
     const title = extractTitle(content);
-    setDecryptedTitle(loadedPost.uuid, title);
+    decryptedTitlesSignal.update((m) => new Map(m).set(loadedPost.uuid, title));
     callRenderPostList();
   }
 
@@ -121,8 +120,8 @@ async function autosave(): Promise<void> {
  * Does NOT save to server.
  */
 export async function encryptCurrentPost(): Promise<void> {
-  const loadedPost = getLoadedPost();
-  const editor = getEditor();
+  const loadedPost = loadedPostSignal.get();
+  const editor = editorSignal.get();
 
   if (!loadedPost || !editor) return;
 
@@ -132,7 +131,7 @@ export async function encryptCurrentPost(): Promise<void> {
   try {
     const encrypted = await encryptPostData(title, content);
 
-    setPendingEncryptedData({
+    pendingEncryptedDataSignal.set({
       title: encrypted.title,
       titleEncrypted: encrypted.titleEncrypted,
       titleIv: encrypted.titleIv ?? null,
@@ -142,12 +141,12 @@ export async function encryptCurrentPost(): Promise<void> {
       encryptionVersion: encrypted.encryptionVersion ?? null,
     });
 
-    setDecryptedTitle(loadedPost.uuid, title);
-    setIsDirty(true);
+    decryptedTitlesSignal.update((m) => new Map(m).set(loadedPost.uuid, title));
+    isDirtySignal.set(true);
     callRenderPostList();
   } catch (err) {
     console.error("Failed to encrypt:", err);
-    setSyncStatus("error");
+    syncStatusSignal.set("error");
   }
 }
 
@@ -165,19 +164,19 @@ interface SaveOptions {
  * Used by all save paths except beacon (which uses sendBeacon).
  */
 async function savePost(options: SaveOptions = {}): Promise<void> {
-  const loadedPost = getLoadedPost();
-  const pendingData = getPendingEncryptedData();
+  const loadedPost = loadedPostSignal.get();
+  const pendingData = pendingEncryptedDataSignal.get();
 
   if (!loadedPost || !pendingData) return;
 
   const { includeAttachments, clearCache } = options;
 
-  setSyncStatus("syncing");
+  syncStatusSignal.set("syncing");
 
   try {
     let attachmentUuids: string[] | undefined;
     if (includeAttachments) {
-      const editor = getEditor();
+      const editor = editorSignal.get();
       if (editor) {
         const content = editor.state.doc.toString();
         attachmentUuids = await parseAttachmentUuids(content);
@@ -190,14 +189,14 @@ async function savePost(options: SaveOptions = {}): Promise<void> {
     );
 
     // Clear pending data after successful save
-    setPendingEncryptedData(null);
-    setIsDirty(false);
+    pendingEncryptedDataSignal.set(null);
+    isDirtySignal.set(false);
 
     // Show synced indicator briefly, then return to idle
-    setSyncStatus("synced");
+    syncStatusSignal.set("synced");
     clearSyncedTimeout();
     syncedTimeout = window.setTimeout(() => {
-      setSyncStatus("idle");
+      syncStatusSignal.set("idle");
     }, SYNCED_INDICATOR_MS);
 
     if (clearCache && attachmentUuids) {
@@ -205,7 +204,7 @@ async function savePost(options: SaveOptions = {}): Promise<void> {
     }
   } catch (err) {
     console.error("Failed to save to server:", err);
-    setSyncStatus("error");
+    syncStatusSignal.set("error");
   }
 }
 
@@ -216,13 +215,13 @@ async function savePost(options: SaveOptions = {}): Promise<void> {
  * Includes attachments and clears cache.
  */
 export async function saveToServerNow(): Promise<void> {
-  const loadedPost = getLoadedPost();
-  const editor = getEditor();
+  const loadedPost = loadedPostSignal.get();
+  const editor = editorSignal.get();
 
   if (!loadedPost || !editor) return;
 
   const currentContent = editor.state.doc.toString();
-  const originalContent = getLoadedDecryptedContent();
+  const originalContent = loadedDecryptedContentSignal.get();
 
   // Only save if content has actually changed
   if (currentContent === originalContent) return;
@@ -237,8 +236,8 @@ export async function saveToServerNow(): Promise<void> {
  * Immediately encrypts and saves the current post.
  */
 export async function forceSave(): Promise<void> {
-  const loadedPost = getLoadedPost();
-  const editor = getEditor();
+  const loadedPost = loadedPostSignal.get();
+  const editor = editorSignal.get();
 
   if (!loadedPost || !editor) return;
 
@@ -253,9 +252,9 @@ export async function forceSave(): Promise<void> {
  * Uses sendBeacon for reliability - cannot be async.
  */
 export function saveBeacon(): void {
-  const loadedPost = getLoadedPost();
-  const editor = getEditor();
-  const pendingData = getPendingEncryptedData();
+  const loadedPost = loadedPostSignal.get();
+  const editor = editorSignal.get();
+  const pendingData = pendingEncryptedDataSignal.get();
 
   if (!loadedPost || !editor || !pendingData) return;
 

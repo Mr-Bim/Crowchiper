@@ -18,18 +18,17 @@ import {
   clearSaveTimeout,
   findPost,
   getFirstSelectablePost,
-  getLoadedPost,
+  loadedPostSignal,
   getSiblingUuids,
   isLoading,
   movePostInSiblings,
   movePostToParent,
   removePost,
-  setDecryptedTitle,
+  decryptedTitlesSignal,
   setExpanded,
-  setIsDirty,
-  setLoadedDecryptedContent,
-  setLoadedPost,
-  setPendingEncryptedData,
+  isDirtySignal,
+  loadedDecryptedContentSignal,
+  pendingEncryptedDataSignal,
 } from "./state/index.ts";
 import { saveToServerNow } from "./save.ts";
 import { renderPostList } from "./render.ts";
@@ -39,9 +38,12 @@ import { destroyEditor, setupEditor } from "./editor.ts";
 /**
  * Create a new post.
  * Returns early if a post is currently loading.
+ * @param parentId - Parent post UUID (null for root level)
+ * @param afterUuid - Insert after this sibling UUID (undefined for beginning)
  */
 export async function handleNewPost(
   parentId: string | null = null,
+  afterUuid?: string,
 ): Promise<void> {
   // Ignore if currently loading a post
   if (isLoading()) return;
@@ -50,8 +52,8 @@ export async function handleNewPost(
   await saveToServerNow();
 
   // Clear pending data
-  setPendingEncryptedData(null);
-  setIsDirty(false);
+  pendingEncryptedDataSignal.set(null);
+  isDirtySignal.set(false);
 
   try {
     const defaultTitle = "Untitled";
@@ -86,7 +88,7 @@ export async function handleNewPost(
       created_at: post.created_at,
       updated_at: post.updated_at,
     };
-    addPost(node, parentId);
+    addPost(node, parentId, afterUuid);
 
     // Expand parent if creating under one
     if (parentId) {
@@ -94,15 +96,17 @@ export async function handleNewPost(
     }
 
     // Set decrypted title
-    setDecryptedTitle(post.uuid, displayTitle);
+    decryptedTitlesSignal.update((m) =>
+      new Map(m).set(post.uuid, displayTitle),
+    );
 
     // Load into editor
-    setLoadedPost({
+    loadedPostSignal.set({
       ...post,
       title: displayTitle,
       content: displayContent,
     });
-    setLoadedDecryptedContent(displayContent);
+    loadedDecryptedContentSignal.set(displayContent);
 
     const container = getOptionalElement("editor");
     if (container) {
@@ -124,7 +128,7 @@ export async function handleNewPost(
  * Delete the currently selected post.
  */
 export async function handleDeletePost(): Promise<void> {
-  const loadedPost = getLoadedPost();
+  const loadedPost = loadedPostSignal.get();
   if (!loadedPost) return;
 
   await handleDeletePostByNode(findPost(loadedPost.uuid));
@@ -151,14 +155,14 @@ export async function handleDeletePostByNode(
 
   if (!confirm(message)) return;
 
-  const loadedPost = getLoadedPost();
+  const loadedPost = loadedPostSignal.get();
   const isDeletingLoadedPost = loadedPost?.uuid === postNode.uuid;
 
   // If deleting the currently loaded post, clear pending saves
   if (isDeletingLoadedPost) {
     clearSaveTimeout();
-    setPendingEncryptedData(null);
-    setIsDirty(false);
+    pendingEncryptedDataSignal.set(null);
+    isDirtySignal.set(false);
   }
 
   try {
@@ -172,8 +176,8 @@ export async function handleDeletePostByNode(
 
     // If we deleted the loaded post, clear the editor
     if (isDeletingLoadedPost) {
-      setLoadedPost(null);
-      setLoadedDecryptedContent(null);
+      loadedPostSignal.set(null);
+      loadedDecryptedContentSignal.set(null);
       destroyEditor();
     }
 

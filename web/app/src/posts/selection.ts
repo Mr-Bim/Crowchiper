@@ -16,12 +16,12 @@ import {
 } from "../shared/attachment-utils.ts";
 import { getOptionalElement } from "../../../shared/dom.ts";
 import {
-  setDecryptedTitle,
-  setIsDirty,
+  decryptedTitlesSignal,
+  isDirtySignal,
   setLastSelectedPostUuid,
-  setLoadedDecryptedContent,
-  setLoadedPost,
-  setPendingEncryptedData,
+  loadedDecryptedContentSignal,
+  loadedPostSignal,
+  pendingEncryptedDataSignal,
   withLoadingLock,
 } from "./state/index.ts";
 import { saveToServerNow } from "./save.ts";
@@ -70,15 +70,15 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     await saveToServerNow();
 
     // Clear pending data for new post
-    setPendingEncryptedData(null);
-    setIsDirty(false);
+    pendingEncryptedDataSignal.set(null);
+    isDirtySignal.set(false);
 
     const container = getOptionalElement("editor");
     if (!container) return;
 
     // Fetch full post data
     const post = await getPost(postNode.uuid);
-    setLoadedPost(post);
+    loadedPostSignal.set(post);
 
     // Remember this post for next session
     setLastSelectedPostUuid(post.uuid);
@@ -86,11 +86,13 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     // Decrypt content and clean up any interrupted upload placeholders
     const decryptedContent = await decryptPostContent(post);
     const displayContent = cleanupPendingUploads(decryptedContent);
-    setLoadedDecryptedContent(displayContent);
+    loadedDecryptedContentSignal.set(displayContent);
 
     // Decrypt title for display (stored separately, post.title stays encrypted)
     const displayTitle = await decryptPostTitle(post);
-    setDecryptedTitle(post.uuid, displayTitle);
+    decryptedTitlesSignal.update((m) =>
+      new Map(m).set(post.uuid, displayTitle),
+    );
 
     renderPostList();
 

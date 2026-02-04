@@ -2,13 +2,13 @@
  * State management for posts module.
  *
  * Re-exports all state-related functions organized by concern:
- * - signals: Reactive state (editor, posts, loadedPost, isDirty)
+ * - signals: Reactive state (editor, posts, loadedPost, isDirty, etc.)
  * - tree: Tree traversal and manipulation
- * - ui-state: Non-reactive UI state (titles, expanded, save timers)
+ * - ui-state: Non-reactive UI state (expanded helpers, save timers)
  * - loading: Loading lock for async operations
  */
 
-// Reactive signals and their accessors
+// Reactive signals - use .get(), .set(), .update(), .subscribe()
 export {
   type SyncStatus,
   editorSignal,
@@ -17,18 +17,10 @@ export {
   loadedDecryptedContentSignal,
   isDirtySignal,
   syncStatusSignal,
-  getEditor,
-  setEditor,
-  getPosts,
-  setPosts,
-  getLoadedPost,
-  setLoadedPost,
-  getLoadedDecryptedContent,
-  setLoadedDecryptedContent,
-  getIsDirty,
-  setIsDirty,
-  getSyncStatus,
-  setSyncStatus,
+  decryptedTitlesSignal,
+  expandedPostsSignal,
+  expandedChangedSignal,
+  pendingEncryptedDataSignal,
 } from "./signals.ts";
 
 // Tree operations
@@ -47,22 +39,15 @@ export {
 } from "./tree.ts";
 
 // Non-reactive UI state
+export type { PendingEncryptedData } from "./ui-state.ts";
 export {
-  type PendingEncryptedData,
   getLastSelectedPostUuid,
   setLastSelectedPostUuid,
   clearLastSelectedPostUuid,
-  getDecryptedTitles,
-  setDecryptedTitles,
-  setDecryptedTitle,
-  getDecryptedTitle,
   isExpanded,
   toggleExpanded,
   setExpanded,
   expandToDepth,
-  expandedChangedSignal,
-  getPendingEncryptedData,
-  setPendingEncryptedData,
   setSaveTimeout,
   clearSaveTimeout,
 } from "./ui-state.ts";

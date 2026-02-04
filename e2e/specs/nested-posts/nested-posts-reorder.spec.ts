@@ -48,7 +48,7 @@ test.describe("Nested posts - Reordering", () => {
       timeout: 10000,
     });
 
-    // Create posts: Post A, Post B, Post C
+    // Create posts: Post A, Post B, Post C (each inserted after the previous)
     await createPostWithTitle(page, "Post A");
     await createPostWithTitle(page, "Post B");
     await createPostWithTitle(page, "Post C");
@@ -59,31 +59,37 @@ test.describe("Nested posts - Reordering", () => {
       timeout: 5000,
     });
 
-    // Order should be: Post C, Post B, Post A, Untitled (newest first)
+    // Order should be: Untitled, Post A, Post B, Post C (each new post after current)
     const wrappers = postList.locator('[data-testid="test-post-wrapper"]');
     await expect(
       wrappers.nth(0).locator('[data-testid="test-post-item"]'),
+    ).toHaveText("Untitled");
+    await expect(
+      wrappers.nth(1).locator('[data-testid="test-post-item"]'),
+    ).toHaveText("Post A");
+    await expect(
+      wrappers.nth(2).locator('[data-testid="test-post-item"]'),
+    ).toHaveText("Post B");
+    await expect(
+      wrappers.nth(3).locator('[data-testid="test-post-item"]'),
     ).toHaveText("Post C");
+
+    // Drag Post B above Post A (reorder within siblings)
+    await dragPostToPost(page, "Post B", "Post A", {
+      centerTarget: false,
+      topEdge: true,
+    });
+
+    // New order should be: Untitled, Post B, Post A, Post C
+    await expect(
+      wrappers.nth(0).locator('[data-testid="test-post-item"]'),
+    ).toHaveText("Untitled");
     await expect(
       wrappers.nth(1).locator('[data-testid="test-post-item"]'),
     ).toHaveText("Post B");
     await expect(
       wrappers.nth(2).locator('[data-testid="test-post-item"]'),
     ).toHaveText("Post A");
-
-    // Drag Post C below Post B (reorder within siblings)
-    await dragPostToPost(page, "Post C", "Post B", {
-      centerTarget: false,
-      topEdge: false,
-    });
-
-    // New order should be: Post B, Post C, Post A, Untitled
-    await expect(
-      wrappers.nth(0).locator('[data-testid="test-post-item"]'),
-    ).toHaveText("Post B");
-    await expect(
-      wrappers.nth(1).locator('[data-testid="test-post-item"]'),
-    ).toHaveText("Post C");
   });
 
   test("reorder within nested children works correctly", async () => {

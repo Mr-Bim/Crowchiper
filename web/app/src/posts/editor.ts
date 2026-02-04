@@ -6,7 +6,7 @@
  */
 
 import { applySpellcheckToEditor } from "../spellcheck.ts";
-import { getEditor, getLoadedPost, setEditor } from "./state/index.ts";
+import { editorSignal, loadedPostSignal } from "./state/index.ts";
 import { scheduleAutosave } from "./save.ts";
 
 // Lazy-load editor chunk - only starts when setupEditor is first called
@@ -27,11 +27,11 @@ export async function setupEditor(
   container: HTMLElement,
   content: string,
 ): Promise<void> {
-  const existingEditor = getEditor();
+  const existingEditor = editorSignal.get();
   const { createEditor, resetEditorContent } = await getEditorModule();
 
   const onDocChange = () => {
-    if (getLoadedPost()) {
+    if (loadedPostSignal.get()) {
       scheduleAutosave();
     }
   };
@@ -44,7 +44,7 @@ export async function setupEditor(
     container.innerHTML = "";
     // Create the editor
     const newEditor = createEditor(container, content, onDocChange);
-    setEditor(newEditor);
+    editorSignal.set(newEditor);
   }
 
   applySpellcheckToEditor();
@@ -55,9 +55,9 @@ export async function setupEditor(
  * Used when deleting posts or clearing the editor area.
  */
 export function destroyEditor(): void {
-  const editor = getEditor();
+  const editor = editorSignal.get();
   if (editor) {
     editor.destroy();
-    setEditor(null);
+    editorSignal.set(null);
   }
 }
