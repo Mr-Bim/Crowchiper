@@ -303,21 +303,19 @@ impl AttachmentStore {
         Ok(rows.into_iter().map(|r| r.0).collect())
     }
 
-    /// Update attachment references for a post.
+    /// Update attachment references for a post within an existing transaction.
     /// Computes the diff between current and new attachments, updates ref counts accordingly.
-    pub async fn update_post_attachments(
-        &self,
+    pub async fn update_post_attachments_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         post_id: i64,
         user_id: i64,
         new_uuids: &[String],
     ) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
         // Get current attachments for this post
         let current_rows: Vec<(String,)> =
             sqlx::query_as("SELECT attachment_uuid FROM post_attachments WHERE post_id = ?")
                 .bind(post_id)
-                .fetch_all(&mut *tx)
+                .fetch_all(&mut **tx)
                 .await?;
         let current: std::collections::HashSet<String> =
             current_rows.into_iter().map(|r| r.0).collect();
@@ -333,7 +331,7 @@ impl AttachmentStore {
             )
             .bind(uuid)
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             // Delete if reference count is now 0
@@ -342,14 +340,14 @@ impl AttachmentStore {
             )
             .bind(uuid)
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             // Remove from post_attachments
             sqlx::query("DELETE FROM post_attachments WHERE post_id = ? AND attachment_uuid = ?")
                 .bind(post_id)
                 .bind(uuid)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         }
 
@@ -362,7 +360,7 @@ impl AttachmentStore {
             )
             .bind(uuid)
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             // Add to post_attachments
@@ -371,11 +369,67 @@ impl AttachmentStore {
             )
             .bind(post_id)
             .bind(uuid)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
 
+        Ok(())
+    }
+
+    /// Update attachment references for a post.
+    /// Computes the diff between current and new attachments, updates ref counts accordingly.
+    pub async fn update_post_attachments(
+        &self,
+        post_id: i64,
+        user_id: i64,
+        new_uuids: &[String],
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+        Self::update_post_attachments_tx(&mut tx, post_id, user_id, new_uuids).await?;
         tx.commit().await?;
+        Ok(())
+    }
+
+    /// Remove all attachment references for a post within an existing transaction.
+    /// Decrements ref counts and deletes attachments with 0 refs.
+    pub async fn remove_post_attachments_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        post_id: i64,
+        user_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        // Get current attachments for this post
+        let current_rows: Vec<(String,)> =
+            sqlx::query_as("SELECT attachment_uuid FROM post_attachments WHERE post_id = ?")
+                .bind(post_id)
+                .fetch_all(&mut **tx)
+                .await?;
+
+        // Decrement ref count for each and delete if 0
+        for (uuid,) in current_rows {
+            sqlx::query(
+                "UPDATE attachments SET reference_count = reference_count - 1
+                 WHERE uuid = ? AND user_id = ? AND reference_count > 0",
+            )
+            .bind(&uuid)
+            .bind(user_id)
+            .execute(&mut **tx)
+            .await?;
+
+            sqlx::query(
+                "DELETE FROM attachments WHERE uuid = ? AND user_id = ? AND reference_count = 0",
+            )
+            .bind(&uuid)
+            .bind(user_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+
+        // Remove all post_attachments entries for this post
+        sqlx::query("DELETE FROM post_attachments WHERE post_id = ?")
+            .bind(post_id)
+            .execute(&mut **tx)
+            .await?;
+
         Ok(())
     }
 
@@ -387,40 +441,7 @@ impl AttachmentStore {
         user_id: i64,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-
-        // Get current attachments for this post
-        let current_rows: Vec<(String,)> =
-            sqlx::query_as("SELECT attachment_uuid FROM post_attachments WHERE post_id = ?")
-                .bind(post_id)
-                .fetch_all(&mut *tx)
-                .await?;
-
-        // Decrement ref count for each and delete if 0
-        for (uuid,) in current_rows {
-            sqlx::query(
-                "UPDATE attachments SET reference_count = reference_count - 1
-                 WHERE uuid = ? AND user_id = ? AND reference_count > 0",
-            )
-            .bind(&uuid)
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await?;
-
-            sqlx::query(
-                "DELETE FROM attachments WHERE uuid = ? AND user_id = ? AND reference_count = 0",
-            )
-            .bind(&uuid)
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await?;
-        }
-
-        // Remove all post_attachments entries for this post
-        sqlx::query("DELETE FROM post_attachments WHERE post_id = ?")
-            .bind(post_id)
-            .execute(&mut *tx)
-            .await?;
-
+        Self::remove_post_attachments_tx(&mut tx, post_id, user_id).await?;
         tx.commit().await?;
         Ok(())
     }

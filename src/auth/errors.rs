@@ -15,6 +15,7 @@ pub enum AuthErrorKind {
     TokenRevoked,
     UserNotFound,
     AccountNotActivated,
+    InsufficientRole,
     DatabaseError,
 }
 
@@ -36,7 +37,9 @@ impl ApiAuthError {
             | AuthErrorKind::InvalidToken
             | AuthErrorKind::TokenRevoked
             | AuthErrorKind::UserNotFound => StatusCode::UNAUTHORIZED,
-            AuthErrorKind::AccountNotActivated => StatusCode::FORBIDDEN,
+            AuthErrorKind::AccountNotActivated | AuthErrorKind::InsufficientRole => {
+                StatusCode::FORBIDDEN
+            }
             AuthErrorKind::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -48,6 +51,7 @@ impl ApiAuthError {
             AuthErrorKind::TokenRevoked => "Token has been revoked",
             AuthErrorKind::UserNotFound => "User not found",
             AuthErrorKind::AccountNotActivated => "Account not activated",
+            AuthErrorKind::InsufficientRole => "Insufficient permissions",
             AuthErrorKind::DatabaseError => "Database error",
         }
     }

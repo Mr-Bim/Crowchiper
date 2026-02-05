@@ -8,12 +8,12 @@ DO always update the appropriate CLAUDE.md after a finished task.
 ## Commands
 
 ```bash
-npm run build-all          # Build frontend for production (no test mode)
-npm run build-all-test     # Build frontend with test mode
+npm run build              # Build all frontends for production (login, app, dashboard)
+npm run build:test         # Build all frontends with test mode (app has TEST_MODE=1)
 npm run prepare-test       # Build frontend and rust in test mode, run before tests
 npm run lint:fix           # TypeScript type check (tsc) and lint fix (oxlint)
 npm run test:rust          # Run Rust tests (requires prior cargo build --features test-mode)
-npm run test:web           # Run Playwright tests (requires prior build-all-test + cargo build)
+npm run test:web           # Run Playwright tests (requires prior build:test + cargo build)
 npm run test:all           # Run both test:rust and test:web
 cargo run -- --port 7291 --database crowchiper.db
 cargo run -- --base /app   # With base path for reverse proxy
@@ -25,7 +25,9 @@ cargo build --release      # Release build (test-mode not included by default)
 
 ## URL Structure
 
-iery-sparrow/*` - JWT-protected app
+- `/login/*` - Public login/register pages
+- `/fiery-sparrow/*` - JWT-protected app
+- `/dashboard/*` - JWT-protected admin dashboard
 - `/api/*` - API endpoints (mixed auth)
 
 With `--base /app`, all paths are prefixed.
@@ -653,6 +655,33 @@ impl_has_auth_state!(MyApiState);
 
 The macro implements `HasAuthState` trait methods (`jwt()`, `db()`, `secure_cookies()`, `ip_extractor()`).
 
+## Database Layer Patterns
+
+### Transaction-Aware Methods
+
+Stores (`PostStore`, `AttachmentStore`) provide `_tx` associated functions that accept `&mut sqlx::Transaction` for use in cross-store transactions:
+
+```rust
+// Associated functions (no &self) - operate on a transaction
+PostStore::get_id_by_uuid_tx(&mut tx, uuid, user_id)
+PostStore::update_tx(&mut tx, uuid, user_id, ...)
+PostStore::get_descendant_ids_tx(&mut tx, uuid, user_id)
+PostStore::delete_tx(&mut tx, uuid, user_id)
+AttachmentStore::update_post_attachments_tx(&mut tx, post_id, user_id, uuids)
+AttachmentStore::remove_post_attachments_tx(&mut tx, post_id, user_id)
+```
+
+The non-`_tx` methods on each store still exist as wrappers that create their own transactions.
+
+### Cross-Store Coordination on `Database`
+
+When operations need to span multiple stores atomically, use coordinating methods on `Database`:
+
+- `db.update_post_with_attachments(UpdatePostParams { ... })` - Updates post + attachment refs in one transaction
+- `db.delete_post_with_attachments(uuid, user_id)` - Cleans up attachments for all descendants + deletes post in one transaction
+
+**Rule:** API handlers should NOT contain raw SQL queries or create transactions directly. Use store methods or `Database` coordinating methods instead.
+
 ## Rust Tests
 
 Test files located in `tests/` folder:
@@ -765,10 +794,47 @@ base-uri 'self'
 - **frame-ancestors**: Prevents clickjacking by disallowing framing
 - **form-action**: Restricts form submissions to same origin
 
-### Separate Headers for Login/App
-Login and app pages have different script hashes, so they get different CSP headers:
+### Separate Headers per Frontend
+Each frontend has different script hashes, so they get different CSP headers:
 - `LOGIN_CSP_HEADER` - For `/login/*` pages
 - `APP_CSP_HEADER` - For `/fiery-sparrow/*` pages
+- `DASHBOARD_CSP_HEADER` - For `/dashboard/*` pages
+
+## Frontend Asset Architecture
+
+The app serves multiple frontends (login, app, dashboard) from embedded assets. The architecture uses a generic pattern to avoid code duplication.
+
+### Key Types (`src/assets.rs`)
+
+- **`FrontendConfig`** - Configuration for a single frontend (path, CSP header, processed HTML)
+- **`HtmlResponder`** - Function pointer type `fn(&str, &'static str) -> Response` for HTML responses
+- **`AssetsState`** - Holds all frontend configs plus auth state
+
+### HTML Response Strategy
+
+Instead of checking `csp_nonce` in every handler, a function pointer is chosen once at startup:
+- `html_response_static` - Uses static CSP header (faster)
+- `html_response_with_nonce` - Generates random nonce per request (for Cloudflare bot detection)
+
+### Generic Handler Pattern
+
+The `serve_frontend<T: Embed>()` function handles all frontends:
+1. For HTML files: check `processed_html` first (base path rewriting), then raw assets
+2. For other files: serve directly from embedded assets with appropriate caching
+
+Individual handlers are thin wrappers that specify the Embed type and auth requirements:
+```rust
+pub async fn app_handler(state, AssetAuth(_), path) -> Response {
+    serve_frontend::<AppAssets>(path, &state.app, state.html_responder)
+}
+```
+
+### Adding a New Frontend
+
+1. **Vite config** (`vite.config.js`): Add to `devApps` array and create build config
+2. **build.rs**: Add `CONFIG_*_ASSETS` env var and CSP header generation
+3. **assets.rs**: Add `#[derive(Embed)]` struct, CSP constant, and handler function
+4. **lib.rs**: Create `FrontendConfig`, add routes
 
 ## Playwright E2E Tests
 

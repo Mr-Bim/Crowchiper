@@ -66,6 +66,20 @@ pub struct DeleteResult {
     pub children_deleted: i64,
 }
 
+/// Parameters for updating a post with optional attachment references.
+pub struct UpdatePostParams<'a> {
+    pub uuid: &'a str,
+    pub user_id: i64,
+    pub title: Option<&'a str>,
+    pub title_encrypted: bool,
+    pub title_iv: Option<&'a str>,
+    pub content: &'a str,
+    pub content_encrypted: bool,
+    pub iv: Option<&'a str>,
+    pub encryption_version: Option<i32>,
+    pub attachment_uuids: Option<&'a [String]>,
+}
+
 #[derive(sqlx::FromRow)]
 struct PostRow {
     id: i64,
@@ -409,6 +423,94 @@ impl PostStore {
         }
 
         Ok(nodes)
+    }
+
+    /// Get the internal post ID by UUID within an existing transaction.
+    /// Returns None if post doesn't exist or doesn't belong to user.
+    pub async fn get_id_by_uuid_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        uuid: &str,
+        user_id: i64,
+    ) -> Result<Option<i64>, sqlx::Error> {
+        let row: Option<(i64,)> =
+            sqlx::query_as("SELECT id FROM posts WHERE uuid = ? AND user_id = ?")
+                .bind(uuid)
+                .bind(user_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    /// Update a post within an existing transaction.
+    /// Returns true if the post was updated.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        uuid: &str,
+        user_id: i64,
+        title: Option<&str>,
+        title_encrypted: bool,
+        title_iv: Option<&str>,
+        content: &str,
+        content_encrypted: bool,
+        iv: Option<&str>,
+        encryption_version: Option<i32>,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE posts SET title = ?, title_encrypted = ?, title_iv = ?, content = ?, content_encrypted = ?, iv = ?, encryption_version = ?, updated_at = datetime('now')
+             WHERE uuid = ? AND user_id = ?",
+        )
+        .bind(title)
+        .bind(title_encrypted)
+        .bind(title_iv)
+        .bind(content)
+        .bind(content_encrypted)
+        .bind(iv)
+        .bind(encryption_version)
+        .bind(uuid)
+        .bind(user_id)
+        .execute(&mut **tx)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Get all descendant post IDs (including the post itself) within a transaction.
+    pub async fn get_descendant_ids_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        uuid: &str,
+        user_id: i64,
+    ) -> Result<Vec<i64>, sqlx::Error> {
+        let rows: Vec<(i64,)> = sqlx::query_as(
+            "WITH RECURSIVE descendants AS (
+                SELECT id FROM posts WHERE uuid = ? AND user_id = ?
+                UNION ALL
+                SELECT p.id FROM posts p
+                INNER JOIN descendants d ON p.parent_id = (SELECT uuid FROM posts WHERE id = d.id)
+                WHERE p.user_id = ?
+            )
+            SELECT id FROM descendants",
+        )
+        .bind(uuid)
+        .bind(user_id)
+        .bind(user_id)
+        .fetch_all(&mut **tx)
+        .await?;
+        Ok(rows.into_iter().map(|r| r.0).collect())
+    }
+
+    /// Delete a post within an existing transaction.
+    /// Returns true if the post was deleted.
+    pub async fn delete_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        uuid: &str,
+        user_id: i64,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query("DELETE FROM posts WHERE uuid = ? AND user_id = ?")
+            .bind(uuid)
+            .bind(user_id)
+            .execute(&mut **tx)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Update a post by UUID. Only updates if the post belongs to the given user.

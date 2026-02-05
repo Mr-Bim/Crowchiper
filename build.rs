@@ -67,6 +67,9 @@ fn main() {
     // Login assets path is always /login
     println!("cargo:rustc-env=CONFIG_LOGIN_ASSETS=/login");
 
+    // Dashboard assets path is always /dashboard
+    println!("cargo:rustc-env=CONFIG_DASHBOARD_ASSETS=/dashboard");
+
     // Load CSP hashes from build output
     let csp_hashes =
         fs::read_to_string("dist/csp-hashes.json").expect("Failed to read dist/csp-hashes.json");
@@ -110,4 +113,22 @@ fn main() {
         ("base-uri", "'self'"),
     ]);
     println!("cargo:rustc-env=CSP_HEADER_APP={}", app_csp);
+
+    // Build CSP header for dashboard pages
+    let dashboard_script_hashes = format_hashes(&csp_json["dashboard"]["scripts"]);
+    let dashboard_style_hashes = format_hashes(&csp_json["dashboard"]["styles"]);
+    let dashboard_csp = build_csp(&[
+        ("default-src", "'none'"),
+        (
+            "script-src",
+            &format!("'strict-dynamic' {}", dashboard_script_hashes),
+        ),
+        ("style-src", &format!("'self' {}", dashboard_style_hashes)),
+        ("img-src", "'self' data:"),
+        ("connect-src", "'self'"),
+        ("frame-ancestors", "'none'"),
+        ("form-action", "'self'"),
+        ("base-uri", "'self'"),
+    ]);
+    println!("cargo:rustc-env=CSP_HEADER_DASHBOARD={}", dashboard_csp);
 }

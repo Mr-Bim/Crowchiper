@@ -37,6 +37,12 @@ const devApps = [
     srcDir: "web/app",
     iifeConfig: false,
   },
+  {
+    name: "dashboard",
+    base: "/dashboard",
+    srcDir: "web/dashboard",
+    iifeConfig: false,
+  },
 ];
 
 // Unified dev server configuration
@@ -151,15 +157,52 @@ const app = defineConfig({
   },
 });
 
+// Dashboard build: web/dashboard/ -> dist/dashboard/ with base /dashboard
+const dashboardHtmlFiles = globSync("web/dashboard/**/*.html");
+const dashboardInput = Object.fromEntries(
+  dashboardHtmlFiles.map((file) => {
+    const name = file.replace("web/dashboard/", "").replace(".html", "");
+    return [name, resolve(__dirname, file)];
+  }),
+);
+
+const dashboard = defineConfig({
+  root: "web/dashboard/",
+  base: "/dashboard/",
+  build: {
+    outDir: "../../dist/dashboard",
+    emptyOutDir: true,
+    rollupOptions: {
+      input: dashboardInput,
+    },
+    minify: true,
+    cssMinify: "lightningcss",
+  },
+  css: {
+    transformer: "lightningcss",
+    lightningcss: {
+      drafts: {
+        customMedia: true,
+      },
+    },
+  },
+  plugins: [
+    buildPlugin({ assetsPath: "/dashboard", sourceDir: "web/dashboard" }),
+  ],
+});
+
 // Select config based on BUILD environment variable
 // - BUILD=login: Production build for login pages
 // - BUILD=app: Production build for app pages
+// - BUILD=dashboard: Production build for dashboard pages
 // - No BUILD (dev): Unified dev server serving all apps
 let out;
 if (process.env.BUILD === "login") {
   out = login;
 } else if (process.env.BUILD === "app") {
   out = app;
+} else if (process.env.BUILD === "dashboard") {
+  out = dashboard;
 } else {
   out = dev;
 }

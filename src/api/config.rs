@@ -4,7 +4,7 @@ use axum::{Json, Router, extract::State, routing::get};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::auth::MaybeAuth;
+use crate::auth::OptionalAuth;
 use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::impl_has_auth_state;
@@ -41,7 +41,7 @@ pub fn router(state: ConfigState) -> Router {
 
 async fn get_config(
     State(state): State<ConfigState>,
-    MaybeAuth(user): MaybeAuth,
+    OptionalAuth(user): OptionalAuth,
 ) -> Json<ConfigResponse> {
     Json(ConfigResponse {
         no_signup: state.no_signup,

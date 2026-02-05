@@ -15,7 +15,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::ActivatedApiAuth;
+use crate::auth::{AnyRole, Auth};
 use crate::cli::IpExtractor;
 use crate::db::{Database, attachments::CreateAttachmentInput};
 use crate::impl_has_auth_state;
@@ -73,7 +73,7 @@ struct UploadResponse {
 /// If user does not have encryption enabled, encryption_version must be 0.
 async fn upload_attachment(
     State(state): State<AttachmentsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut image_data: Option<Vec<u8>> = None;
@@ -177,7 +177,7 @@ async fn upload_attachment(
     let encryption_settings = state
         .db
         .encryption_settings()
-        .get(user.user_id)
+        .get(auth.user_id)
         .await
         .db_err("Failed to get encryption settings")?;
 
@@ -236,7 +236,7 @@ async fn upload_attachment(
     };
 
     let input = CreateAttachmentInput {
-        user_id: user.user_id,
+        user_id: auth.user_id,
         image_data: &image_data,
         image_iv: image_iv_opt.as_deref(),
         thumb_sm: &thumb_sm,
@@ -278,13 +278,13 @@ async fn upload_attachment(
 /// IV is returned in the `X-Encryption-IV` header (empty string if unencrypted).
 async fn get_attachment(
     State(state): State<AttachmentsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let attachment = state
         .db
         .attachments()
-        .get_by_uuid(&uuid, user.user_id)
+        .get_by_uuid(&uuid, auth.user_id)
         .await
         .db_err("Failed to get attachment")?
         .ok_or_else(|| ApiError::not_found("Attachment not found"))?;
@@ -308,7 +308,7 @@ async fn get_attachment(
 /// Size must be "sm", "md", or "lg".
 async fn get_thumbnail(
     State(state): State<AttachmentsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path((uuid, size)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate size parameter
@@ -319,7 +319,7 @@ async fn get_thumbnail(
     let thumbnail = state
         .db
         .attachments()
-        .get_thumbnail_by_size(&uuid, user.user_id, &size)
+        .get_thumbnail_by_size(&uuid, auth.user_id, &size)
         .await
         .db_err("Failed to get thumbnail")?
         .ok_or_else(|| ApiError::not_found("Thumbnail not found"))?;
@@ -342,13 +342,13 @@ async fn get_thumbnail(
 /// Each part has `X-Thumbnail-Size` header (sm, md, lg) and `X-Encryption-IV` header (empty if unencrypted).
 async fn get_thumbnails(
     State(state): State<AttachmentsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let thumbnails = state
         .db
         .attachments()
-        .get_thumbnails(&uuid, user.user_id)
+        .get_thumbnails(&uuid, auth.user_id)
         .await
         .db_err("Failed to get thumbnails")?
         .ok_or_else(|| ApiError::not_found("Attachment not found"))?;

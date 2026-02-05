@@ -13,27 +13,14 @@ pub mod rate_limit;
 pub use cli::local_ip_extractor;
 
 use api::create_api_router;
-use assets::{
-    AssetsState, app_handler, app_handler_direct, login_handler, login_handler_direct,
-    login_index_handler, process_app_html_files, process_login_html_files,
-};
-
-use auth::NEW_ACCESS_TOKEN_COOKIE;
-use axum::{
-    Router,
-    http::header::SET_COOKIE,
-    middleware::{self, Next},
-    response::{Redirect, Response},
-    routing::get,
-};
+use assets::{AssetsState, app_handler, dashboard_handler, login_handler, login_index_handler};
+use auth::add_access_token_cookie;
+use axum::{Router, middleware, response::Redirect, routing::get};
 use db::Database;
 use jwt::JwtConfig;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-
 use url::Url;
 use webauthn_rs::prelude::*;
 
@@ -58,54 +45,21 @@ pub struct ServerConfig {
     pub ip_extractor: Option<cli::IpExtractor>,
 }
 
-/// Leak a String to get a &'static str. Used for paths that live for the program lifetime.
-fn leak_string(s: String) -> &'static str {
-    Box::leak(s.into_boxed_str())
-}
-
-/// Middleware to add the new access token cookie to responses when token was refreshed.
-async fn add_access_token_cookie(request: axum::extract::Request, next: Next) -> Response {
-    // Set up task-local scope and run the handler inside it
-    NEW_ACCESS_TOKEN_COOKIE
-        .scope(RefCell::new(None), async {
-            let mut response = next.run(request).await;
-
-            // Check if a new access token cookie was set by the auth extractor
-            if let Some(cookie) = NEW_ACCESS_TOKEN_COOKIE.with(|cell| cell.borrow_mut().take()) {
-                if let Ok(value) = cookie.parse() {
-                    response.headers_mut().append(SET_COOKIE, value);
-                }
-            }
-
-            response
-        })
-        .await
-}
-
 /// Create the application router with the given configuration.
 pub fn create_app(config: &ServerConfig) -> Router {
-    let base_path: &'static str = leak_string(config.base.clone().unwrap_or("".to_string()));
-    let api_path: &'static str = leak_string(AssetsState::make_api_path(base_path));
-    let login_path: &'static str = leak_string(AssetsState::make_login_path(base_path));
-    let app_path: &'static str = leak_string(AssetsState::make_app_path(base_path));
+    // Create JWT config
+    let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));
 
-    // Process HTML files for path rewriting when base is set
-    let (login_assets_html, app_assets_html, login_assets_handler, app_assets_handler) =
-        if base_path.is_empty() {
-            (
-                HashMap::default(),
-                HashMap::default(),
-                get(login_handler_direct),
-                get(app_handler_direct),
-            )
-        } else {
-            (
-                process_login_html_files(login_path),
-                process_app_html_files(app_path),
-                get(login_handler),
-                get(app_handler),
-            )
-        };
+    // Build assets state (handles all frontend config internally)
+    let state = AssetsState::new(
+        config.base.as_deref(),
+        config.csp_nonce,
+        jwt.clone(),
+        config.db.clone(),
+        config.secure_cookies,
+        config.ip_extractor.clone(),
+    )
+    .expect("Failed to initialize assets");
 
     // Create WebAuthn instance
     let webauthn = Arc::new(
@@ -115,23 +69,6 @@ pub fn create_app(config: &ServerConfig) -> Router {
             .build()
             .expect("Failed to build WebAuthn"),
     );
-
-    // Create JWT config
-    let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));
-
-    let state = AssetsState::new(
-        api_path,
-        login_path,
-        app_path,
-        login_assets_html,
-        app_assets_html,
-        jwt.clone(),
-        config.db.clone(),
-        config.secure_cookies,
-        config.csp_nonce,
-        config.ip_extractor.clone(),
-    )
-    .expect("Failed to initialize assets");
 
     let api_router = create_api_router(
         config.db.clone(),
@@ -143,6 +80,11 @@ pub fn create_app(config: &ServerConfig) -> Router {
     )
     .layer(middleware::from_fn(add_access_token_cookie));
 
+    // Get paths from state
+    let login_path = state.login_path();
+    let app_path = state.app_path();
+    let dashboard_path = state.dashboard_path();
+
     // Login assets (public, no auth)
     // Index routes redirect authenticated users to the app
     let login_routes = Router::new()
@@ -152,24 +94,41 @@ pub fn create_app(config: &ServerConfig) -> Router {
             &format!("{}/index.html", login_path),
             get(login_index_handler),
         )
-        .route(&format!("{}/{{*path}}", login_path), login_assets_handler)
+        .route(&format!("{}/{{*path}}", login_path), get(login_handler))
         .with_state(state.clone());
 
     // App assets (protected, JWT required)
     let app_routes = Router::new()
-        .route(app_path, app_assets_handler.clone())
-        .route(&format!("{}/", app_path), app_assets_handler.clone())
-        .route(&format!("{}/{{*path}}", app_path), app_assets_handler)
-        .with_state(state)
+        .route(app_path, get(app_handler))
+        .route(&format!("{}/", app_path), get(app_handler))
+        .route(&format!("{}/{{*path}}", app_path), get(app_handler))
+        .with_state(state.clone())
         .layer(middleware::from_fn(add_access_token_cookie));
 
-    let redirect_path: &'static str = if base_path.is_empty() { "/" } else { base_path };
+    // Dashboard assets (protected, JWT required)
+    let dashboard_routes = Router::new()
+        .route(dashboard_path, get(dashboard_handler))
+        .route(&format!("{}/", dashboard_path), get(dashboard_handler))
+        .route(
+            &format!("{}/{{*path}}", dashboard_path),
+            get(dashboard_handler),
+        )
+        .with_state(state.clone())
+        .layer(middleware::from_fn(add_access_token_cookie));
+
+    let base_path = config.base.as_deref().unwrap_or("");
+    let redirect_path: &'static str = if base_path.is_empty() {
+        "/"
+    } else {
+        Box::leak(base_path.to_string().into_boxed_str())
+    };
 
     Router::new()
         .route(redirect_path, get(Redirect::temporary(login_path)))
-        .nest(api_path, api_router)
+        .nest(state.api_path, api_router)
         .merge(login_routes)
         .merge(app_routes)
+        .merge(dashboard_routes)
 }
 
 /// Run cleanup tasks and spawn background scheduler.

@@ -31,12 +31,6 @@ export async function compileIIFE(rootDir, inlineConfig) {
         entry: entryPath,
       },
       minify: true,
-      rollupOptions: {
-        output: {
-          // Prevent any external imports
-          inlineDynamicImports: true,
-        },
-      },
     },
     define: {
       "import.meta.env.INLINE_CONFIG": inlineConfig ? "true" : "false",

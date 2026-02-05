@@ -17,8 +17,7 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{
-    ACCESS_COOKIE_NAME, ActivatedApiAuth, ActivatedApiAuthWithJti, ApiAuth, REFRESH_COOKIE_NAME,
-    get_cookie,
+    ACCESS_COOKIE_NAME, AnyRole, Auth, AuthWithSession, REFRESH_COOKIE_NAME, get_cookie,
 };
 use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
@@ -61,7 +60,7 @@ struct ListTokensResponse {
 /// Verify that the current access token is still valid.
 /// Returns 200 if valid, 401 if not.
 /// This is a lightweight endpoint for checking auth status (e.g., on bfcache restore).
-async fn verify_token(ApiAuth(_auth): ApiAuth) -> impl IntoResponse {
+async fn verify_token(_: Auth<AnyRole>) -> impl IntoResponse {
     StatusCode::OK
 }
 
@@ -69,7 +68,7 @@ async fn verify_token(ApiAuth(_auth): ApiAuth) -> impl IntoResponse {
 /// Marks the current session's token based on the refresh token JTI.
 async fn list_tokens(
     State(state): State<TokensState>,
-    ActivatedApiAuthWithJti(auth): ActivatedApiAuthWithJti,
+    auth: AuthWithSession<AnyRole>,
 ) -> Result<impl IntoResponse, ApiError> {
     let tokens = state
         .db
@@ -140,7 +139,7 @@ struct RevokeResponse {
 /// Users can revoke their own tokens, admins can revoke any token.
 async fn revoke_token(
     State(state): State<TokensState>,
-    ActivatedApiAuth(auth): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(jti): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Check if the token belongs to the current user or if user is admin

@@ -14,7 +14,7 @@ pub use challenge::ChallengeStore;
 pub use encryption::{EncryptionSettings, EncryptionSettingsStore};
 pub use login_challenge::{AuthChallenge, LoginChallengeStore};
 pub use passkey::{PasskeyStore, StoredPasskey};
-pub use posts::{DeleteResult, Post, PostNode, PostStore, PostSummary};
+pub use posts::{DeleteResult, Post, PostNode, PostStore, PostSummary, UpdatePostParams};
 pub use token::{ActiveToken, TokenStore};
 pub use user::{User, UserRole, UserStore};
 
@@ -263,6 +263,77 @@ impl Database {
     /// Begin a new transaction.
     pub async fn begin(&self) -> Result<sqlx::Transaction<'_, sqlx::Sqlite>, sqlx::Error> {
         self.pool.begin().await
+    }
+
+    /// Update a post and optionally its attachment references atomically.
+    /// Returns Ok(true) if the post was found and updated, Ok(false) if not found.
+    pub async fn update_post_with_attachments(
+        &self,
+        params: UpdatePostParams<'_>,
+    ) -> Result<bool, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let post_id =
+            match PostStore::get_id_by_uuid_tx(&mut tx, params.uuid, params.user_id).await? {
+                Some(id) => id,
+                None => return Ok(false),
+            };
+
+        PostStore::update_tx(
+            &mut tx,
+            params.uuid,
+            params.user_id,
+            params.title,
+            params.title_encrypted,
+            params.title_iv,
+            params.content,
+            params.content_encrypted,
+            params.iv,
+            params.encryption_version,
+        )
+        .await?;
+
+        if let Some(uuids) = params.attachment_uuids {
+            AttachmentStore::update_post_attachments_tx(&mut tx, post_id, params.user_id, uuids)
+                .await?;
+        }
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    /// Delete a post and all its descendants, cleaning up attachment references atomically.
+    pub async fn delete_post_with_attachments(
+        &self,
+        uuid: &str,
+        user_id: i64,
+    ) -> Result<DeleteResult, sqlx::Error> {
+        let children_count = self.posts().count_descendants(uuid, user_id).await?;
+
+        let mut tx = self.pool.begin().await?;
+
+        let post_id = PostStore::get_id_by_uuid_tx(&mut tx, uuid, user_id).await?;
+        if post_id.is_none() {
+            return Ok(DeleteResult {
+                deleted: false,
+                children_deleted: 0,
+            });
+        }
+
+        let descendant_ids = PostStore::get_descendant_ids_tx(&mut tx, uuid, user_id).await?;
+
+        for id in descendant_ids {
+            AttachmentStore::remove_post_attachments_tx(&mut tx, id, user_id).await?;
+        }
+
+        PostStore::delete_tx(&mut tx, uuid, user_id).await?;
+
+        tx.commit().await?;
+
+        Ok(DeleteResult {
+            deleted: true,
+            children_deleted: children_count,
+        })
     }
 }
 

@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::ActivatedApiAuth;
+use crate::auth::{AnyRole, Auth};
 use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::impl_has_auth_state;
@@ -59,12 +59,12 @@ struct SetupResponse {
 /// Get encryption settings for the current user.
 async fn get_settings(
     State(state): State<EncryptionState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
 ) -> Result<impl IntoResponse, ApiError> {
     let settings = state
         .db
         .encryption_settings()
-        .get(user.user_id)
+        .get(auth.user_id)
         .await
         .db_err("Failed to get encryption settings")?;
 
@@ -88,13 +88,13 @@ async fn get_settings(
 /// Generates a random PRF salt server-side and returns it.
 async fn setup_encryption(
     State(state): State<EncryptionState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Check if already set up
     let existing = state
         .db
         .encryption_settings()
-        .get(user.user_id)
+        .get(auth.user_id)
         .await
         .db_err("Failed to check existing settings")?;
 
@@ -109,7 +109,7 @@ async fn setup_encryption(
     state
         .db
         .encryption_settings()
-        .create(user.user_id, &prf_salt)
+        .create(auth.user_id, &prf_salt)
         .await
         .db_err("Failed to save encryption settings")?;
 
@@ -125,13 +125,13 @@ async fn setup_encryption(
 /// Marks setup as done without enabling encryption.
 async fn skip_encryption(
     State(state): State<EncryptionState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Check if already set up
     let existing = state
         .db
         .encryption_settings()
-        .get(user.user_id)
+        .get(auth.user_id)
         .await
         .db_err("Failed to check existing settings")?;
 
@@ -142,7 +142,7 @@ async fn skip_encryption(
     state
         .db
         .encryption_settings()
-        .mark_setup_done(user.user_id)
+        .mark_setup_done(auth.user_id)
         .await
         .db_err("Failed to save encryption settings")?;
 

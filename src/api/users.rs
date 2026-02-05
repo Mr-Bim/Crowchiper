@@ -1,4 +1,3 @@
-use axum::http::HeaderMap;
 use axum::{
     Json, Router,
     extract::State,
@@ -11,8 +10,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
-use crate::auth::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, get_cookie};
+use crate::auth::OptionalAuth;
+use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
+use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 use crate::rate_limit::{RateLimitConfig, rate_limit_user_create};
 
@@ -20,9 +21,13 @@ use crate::rate_limit::{RateLimitConfig, rate_limit_user_create};
 pub struct UsersState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub secure_cookies: bool,
+    pub ip_extractor: Option<IpExtractor>,
     pub no_signup: bool,
     pub rate_limit_config: Arc<RateLimitConfig>,
 }
+
+impl_has_auth_state!(UsersState);
 
 pub fn router(state: UsersState) -> Router {
     let delete_router = Router::new()
@@ -113,7 +118,7 @@ async fn create_user(
 
 async fn delete_user(
     State(state): State<UsersState>,
-    headers: HeaderMap,
+    OptionalAuth(auth_user): OptionalAuth,
     axum::extract::Path(uuid): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     validate_uuid(&uuid)?;
@@ -129,42 +134,9 @@ async fn delete_user(
 
     // For activated users, require authentication
     if user.activated {
-        // Try access token first, then refresh token
-        let claims = if let Some(token) = get_cookie(&headers, ACCESS_COOKIE_NAME) {
-            state
-                .jwt
-                .validate_access_token(token)
-                .map_err(|_| ApiError::unauthorized("Invalid or expired token"))?
-        } else if let Some(token) = get_cookie(&headers, REFRESH_COOKIE_NAME) {
-            let refresh_claims = state
-                .jwt
-                .validate_refresh_token(token)
-                .map_err(|_| ApiError::unauthorized("Invalid or expired token"))?;
-            // Convert refresh claims to have the same fields we need
-            // Check if refresh token is in database (not revoked)
-            state
-                .db
-                .tokens()
-                .get_by_jti(&refresh_claims.jti)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to check token: {}", e);
-                    ApiError::internal("Unable to check token")
-                })?
-                .ok_or(ApiError::unauthorized("Invalid or expired token"))?;
-
-            crate::jwt::AccessClaims {
-                sub: refresh_claims.sub,
-                username: refresh_claims.username,
-                role: refresh_claims.role,
-                token_type: crate::jwt::TokenType::Access,
-                iat: refresh_claims.iat,
-                exp: refresh_claims.exp,
-                ipaddr: "_".to_owned(),
-            }
-        } else {
-            return Err(ApiError::unauthorized("Authentication required"));
-        };
+        let claims = auth_user
+            .ok_or_else(|| ApiError::unauthorized("Authentication required"))?
+            .claims;
 
         // Only allow the user themselves or an admin to delete
         let is_self = claims.sub == uuid;

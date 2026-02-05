@@ -26,11 +26,6 @@ async function compileIIFEForDev(rootDir, inlineConfig) {
         entry: entryPath,
       },
       minify: false, // Keep unminified for dev
-      rollupOptions: {
-        output: {
-          inlineDynamicImports: true,
-        },
-      },
     },
     define: {
       "import.meta.env.INLINE_CONFIG": inlineConfig ? "true" : "false",

@@ -78,12 +78,14 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         db: db.clone(),
         secure_cookies,
-        ip_extractor,
+        ip_extractor: ip_extractor.clone(),
     };
 
     let users_state = users::UsersState {
         db,
         jwt,
+        secure_cookies,
+        ip_extractor,
         no_signup,
         rate_limit_config: rate_limit_config.clone(),
     };

@@ -14,9 +14,9 @@ use sqlx;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::ActivatedApiAuth;
+use crate::auth::{AnyRole, Auth};
 use crate::cli::IpExtractor;
-use crate::db::{Database, PostNode};
+use crate::db::{Database, PostNode, UpdatePostParams};
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
 
@@ -200,13 +200,13 @@ async fn validate_encryption(
 
 async fn list_posts(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Query(query): Query<ListPostsQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let posts = state
         .db
         .posts()
-        .list_tree(user.user_id, query.depth)
+        .list_tree(auth.user_id, query.depth)
         .await
         .db_err("Failed to list posts")?;
 
@@ -217,13 +217,13 @@ async fn list_posts(
 
 async fn list_children(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let children = state
         .db
         .posts()
-        .list_children(user.user_id, &uuid)
+        .list_children(auth.user_id, &uuid)
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => ApiError::not_found("Parent post not found"),
@@ -237,13 +237,13 @@ async fn list_children(
 
 async fn create_post(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Json(payload): Json<CreatePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate encryption matches user settings
     validate_encryption(
         &state.db,
-        user.user_id,
+        auth.user_id,
         &payload.encryption_version,
         payload.content_encrypted,
     )
@@ -253,7 +253,7 @@ async fn create_post(
         .db
         .posts()
         .create(
-            user.user_id,
+            auth.user_id,
             payload.title.as_deref(),
             payload.title_encrypted,
             payload.title_iv.as_deref(),
@@ -272,7 +272,7 @@ async fn create_post(
     let post = state
         .db
         .posts()
-        .get_by_uuid(&uuid, user.user_id)
+        .get_by_uuid(&uuid, auth.user_id)
         .await
         .db_err("Failed to get created post")?
         .ok_or_else(|| ApiError::internal("Created post not found"))?;
@@ -298,13 +298,13 @@ async fn create_post(
 
 async fn get_post(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let post = state
         .db
         .posts()
-        .get_by_uuid(&uuid, user.user_id)
+        .get_by_uuid(&uuid, auth.user_id)
         .await
         .db_err("Failed to get post")?
         .ok_or_else(|| ApiError::not_found("Post not found"))?;
@@ -327,264 +327,73 @@ async fn get_post(
 
 async fn update_post(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
     Json(payload): Json<UpdatePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate encryption matches user settings
     validate_encryption(
         &state.db,
-        user.user_id,
+        auth.user_id,
         &payload.encryption_version,
         payload.content_encrypted,
     )
     .await?;
 
-    // Use a transaction to ensure atomicity when updating post and attachment refs
-    let mut tx = state
+    let found = state
         .db
-        .begin()
+        .update_post_with_attachments(UpdatePostParams {
+            uuid: &uuid,
+            user_id: auth.user_id,
+            title: payload.title.as_deref(),
+            title_encrypted: payload.title_encrypted,
+            title_iv: payload.title_iv.as_deref(),
+            content: &payload.content,
+            content_encrypted: payload.content_encrypted,
+            iv: payload.iv.as_deref(),
+            encryption_version: payload.encryption_version,
+            attachment_uuids: payload.attachment_uuids.as_deref(),
+        })
         .await
-        .db_err("Failed to begin transaction")?;
+        .db_err("Failed to update post")?;
 
-    // Get the post first to verify ownership and get post_id for attachment refs
-    let post: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM posts WHERE uuid = ? AND user_id = ?")
-            .bind(&uuid)
-            .bind(user.user_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .db_err("Failed to get post")?;
-
-    let post_id = post.ok_or_else(|| ApiError::not_found("Post not found"))?.0;
-
-    // Update the post
-    sqlx::query(
-        "UPDATE posts SET title = ?, title_encrypted = ?, title_iv = ?, content = ?, content_encrypted = ?, iv = ?, encryption_version = ?, updated_at = datetime('now')
-         WHERE uuid = ? AND user_id = ?",
-    )
-    .bind(payload.title.as_deref())
-    .bind(payload.title_encrypted)
-    .bind(payload.title_iv.as_deref())
-    .bind(&payload.content)
-    .bind(payload.content_encrypted)
-    .bind(payload.iv.as_deref())
-    .bind(payload.encryption_version)
-    .bind(&uuid)
-    .bind(user.user_id)
-    .execute(&mut *tx)
-    .await
-    .db_err("Failed to update post")?;
-
-    // Update attachment refs if provided (used with sendBeacon on page unload)
-    if let Some(attachment_uuids) = payload.attachment_uuids {
-        update_post_attachments_tx(&mut tx, post_id, user.user_id, &attachment_uuids)
-            .await
-            .db_err("Failed to update attachment references")?;
+    if !found {
+        return Err(ApiError::not_found("Post not found"));
     }
-
-    tx.commit().await.db_err("Failed to commit transaction")?;
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Update attachment references within a transaction.
-async fn update_post_attachments_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    post_id: i64,
-    user_id: i64,
-    new_uuids: &[String],
-) -> Result<(), sqlx::Error> {
-    use std::collections::HashSet;
-
-    // Get current attachments for this post
-    let current_rows: Vec<(String,)> =
-        sqlx::query_as("SELECT attachment_uuid FROM post_attachments WHERE post_id = ?")
-            .bind(post_id)
-            .fetch_all(&mut **tx)
-            .await?;
-    let current: HashSet<String> = current_rows.into_iter().map(|r| r.0).collect();
-
-    let new_set: HashSet<String> = new_uuids.iter().cloned().collect();
-
-    // Find removed attachments (in current but not in new)
-    for uuid in current.difference(&new_set) {
-        // Decrement reference count
-        sqlx::query(
-            "UPDATE attachments SET reference_count = reference_count - 1
-             WHERE uuid = ? AND user_id = ? AND reference_count > 0",
-        )
-        .bind(uuid)
-        .bind(user_id)
-        .execute(&mut **tx)
-        .await?;
-
-        // Delete if reference count is now 0
-        sqlx::query(
-            "DELETE FROM attachments WHERE uuid = ? AND user_id = ? AND reference_count = 0",
-        )
-        .bind(uuid)
-        .bind(user_id)
-        .execute(&mut **tx)
-        .await?;
-
-        // Remove from post_attachments
-        sqlx::query("DELETE FROM post_attachments WHERE post_id = ? AND attachment_uuid = ?")
-            .bind(post_id)
-            .bind(uuid)
-            .execute(&mut **tx)
-            .await?;
-    }
-
-    // Find added attachments (in new but not in current)
-    for uuid in new_set.difference(&current) {
-        // Increment reference count
-        sqlx::query(
-            "UPDATE attachments SET reference_count = reference_count + 1
-             WHERE uuid = ? AND user_id = ?",
-        )
-        .bind(uuid)
-        .bind(user_id)
-        .execute(&mut **tx)
-        .await?;
-
-        // Add to post_attachments
-        sqlx::query(
-            "INSERT OR IGNORE INTO post_attachments (post_id, attachment_uuid) VALUES (?, ?)",
-        )
-        .bind(post_id)
-        .bind(uuid)
-        .execute(&mut **tx)
-        .await?;
-    }
-
-    Ok(())
-}
-
 async fn delete_post(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Use a transaction to ensure atomicity when deleting post and cleaning up attachments
-    let mut tx = state
+    let result = state
         .db
-        .begin()
-        .await
-        .db_err("Failed to begin transaction")?;
-
-    // Get the post first to verify ownership and get post_id for attachment cleanup
-    let post: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM posts WHERE uuid = ? AND user_id = ?")
-            .bind(&uuid)
-            .bind(user.user_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .db_err("Failed to get post")?;
-
-    // Verify post exists and belongs to user
-    post.ok_or_else(|| ApiError::not_found("Post not found"))?;
-
-    // Count descendants first (for response)
-    let children_count = state
-        .db
-        .posts()
-        .count_descendants(&uuid, user.user_id)
-        .await
-        .db_err("Failed to count descendants")?;
-
-    // Get all descendant post IDs for attachment cleanup
-    let descendant_ids: Vec<(i64,)> = sqlx::query_as(
-        "WITH RECURSIVE descendants AS (
-            SELECT id FROM posts WHERE uuid = ? AND user_id = ?
-            UNION ALL
-            SELECT p.id FROM posts p
-            INNER JOIN descendants d ON p.parent_id = (SELECT uuid FROM posts WHERE id = d.id)
-            WHERE p.user_id = ?
-        )
-        SELECT id FROM descendants",
-    )
-    .bind(&uuid)
-    .bind(user.user_id)
-    .bind(user.user_id)
-    .fetch_all(&mut *tx)
-    .await
-    .db_err("Failed to get descendant IDs")?;
-
-    // Remove attachment references for all posts being deleted
-    for (id,) in descendant_ids {
-        remove_post_attachments_tx(&mut tx, id, user.user_id)
-            .await
-            .db_err("Failed to remove attachment references")?;
-    }
-
-    // Delete the post (children cascade via database constraint)
-    sqlx::query("DELETE FROM posts WHERE uuid = ? AND user_id = ?")
-        .bind(&uuid)
-        .bind(user.user_id)
-        .execute(&mut *tx)
+        .delete_post_with_attachments(&uuid, auth.user_id)
         .await
         .db_err("Failed to delete post")?;
 
-    tx.commit().await.db_err("Failed to commit transaction")?;
+    if !result.deleted {
+        return Err(ApiError::not_found("Post not found"));
+    }
 
     Ok(Json(DeleteResponse {
         deleted: true,
-        children_deleted: children_count,
+        children_deleted: result.children_deleted,
     }))
-}
-
-/// Remove all attachment references for a post within a transaction.
-async fn remove_post_attachments_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    post_id: i64,
-    user_id: i64,
-) -> Result<(), sqlx::Error> {
-    // Get current attachments for this post
-    let current_rows: Vec<(String,)> =
-        sqlx::query_as("SELECT attachment_uuid FROM post_attachments WHERE post_id = ?")
-            .bind(post_id)
-            .fetch_all(&mut **tx)
-            .await?;
-
-    // Decrement ref count for each and delete if 0
-    for (uuid,) in current_rows {
-        sqlx::query(
-            "UPDATE attachments SET reference_count = reference_count - 1
-             WHERE uuid = ? AND user_id = ? AND reference_count > 0",
-        )
-        .bind(&uuid)
-        .bind(user_id)
-        .execute(&mut **tx)
-        .await?;
-
-        sqlx::query(
-            "DELETE FROM attachments WHERE uuid = ? AND user_id = ? AND reference_count = 0",
-        )
-        .bind(&uuid)
-        .bind(user_id)
-        .execute(&mut **tx)
-        .await?;
-    }
-
-    // Remove all post_attachments entries for this post
-    sqlx::query("DELETE FROM post_attachments WHERE post_id = ?")
-        .bind(post_id)
-        .execute(&mut **tx)
-        .await?;
-
-    Ok(())
 }
 
 async fn reorder_posts(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Json(payload): Json<ReorderRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     state
         .db
         .posts()
-        .reorder(user.user_id, payload.parent_id.as_deref(), &payload.uuids)
+        .reorder(auth.user_id, payload.parent_id.as_deref(), &payload.uuids)
         .await
         .db_err("Failed to reorder posts")?;
 
@@ -593,7 +402,7 @@ async fn reorder_posts(
 
 async fn move_post(
     State(state): State<PostsState>,
-    ActivatedApiAuth(user): ActivatedApiAuth,
+    auth: Auth<AnyRole>,
     Path(uuid): Path<String>,
     Json(payload): Json<MovePostRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -602,7 +411,7 @@ async fn move_post(
         .posts()
         .move_post(
             &uuid,
-            user.user_id,
+            auth.user_id,
             payload.parent_id.as_deref(),
             payload.position,
         )
