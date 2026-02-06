@@ -27,12 +27,9 @@ test.describe("Claim page", () => {
   test("claim admin user success", async ({ context, baseUrl, testId }) => {
     // Create an admin user via test API
     const username = `admin_${testId}`;
-    const response = await context.request.post(
-      `${baseUrl}/api/test/admin`,
-      {
-        data: { username },
-      },
-    );
+    const response = await context.request.post(`${baseUrl}/api/test/admin`, {
+      data: { username },
+    });
     expect(response.ok()).toBe(true);
     const { uuid } = await response.json();
 
@@ -55,8 +52,10 @@ test.describe("Claim page", () => {
     // Click the claim button
     await claimButton.click();
 
-    // Wait for redirect to login page after successful claim
-    await expect(page).toHaveTitle("Crowchiper", { timeout: 10000 });
+    // Wait for redirect to encryption setup page after successful claim
+    await expect(page).toHaveTitle("Setup Encryption - Crowchiper", {
+      timeout: 10000,
+    });
 
     await page.close();
   });

@@ -27,6 +27,7 @@ import { getOptionalElement } from "../../shared/dom.ts";
 
 declare const __TEST_MODE__: boolean;
 declare const API_PATH: string;
+declare const APP_PATH: string;
 declare const LOGIN_PATH: string;
 
 /**
@@ -341,8 +342,23 @@ async function init(): Promise<void> {
     // Set up version modal
     setupVersionModal();
 
-    // Check encryption settings first
+    // Check user settings (encryption + admin info)
     const settings = await getEncryptionSettings();
+
+    // Redirect to encryption setup if not completed yet
+    if (!settings.setup_done) {
+      window.location.href = `${APP_PATH}/setup-encryption.html`;
+      return;
+    }
+
+    // Show dashboard link for admins
+    if (settings.is_admin && settings.dashboard_path) {
+      const dashboardLink = getOptionalElement("dashboard-link");
+      if (dashboardLink instanceof HTMLAnchorElement) {
+        dashboardLink.href = settings.dashboard_path;
+        dashboardLink.hidden = false;
+      }
+    }
 
     if (settings.encryption_enabled) {
       if (settings.prf_salt) {

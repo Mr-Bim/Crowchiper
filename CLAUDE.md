@@ -655,6 +655,42 @@ impl_has_auth_state!(MyApiState);
 
 The macro implements `HasAuthState` trait methods (`jwt()`, `db()`, `secure_cookies()`, `ip_extractor()`).
 
+## Admin Dashboard
+
+The admin dashboard (`/dashboard/`) lists all users and is only accessible to admin users.
+
+### User Settings Endpoint
+
+`GET /api/user/settings` replaces the old `GET /api/encryption/settings`. Returns encryption settings plus admin info:
+```json
+{
+  "setup_done": false,
+  "encryption_enabled": false,
+  "prf_salt": null,
+  "is_admin": true,
+  "dashboard_path": "/dashboard"
+}
+```
+- `is_admin` and `dashboard_path` are used by the app frontend to show a "Dashboard" link in the settings menu
+- `dashboard_path` is only included for admins (omitted via `skip_serializing_if` for non-admins)
+
+### Admin API
+
+- `GET /api/admin/users` - Lists all activated users (admin-only, returns 403 for non-admins)
+- Response: `[{ uuid, username, role, activated, created_at }]` — no internal database IDs
+
+### Admin Claim Flow
+
+Admins are created via `--create-admin` CLI flag, which outputs a claim URL (`/login/claim.html?uuid=...`). The claim page registers a passkey, then redirects to `/app/setup-encryption.html` for encryption setup — the same flow as regular user registration. After encryption setup, the admin can access both the app and the dashboard.
+
+### Key Files
+- **`src/api/user_settings.rs`** - User settings endpoint (encryption + admin info)
+- **`src/api/admin.rs`** - Admin API (user listing)
+- **`src/db/user.rs`** - `UserSummary` struct, `list_activated()` method
+- **`web/login/js/claim.ts`** - Admin claim page (passkey registration + redirect to encryption setup)
+- **`web/dashboard/`** - Dashboard frontend (HTML, CSS, JS)
+- **`web/app/index.html`** - Dashboard link in settings menu (hidden for non-admins)
+
 ## Database Layer Patterns
 
 ### Transaction-Aware Methods
@@ -687,6 +723,7 @@ When operations need to span multiple stores atomically, use coordinating method
 Test files located in `tests/` folder:
 
 - **`api_tests.rs`**: User and passkey registration API tests
+- **`admin_tests.rs`**: Admin dashboard API and user settings tests
 - **`posts_tests.rs`**: Posts CRUD, reordering, and user isolation tests
 - **`token_tests.rs`**: Dual-token authentication system tests
 - **`startup_tests.rs`**: Binary startup validation (JWT secret, HTTPS, base path)

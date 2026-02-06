@@ -1,14 +1,8 @@
-//! Encryption settings API.
+//! Encryption mutation API (setup/skip).
 //!
-//! All endpoints require JWT authentication.
+//! The GET settings endpoint has moved to `/api/user/settings` (user_settings module).
 
-use axum::{
-    Json, Router,
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
-};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use rand::RngCore;
 use serde::Serialize;
 use std::sync::Arc;
@@ -33,7 +27,6 @@ impl_has_auth_state!(EncryptionState);
 
 pub fn router(state: EncryptionState) -> Router {
     Router::new()
-        .route("/settings", get(get_settings))
         .route("/setup", post(setup_encryption))
         .route("/skip", post(skip_encryption))
         .with_state(state)
@@ -42,47 +35,11 @@ pub fn router(state: EncryptionState) -> Router {
 // --- Response types ---
 
 #[derive(Serialize)]
-struct SettingsResponse {
-    setup_done: bool,
-    encryption_enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    prf_salt: Option<String>,
-}
-
-#[derive(Serialize)]
 struct SetupResponse {
     prf_salt: String, // base64
 }
 
 // --- Handlers ---
-
-/// Get encryption settings for the current user.
-async fn get_settings(
-    State(state): State<EncryptionState>,
-    auth: Auth<AnyRole>,
-) -> Result<impl IntoResponse, ApiError> {
-    let settings = state
-        .db
-        .encryption_settings()
-        .get(auth.user_id)
-        .await
-        .db_err("Failed to get encryption settings")?;
-
-    let response = match settings {
-        Some(s) => SettingsResponse {
-            setup_done: s.setup_done,
-            encryption_enabled: s.encryption_enabled,
-            prf_salt: s.prf_salt.map(|salt| base64_encode(&salt)),
-        },
-        None => SettingsResponse {
-            setup_done: false,
-            encryption_enabled: false,
-            prf_salt: None,
-        },
-    };
-
-    Ok(Json(response))
-}
 
 /// Set up encryption for the current user.
 /// Generates a random PRF salt server-side and returns it.

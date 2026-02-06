@@ -145,6 +145,12 @@ test.describe("Session revocation via settings panel", () => {
       timeout: 10000,
     });
 
+    // Skip encryption setup so the app page is accessible
+    await page1.locator("#skip-btn").click();
+    await page1.waitForURL(new RegExp(`${APP_PATH}(/index\\.html)?$`), {
+      timeout: 10000,
+    });
+
     // Get the first session's refresh token
     const cookies1 = await context1.cookies();
     const token1 = cookies1.find((c) => c.name === "refresh_token")?.value;
@@ -158,10 +164,10 @@ test.describe("Session revocation via settings panel", () => {
     await page1.fill("#username", username);
     await page1.click("#login-button");
 
-    await expect(page1).toHaveURL(
-      new RegExp(`${APP_PATH}/setup-encryption.html`),
-      { timeout: 10000 },
-    );
+    // Login redirects to app since encryption setup is already done
+    await expect(page1).toHaveURL(new RegExp(`${APP_PATH}(/index\\.html)?$`), {
+      timeout: 10000,
+    });
 
     // Verify we now have 2 sessions
     const tokensResponse = await page1.request.get(`${baseUrl}/api/tokens`);
@@ -169,7 +175,6 @@ test.describe("Session revocation via settings panel", () => {
     expect(tokensData.tokens.length).toBe(2);
 
     // Open settings panel
-    await page1.goto(`${baseUrl}${APP_PATH}/index.html`);
     await page1.locator("#settings-btn").click();
     await page1.locator("#manage-sessions-btn").click();
 
@@ -231,6 +236,12 @@ test.describe("Session revocation via settings panel", () => {
       timeout: 10000,
     });
 
+    // Skip encryption setup so the app page is accessible
+    await page1.locator("#skip-btn").click();
+    await page1.waitForURL(new RegExp(`${APP_PATH}(/index\\.html)?$`), {
+      timeout: 10000,
+    });
+
     // Save the first session's cookies
     const cookies1 = await context1.cookies();
     const refreshToken1 = cookies1.find(
@@ -246,13 +257,12 @@ test.describe("Session revocation via settings panel", () => {
     await page1.fill("#username", username);
     await page1.click("#login-button");
 
-    await expect(page1).toHaveURL(
-      new RegExp(`${APP_PATH}/setup-encryption.html`),
-      { timeout: 10000 },
-    );
+    // Login redirects to app since encryption setup is already done
+    await expect(page1).toHaveURL(new RegExp(`${APP_PATH}(/index\\.html)?$`), {
+      timeout: 10000,
+    });
 
     // From session 2, revoke session 1 via settings panel
-    await page1.goto(`${baseUrl}${APP_PATH}/index.html`);
     await page1.locator("#settings-btn").click();
     await page1.locator("#manage-sessions-btn").click();
 

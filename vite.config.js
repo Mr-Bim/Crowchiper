@@ -187,7 +187,11 @@ const dashboard = defineConfig({
     },
   },
   plugins: [
-    buildPlugin({ assetsPath: "/dashboard", sourceDir: "web/dashboard" }),
+    buildPlugin({
+      assetsPath: "/dashboard",
+      sourceDir: "web/dashboard",
+      testMode: !!process.env.TEST_MODE,
+    }),
   ],
 });
 

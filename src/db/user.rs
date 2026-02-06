@@ -59,6 +59,37 @@ impl From<UserRow> for User {
     }
 }
 
+/// Public user summary for admin dashboard. Does not expose internal database IDs.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UserSummary {
+    pub uuid: String,
+    pub username: String,
+    pub role: UserRole,
+    pub activated: bool,
+    pub created_at: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct UserSummaryRow {
+    uuid: String,
+    username: String,
+    role: String,
+    activated: i32,
+    created_at: String,
+}
+
+impl From<UserSummaryRow> for UserSummary {
+    fn from(row: UserSummaryRow) -> Self {
+        Self {
+            uuid: row.uuid,
+            username: row.username,
+            role: UserRole::from_str(&row.role),
+            activated: row.activated != 0,
+            created_at: row.created_at,
+        }
+    }
+}
+
 impl UserStore {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
@@ -165,6 +196,16 @@ impl UserStore {
             .execute(&self.pool)
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    /// List all activated users (for admin dashboard). Does not expose internal IDs.
+    pub async fn list_activated(&self) -> Result<Vec<UserSummary>, sqlx::Error> {
+        let rows: Vec<UserSummaryRow> = sqlx::query_as(
+            "SELECT uuid, username, role, activated, created_at FROM users WHERE activated = 1 ORDER BY created_at",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(UserSummary::from).collect())
     }
 
     /// Get a pending (not activated) admin user, if one exists.

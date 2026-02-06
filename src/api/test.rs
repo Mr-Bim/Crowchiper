@@ -115,6 +115,12 @@ async fn store_token(
             .activate(id)
             .await
             .db_err("Failed to activate user")?;
+        state
+            .db
+            .encryption_settings()
+            .mark_setup_done(id)
+            .await
+            .db_err("Failed to mark encryption setup done")?;
         id
     };
 
@@ -217,6 +223,12 @@ async fn generate_tokens(
                 .activate(id)
                 .await
                 .db_err("Failed to activate user")?;
+            state
+                .db
+                .encryption_settings()
+                .mark_setup_done(id)
+                .await
+                .db_err("Failed to mark encryption setup done")?;
             id
         };
 

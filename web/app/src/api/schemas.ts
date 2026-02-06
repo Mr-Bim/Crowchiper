@@ -64,13 +64,19 @@ export type DeleteResponse = v.InferOutput<typeof DeleteResponseSchema>;
 
 // --- Encryption Settings ---
 
-export const EncryptionSettingsSchema = v.object({
+export const UserSettingsSchema = v.object({
   setup_done: v.boolean(),
   encryption_enabled: v.boolean(),
   prf_salt: v.optional(v.string()),
+  is_admin: v.boolean(),
+  dashboard_path: v.optional(v.string()),
 });
 
-export type EncryptionSettings = v.InferOutput<typeof EncryptionSettingsSchema>;
+export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
+
+// Keep old name as alias for backward compatibility within encryption-settings.ts
+export const EncryptionSettingsSchema = UserSettingsSchema;
+export type EncryptionSettings = UserSettings;
 
 export const SetupResponseSchema = v.object({
   prf_salt: v.string(),

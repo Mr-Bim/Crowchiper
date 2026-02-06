@@ -2,7 +2,7 @@
   "scripts": {
     "dev": "vite",
     "build": "BUILD=login vite build && BUILD=app vite build && BUILD=dashboard vite build",
-    "build:test": "BUILD=login vite build && BUILD=app TEST_MODE=1 vite build && BUILD=dashboard vite build",
+    "build:test": "BUILD=login vite build && BUILD=app TEST_MODE=1 vite build && BUILD=dashboard TEST_MODE=1 vite build",
     "prepare-test": "npm run build:test && cargo build --features test-mode",
     "lint": "tsc --noEmit && oxlint",
     "lint:fix": "tsc --noEmit && oxlint --fix",

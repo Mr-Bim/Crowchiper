@@ -1,1 +1,53 @@
-<div>Dashboard</div>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Dashboard - Crowchiper</title>
+        <link rel="stylesheet" href="./css/dashboard.css" />
+    </head>
+    <body>
+        <div class="dashboard-container">
+            <header class="dashboard-header">
+                <h1>Dashboard</h1>
+                <div class="dashboard-header-actions">
+                    <a id="app-link" href="#" class="dashboard-link">
+                        Back to App
+                    </a>
+                    <button id="logout-btn" type="button" class="dashboard-btn">
+                        Logout
+                    </button>
+                </div>
+            </header>
+            <main class="dashboard-main">
+                <section class="dashboard-section">
+                    <h2>Users</h2>
+                    <div id="users-loading" class="dashboard-loading">
+                        Loading users...
+                    </div>
+                    <div id="users-error" class="dashboard-error" hidden></div>
+                    <table
+                        id="users-table"
+                        class="dashboard-table"
+                        hidden
+                        data-testid="test-users-table"
+                    >
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody"></tbody>
+                    </table>
+                </section>
+            </main>
+            <footer class="dashboard-footer">
+                <div id="theme-toggle"></div>
+            </footer>
+        </div>
+        <script type="module" src="./src/main.ts"></script>
+    </body>
+</html>

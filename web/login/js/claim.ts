@@ -176,7 +176,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         statusEl.textContent = "Registering passkey...";
         await startPasskeyRegistration(uuid);
         statusEl.textContent = "Registration successful! Redirecting...";
-        window.location.href = `${LOGIN_PATH}/index.html`;
+        window.location.href = `${APP_PATH}/setup-encryption.html`;
       } else {
         statusEl.textContent = "Authenticating...";
         await reclaimAccount();

@@ -22,10 +22,15 @@ Routes at `{base}/api/`.
 - `PUT /api/posts/{id}` - Update post (optional `attachment_uuids`)
 - `DELETE /api/posts/{id}` - Delete post
 
+## User Settings
+- `GET /api/user/settings` - Get user settings (encryption + admin info)
+
 ## Encryption
-- `GET /api/encryption/settings` - Get settings
 - `POST /api/encryption/setup` - Initial setup
 - `POST /api/encryption/skip` - Skip encryption
+
+## Admin (admin-only)
+- `GET /api/admin/users` - List all activated users
 
 ## Attachments
 - `POST /api/attachments` - Upload (multipart: image, image_iv, thumbnail, thumbnail_iv, encryption_version)

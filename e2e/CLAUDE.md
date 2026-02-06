@@ -166,6 +166,8 @@ Defined in `Server` enum:
 - **`login.spec.ts`** - Login flow and navigation tests
 - **`encryption.spec.ts`** - Encryption setup and usage tests
 - **`app-auth.spec.ts`** - Authentication, JWT, and authorization tests
+- **`admin-claim.spec.ts`** - Admin claim flow with encryption setup
+- **`admin-dashboard.spec.ts`** - Admin dashboard access control and users table tests
 - **`tokens.spec.ts`** - Comprehensive token system tests (see below)
 - **`post-navigation.spec.ts`** - Post switching, save behavior, editor state tests
 - **`reorder.spec.ts`** - Drag and drop post reordering tests

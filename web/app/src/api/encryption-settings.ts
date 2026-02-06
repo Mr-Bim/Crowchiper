@@ -21,7 +21,7 @@ export type { EncryptionSettings, SetupResponse };
  * Get the current encryption settings for the user.
  */
 export async function getEncryptionSettings(): Promise<EncryptionSettings> {
-  const response = await fetchWithAuth(`${API_PATH}/encryption/settings`);
+  const response = await fetchWithAuth(`${API_PATH}/user/settings`);
   if (!response.ok) {
     const errorMsg = await getErrorMessage(
       response,

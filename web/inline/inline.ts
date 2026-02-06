@@ -9,6 +9,11 @@
     const loginIndex = path.indexOf("/login");
     base = path.substring(0, loginIndex);
   }
+  // If we're on a /dashboard page, remove /dashboard and everything after
+  else if (path.includes("/dashboard")) {
+    const dashboardIndex = path.indexOf("/dashboard");
+    base = path.substring(0, dashboardIndex);
+  }
   // Otherwise, remove /__APP_ASSETS__ and everything after (will be replaced by build)
   else if (path.includes(assets)) {
     const appIndex = path.indexOf(assets);

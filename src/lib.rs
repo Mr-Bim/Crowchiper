@@ -70,6 +70,11 @@ pub fn create_app(config: &ServerConfig) -> Router {
             .expect("Failed to build WebAuthn"),
     );
 
+    // Get paths from state (before moving into api_router)
+    let login_path = state.login_path();
+    let app_path = state.app_path();
+    let dashboard_path = state.dashboard_path();
+
     let api_router = create_api_router(
         config.db.clone(),
         webauthn,
@@ -77,13 +82,9 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.secure_cookies,
         config.no_signup,
         config.ip_extractor.clone(),
+        dashboard_path,
     )
     .layer(middleware::from_fn(add_access_token_cookie));
-
-    // Get paths from state
-    let login_path = state.login_path();
-    let app_path = state.app_path();
-    let dashboard_path = state.dashboard_path();
 
     // Login assets (public, no auth)
     // Index routes redirect authenticated users to the app
