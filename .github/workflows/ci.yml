@@ -41,7 +41,7 @@ jobs:
             ${{ runner.os }}-cargo-release-
 
       - name: Build frontend (production)
-        run: npm run build-all
+        run: npm run build
 
       - name: Build release binary
         run: cargo build --release

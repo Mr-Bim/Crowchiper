@@ -98,7 +98,7 @@ jobs:
             ${{ runner.os }}-cargo-test-
 
       - name: Build frontend (test mode)
-        run: npm run build-all-test
+        run: npm run build:test
 
       - name: Build Rust (test mode)
         run: cargo build --features test-mode

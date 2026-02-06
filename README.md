@@ -23,7 +23,7 @@ A secure notes app with passkey authentication and optional end-to-end encryptio
 ```bash
 # Build frontend
 npm install
-npm run build-all
+npm run build
 
 # Build and run server
 cargo run -- --port 7291 --database crowchiper.db
@@ -182,7 +182,7 @@ The dev server:
 npm install
 
 # Build frontend for production
-npm run build-all
+npm run build
 
 # Run the server (JWT_SECRET must be 32+ characters)
 JWT_SECRET=your-32-character-secret-here cargo run
@@ -193,8 +193,8 @@ JWT_SECRET=your-32-character-secret-here cargo run
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start Vite dev server (port 5173) |
-| `npm run build-all` | Build frontend for production |
-| `npm run build-all-test` | Build frontend with test mode |
+| `npm run build` | Build frontend for production |
+| `npm run build:test` | Build frontend with test mode |
 | `npm run lint:fix` | TypeScript type check and lint fix |
 | `cargo run -- --port 7291` | Run server on port 7291 |
 | `cargo build --release` | Build release binary |

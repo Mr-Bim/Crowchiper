@@ -104,10 +104,10 @@ When overlap is detected, the build will:
 
 The build system handles `data-testid` attributes differently based on test mode:
 
-**Production build (`npm run build-all`):**
+**Production build (`npm run build`):**
 - All `data-testid` attributes are stripped from HTML
 
-**Test build (`npm run build-all-test`):**
+**Test build (`npm run build:test`):**
 - `data-testid` attributes are preserved
 - Build fails if any `data-testid` value in HTML overlaps with a CSS class name
 
@@ -139,8 +139,8 @@ Set in `inline.ts`, available via `declare const`:
 
 ## Adding Pages
 
-**Login page**: Create `web/public/my-page.html`, run `npm run build-all`
-**App page**: Create `web/app/my-page.html`, run `npm run build-all`
+**Login page**: Create `web/public/my-page.html`, run `npm run build`
+**App page**: Create `web/app/my-page.html`, run `npm run build`
 
 ## When changing the web folder/frontend ALWAYS
 - Run npm run lint:fix
@@ -188,7 +188,7 @@ await page.goto(`${baseUrl}/login/register.html`);
 ```
 
 The test code is only included when building with test mode:
-- JS: Use `npm run build-all-test` to build with TEST_MODE (includes test code)
+- JS: Use `npm run build:test` to build with TEST_MODE (includes test code)
 - `__TEST_MODE__` constant is replaced at build time and dead code is eliminated
 
 ## Test Token Generation API
@@ -379,7 +379,7 @@ This makes Vite:
 1. Build and check the bundled index.js for the chunk's import
 2. If it uses `__vite__mapDeps([])` (empty array), the chunk has no shared dependencies
 3. Add an import from `shared/dom.ts` and use it somewhere in the code
-4. Rebuild both frontend (`npm run build-all`) and Rust (`cargo build`) to update CSP hashes
+4. Rebuild both frontend (`npm run build`) and Rust (`cargo build`) to update CSP hashes
 5. Verify the chunk now has a non-empty `__vite__mapDeps` array
 
 ### Shared Utilities (`web/app/src/shared/`)
