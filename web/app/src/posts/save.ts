@@ -13,7 +13,6 @@ import { clearImageCacheExcept } from "../shared/image-cache.ts";
 import {
   clearSaveTimeout,
   editorSignal,
-  loadedDecryptedContentSignal,
   loadedPostSignal,
   pendingEncryptedDataSignal,
   decryptedTitlesSignal,
@@ -82,8 +81,9 @@ export function setupBeforeUnloadWarning(): void {
 // --- Autosave ---
 
 /**
- * Schedule autosave after 5 seconds of inactivity.
- * Updates the title in the sidebar immediately, sets sync status to "pending".
+ * Schedule autosave after debounce period of inactivity.
+ * Encrypts immediately so sendBeacon always has fresh data on page close.
+ * Only the network save is debounced.
  */
 export function scheduleAutosave(): void {
   clearSaveTimeout();
@@ -100,19 +100,14 @@ export function scheduleAutosave(): void {
     callRenderPostList();
   }
 
+  // Encrypt immediately so pagehide beacon always has fresh data
+  encryptCurrentPost();
+
   setSaveTimeout(
     window.setTimeout(() => {
-      autosave();
+      savePost({ includeAttachments: true, clearCache: true });
     }, AUTOSAVE_DEBOUNCE_MS),
   );
-}
-
-/**
- * Autosave: encrypt and save to server.
- */
-async function autosave(): Promise<void> {
-  await encryptCurrentPost();
-  await savePost({ includeAttachments: true, clearCache: true });
 }
 
 /**
@@ -211,41 +206,17 @@ async function savePost(options: SaveOptions = {}): Promise<void> {
 // --- Public Save APIs ---
 
 /**
- * Save to server immediately when navigating away from a post.
- * Includes attachments and clears cache.
+ * Flush pending encrypted data to server immediately.
+ * Cancels any active debounce timer. No-op if nothing is pending.
+ * Used when switching posts, creating new posts, and force-saving.
  */
-export async function saveToServerNow(): Promise<void> {
-  const loadedPost = loadedPostSignal.get();
-  const editor = editorSignal.get();
-
-  if (!loadedPost || !editor) return;
-
-  const currentContent = editor.state.doc.toString();
-  const originalContent = loadedDecryptedContentSignal.get();
-
-  // Only save if content has actually changed
-  if (currentContent === originalContent) return;
-
-  clearSaveTimeout();
-  await encryptCurrentPost();
-  await savePost({ includeAttachments: true, clearCache: true });
-}
-
-/**
- * Force save for testing purposes.
- * Immediately encrypts and saves the current post.
- */
-export async function forceSave(): Promise<void> {
-  const loadedPost = loadedPostSignal.get();
-  const editor = editorSignal.get();
-
-  if (!loadedPost || !editor) return;
-
+export async function flushSave(): Promise<void> {
   clearSaveTimeout();
   clearSyncedTimeout();
-  await encryptCurrentPost();
   await savePost({ includeAttachments: true, clearCache: true });
 }
+
+// --- Beacon Save ---
 
 /**
  * Save post via beacon when page is unloading.

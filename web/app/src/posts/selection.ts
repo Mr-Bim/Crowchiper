@@ -24,7 +24,7 @@ import {
   pendingEncryptedDataSignal,
   withLoadingLock,
 } from "./state/index.ts";
-import { saveToServerNow } from "./save.ts";
+import { flushSave } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { setupEditor } from "./editor.ts";
 
@@ -67,7 +67,7 @@ export async function selectPost(postNode: PostNode): Promise<void> {
     setPostItemLoading(postNode.uuid, true);
 
     // Save current post to server before switching (includes attachment refs)
-    await saveToServerNow();
+    await flushSave();
 
     // Clear pending data for new post
     pendingEncryptedDataSignal.set(null);

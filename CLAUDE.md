@@ -416,7 +416,15 @@ The `editor/attachment-widget/utils.ts` and `cache.ts` files re-export from shar
 
 ## Autosave and Sync Indicator
 
-The app automatically saves content after 1.5 seconds of inactivity (autosave with debounce). The header shows a sync indicator instead of a save button:
+The app automatically saves content after 1.5 seconds of inactivity (autosave with debounce). The header shows a sync indicator instead of a save button.
+
+### Eager Encryption for Page Close Safety
+Content is encrypted immediately on every change (not debounced), so `pendingEncryptedDataSignal` always has fresh encrypted data. Only the network save is debounced (1.5s). This ensures the `pagehide` beacon always has data to send.
+
+Two layers protect against data loss when the page is closed:
+
+1. **`pagehide` → `sendBeacon`** - Sends the already-encrypted pending data via `navigator.sendBeacon()`, which survives page unload. Works across all browsers since no async work is needed.
+2. **`beforeunload` → browser dialog** - Shows "Are you sure?" dialog if there's still unsaved encrypted data.
 
 ### Sync States (`SyncStatus` in `web/app/src/posts/state/signals.ts`)
 - **idle** - No pending changes, indicator hidden

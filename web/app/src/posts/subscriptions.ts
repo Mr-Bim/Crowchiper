@@ -15,7 +15,7 @@ import {
   type SyncStatus,
 } from "./state/index.ts";
 import { renderPostNode, reinitDragAndDrop } from "./render.ts";
-import { forceSave } from "./save.ts";
+import { flushSave } from "./save.ts";
 
 let initialized = false;
 
@@ -170,7 +170,7 @@ export function initSubscriptions(): void {
   if (indicator) {
     indicator.addEventListener("click", () => {
       if (syncStatusSignal.get() === "pending") {
-        forceSave();
+        flushSave();
       }
     });
   }

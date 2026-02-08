@@ -9,7 +9,7 @@ export * from "./state/index.ts";
 export { registerHandlers } from "./handlers.ts";
 
 // Save and encryption
-export { forceSave, saveBeacon, scheduleAutosave } from "./save.ts";
+export { flushSave, saveBeacon, scheduleAutosave } from "./save.ts";
 
 // Rendering
 export { renderPostList } from "./render.ts";

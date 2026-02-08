@@ -30,7 +30,7 @@ import {
   loadedDecryptedContentSignal,
   pendingEncryptedDataSignal,
 } from "./state/index.ts";
-import { saveToServerNow } from "./save.ts";
+import { flushSave } from "./save.ts";
 import { renderPostList } from "./render.ts";
 import { selectPost } from "./selection.ts";
 import { destroyEditor, setupEditor } from "./editor.ts";
@@ -49,7 +49,7 @@ export async function handleNewPost(
   if (isLoading()) return;
 
   // Save current post before creating new one (includes attachment refs)
-  await saveToServerNow();
+  await flushSave();
 
   // Clear pending data
   pendingEncryptedDataSignal.set(null);
