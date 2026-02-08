@@ -88,7 +88,6 @@ async function dragPostToPost(
     steps: 10,
   });
   await page.mouse.up();
-  await page.waitForTimeout(500);
 }
 
 /**
@@ -212,20 +211,19 @@ test.describe("Last selected post persistence", () => {
     // Save before reload
     await forceSave(page);
 
+    // Wait for reparent API call to complete before reloading
+    await page.waitForLoadState("networkidle");
+
     // Reload page
     await reloadAndUnlock(page);
 
-    // Wait for posts to load - both Parent and Child should be visible
-    await expect(
-      postList
-        .locator('[data-testid="test-post-item"]')
-        .filter({ hasText: "Parent Post" }),
-    ).toBeVisible({ timeout: 10000 });
-
-    // The nested post should be selected and parent expanded
+    // Wait for a post to be selected (loadPosts renders first, then selects async)
     const activePost = postList.locator(
       '[data-testid="test-post-item"].active',
     );
+    await expect(activePost).toBeVisible({ timeout: 10000 });
+
+    // The nested post should be selected and parent expanded
     await expect(activePost).toContainText("Child Post", { timeout: 5000 });
     await expect(editor).toContainText("Child Post", { timeout: 5000 });
 

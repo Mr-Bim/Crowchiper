@@ -42,51 +42,42 @@ jobs:
           echo "Looking for CI workflow run for commit ${{ github.sha }}"
 
           for i in {1..60}; do
-            # Check for successful run first
-            RUN_ID=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=1" \
-              --jq '.workflow_runs[0].id // empty')
-
-            if [ -n "$RUN_ID" ]; then
-              echo "Found successful CI run: $RUN_ID"
-              echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-
-            # Check if CI is still running
-            IN_PROGRESS=$(gh api \
+            # Get the latest CI run for this commit
+            RUN_JSON=$(gh api \
               -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&per_page=1" \
-              --jq '.workflow_runs[0] | select(.status == "in_progress" or .status == "queued" or .status == "waiting") | .id // empty')
+              --jq '.workflow_runs[0] // empty')
 
-            if [ -n "$IN_PROGRESS" ]; then
-              echo "CI run $IN_PROGRESS is still in progress, waiting 30s... (attempt $i/60)"
-              sleep 30
-              continue
-            fi
+            if [ -z "$RUN_JSON" ] || [ "$RUN_JSON" = "null" ]; then
+              # No CI run found at all - wait a bit in case it's just starting
+              if [ $i -lt 5 ]; then
+                echo "No CI run found yet, waiting 30s... (attempt $i/60)"
+                sleep 30
+                continue
+              fi
 
-            # Check if CI failed
-            FAILED=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=failure&per_page=1" \
-              --jq '.workflow_runs[0].id // empty')
-
-            if [ -n "$FAILED" ]; then
-              echo "CI run $FAILED failed. Cannot create release."
+              echo "No CI run found for commit ${{ github.sha }}"
+              echo "Make sure CI has run on main before pushing a tag"
               exit 1
             fi
 
-            # No CI run found at all - wait a bit in case it's just starting
-            if [ $i -lt 5 ]; then
-              echo "No CI run found yet, waiting 30s... (attempt $i/60)"
-              sleep 30
-              continue
+            RUN_ID=$(echo "$RUN_JSON" | jq -r '.id')
+            STATUS=$(echo "$RUN_JSON" | jq -r '.status')
+            CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion')
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "Found successful CI run: $RUN_ID"
+                echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+                exit 0
+              else
+                echo "CI run $RUN_ID completed with conclusion: $CONCLUSION. Cannot create release."
+                exit 1
+              fi
             fi
 
-            echo "No CI run found for commit ${{ github.sha }}"
-            echo "Make sure CI has run on main before pushing a tag"
-            exit 1
+            echo "CI run $RUN_ID status: $STATUS, waiting 30s... (attempt $i/60)"
+            sleep 30
           done
 
           echo "Timed out waiting for CI to complete (30 minutes)"

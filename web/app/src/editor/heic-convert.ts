@@ -260,28 +260,34 @@ function runWorkerTask(task: WorkerTask): Promise<WorkerResult> {
  * Process an image file: convert to WebP, compress if needed, generate thumbnails.
  * Uses Web Workers for true parallel processing on multiple CPU cores.
  * HEIC files should be converted first via convertHeicIfNeeded.
+ *
+ * Creates ImageBitmaps individually to avoid holding all of them in GPU memory
+ * simultaneously. Each bitmap is transferred (zero-copy) to its worker immediately,
+ * which is important for memory on mobile devices.
  */
 export async function processImage(file: File): Promise<ProcessedImage> {
-  // Create ImageBitmap from file - this is transferable to workers
-  const bitmap = await createImageBitmap(file);
+  // Create bitmaps and dispatch to workers individually.
+  // Each createImageBitmap decodes the file into GPU memory. By starting each
+  // worker task immediately after creating its bitmap, the worker can take
+  // ownership via transfer and the main thread reference is released.
+  const mainPromise = createImageBitmap(file).then((b) =>
+    runWorkerTask({ type: "main", bitmap: b }),
+  );
+  const smPromise = createImageBitmap(file).then((b) =>
+    runWorkerTask({ type: "thumbnail", bitmap: b, size: "sm" }),
+  );
+  const mdPromise = createImageBitmap(file).then((b) =>
+    runWorkerTask({ type: "thumbnail", bitmap: b, size: "md" }),
+  );
+  const lgPromise = createImageBitmap(file).then((b) =>
+    runWorkerTask({ type: "thumbnail", bitmap: b, size: "lg" }),
+  );
 
-  // Create separate bitmaps for each worker (bitmaps can only be transferred once)
-  const [bitmapMain, bitmapSm, bitmapMd, bitmapLg] = await Promise.all([
-    createImageBitmap(file),
-    createImageBitmap(file),
-    createImageBitmap(file),
-    createImageBitmap(file),
-  ]);
-
-  // Close the original bitmap we used for nothing
-  bitmap.close();
-
-  // Run all tasks in parallel on separate workers
   const [mainResult, smResult, mdResult, lgResult] = await Promise.all([
-    runWorkerTask({ type: "main", bitmap: bitmapMain }),
-    runWorkerTask({ type: "thumbnail", bitmap: bitmapSm, size: "sm" }),
-    runWorkerTask({ type: "thumbnail", bitmap: bitmapMd, size: "md" }),
-    runWorkerTask({ type: "thumbnail", bitmap: bitmapLg, size: "lg" }),
+    mainPromise,
+    smPromise,
+    mdPromise,
+    lgPromise,
   ]);
 
   // Check for errors

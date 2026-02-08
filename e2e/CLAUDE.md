@@ -171,6 +171,8 @@ Defined in `Server` enum:
 - **`tokens.spec.ts`** - Comprehensive token system tests (see below)
 - **`post-navigation.spec.ts`** - Post switching, save behavior, editor state tests
 - **`reorder.spec.ts`** - Drag and drop post reordering tests
+- **`upload.spec.ts`** - Single image upload with progress feedback and encryption
+- **`multi-upload.spec.ts`** - Multi-image upload, individual/gallery deletion, add to existing gallery
 - **`nested-posts/*.spec.ts`** - Hierarchical post structure tests
 
 ### Token Tests (`tokens.spec.ts`)

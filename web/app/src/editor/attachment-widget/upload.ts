@@ -69,7 +69,6 @@ async function uploadProcessedImage(
   processed: ProcessedImage,
   options?: UploadOptions,
 ): Promise<string> {
-  const { image, thumbnails } = processed;
   const { onProgress, signal } = options ?? {};
 
   // Check if already aborted
@@ -89,11 +88,17 @@ async function uploadProcessedImage(
 
     const [encryptedImage, encThumbSm, encThumbMd, encThumbLg] =
       await Promise.all([
-        encryptBinary(image, sessionEncryptionKey),
-        encryptBinary(thumbnails.sm, sessionEncryptionKey),
-        encryptBinary(thumbnails.md, sessionEncryptionKey),
-        encryptBinary(thumbnails.lg, sessionEncryptionKey),
+        encryptBinary(processed.image, sessionEncryptionKey),
+        encryptBinary(processed.thumbnails.sm, sessionEncryptionKey),
+        encryptBinary(processed.thumbnails.md, sessionEncryptionKey),
+        encryptBinary(processed.thumbnails.lg, sessionEncryptionKey),
       ]);
+
+    // Release unencrypted data — no longer needed after encryption
+    processed.image = new ArrayBuffer(0);
+    processed.thumbnails.sm = new ArrayBuffer(0);
+    processed.thumbnails.md = new ArrayBuffer(0);
+    processed.thumbnails.lg = new ArrayBuffer(0);
 
     // Check if aborted during encryption
     if (signal?.aborted) {
@@ -143,13 +148,13 @@ async function uploadProcessedImage(
 
     const response = await uploadAttachmentWithProgress(
       {
-        image,
+        image: processed.image,
         image_iv: "",
-        thumb_sm: thumbnails.sm,
+        thumb_sm: processed.thumbnails.sm,
         thumb_sm_iv: "",
-        thumb_md: thumbnails.md,
+        thumb_md: processed.thumbnails.md,
         thumb_md_iv: "",
-        thumb_lg: thumbnails.lg,
+        thumb_lg: processed.thumbnails.lg,
         thumb_lg_iv: "",
         encryption_version: UNENCRYPTED_VERSION,
       },

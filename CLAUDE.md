@@ -724,6 +724,7 @@ Test files located in `tests/` folder:
 
 - **`api_tests.rs`**: User and passkey registration API tests
 - **`admin_tests.rs`**: Admin dashboard API and user settings tests
+- **`attachment_tests.rs`**: Attachment upload, post linking, reference counting, and cleanup tests
 - **`posts_tests.rs`**: Posts CRUD, reordering, and user isolation tests
 - **`token_tests.rs`**: Dual-token authentication system tests
 - **`startup_tests.rs`**: Binary startup validation (JWT secret, HTTPS, base path)
