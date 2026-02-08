@@ -24,7 +24,7 @@ import {
 
 // --- Constants ---
 
-const AUTOSAVE_DEBOUNCE_MS = 5000;
+const AUTOSAVE_DEBOUNCE_MS = 1500;
 const SYNCED_INDICATOR_MS = 2000;
 
 // --- Helpers ---

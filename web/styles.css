@@ -81,6 +81,7 @@
 
 /* Scandinavian - Dark */
 [data-theme="scandi-dark"] {
+    color-scheme: dark;
     --accent: oklch(0.72 0.17 55);
     --accent-hover: oklch(0.78 0.14 60);
     --bg: oklch(0.15 0 0);
@@ -117,6 +118,7 @@
 
 /* Paper/Stationery - Dark */
 [data-theme="paper-dark"] {
+    color-scheme: dark;
     --accent: oklch(0.72 0.15 55);
     --accent-hover: oklch(0.78 0.12 60);
     --bg: oklch(0.22 0.008 60);
@@ -165,7 +167,8 @@ a:hover {
 
 button,
 input,
-textarea {
+textarea,
+select {
     font-family: inherit;
     color: var(--text);
 }

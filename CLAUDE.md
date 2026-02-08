@@ -416,7 +416,7 @@ The `editor/attachment-widget/utils.ts` and `cache.ts` files re-export from shar
 
 ## Autosave and Sync Indicator
 
-The app automatically saves content after 5 seconds of inactivity (autosave with debounce). The header shows a sync indicator instead of a save button:
+The app automatically saves content after 1.5 seconds of inactivity (autosave with debounce). The header shows a sync indicator instead of a save button:
 
 ### Sync States (`SyncStatus` in `web/app/src/posts/state/signals.ts`)
 - **idle** - No pending changes, indicator hidden
@@ -433,7 +433,7 @@ The app automatically saves content after 5 seconds of inactivity (autosave with
 - **CSS**: `web/app/css/app.css` - `.cl-sync-indicator` styles and animations
 
 ### Test Mode Force Save Button
-In test mode (`__TEST_MODE__`), a "Save" button is dynamically added next to the sync indicator for testing purposes. This allows tests to trigger immediate saves instead of waiting for the 5-second debounce.
+In test mode (`__TEST_MODE__`), a "Save" button is dynamically added next to the sync indicator for testing purposes. This allows tests to trigger immediate saves instead of waiting for the debounce.
 
 ```typescript
 // In tests, use the force save button instead of waitForTimeout

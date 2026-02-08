@@ -15,6 +15,7 @@ import {
   type SyncStatus,
 } from "./state/index.ts";
 import { renderPostNode, reinitDragAndDrop } from "./render.ts";
+import { forceSave } from "./save.ts";
 
 let initialized = false;
 
@@ -163,6 +164,16 @@ export function initSubscriptions(): void {
 
   // Auto-update sync indicator when sync status changes
   syncStatusSignal.subscribe(updateSyncIndicator);
+
+  // Click sync indicator to save immediately when pending
+  const indicator = getOptionalElement("sync-indicator");
+  if (indicator) {
+    indicator.addEventListener("click", () => {
+      if (syncStatusSignal.get() === "pending") {
+        forceSave();
+      }
+    });
+  }
 
   // Auto-update chevron and surgically add/remove children
   expandedChangedSignal.subscribe(handleExpandedChange);
