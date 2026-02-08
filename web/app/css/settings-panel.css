@@ -11,6 +11,7 @@
     align-items: flex-start;
     justify-content: center;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .cl-settings-panel[hidden] {
@@ -90,8 +91,10 @@ button.ghost.settings-panel-close-btn {
 
 .session-item {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
+    gap: 0.5rem;
     padding: 1rem;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -106,6 +109,7 @@ button.ghost.settings-panel-close-btn {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    min-width: 0;
 }
 
 .session-ip {
@@ -127,6 +131,7 @@ button.ghost.settings-panel-close-btn {
 .session-details {
     font-size: 0.75rem;
     color: var(--text-muted);
+    word-break: break-word;
 }
 
 .session-revoke-btn {
@@ -156,4 +161,14 @@ button.ghost.settings-panel-close-btn {
 .session-revoke-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+@media (max-width: 48rem) {
+    .settings-panel-content {
+        padding: 1rem;
+    }
+
+    .settings-panel-header {
+        margin-bottom: 1rem;
+    }
 }

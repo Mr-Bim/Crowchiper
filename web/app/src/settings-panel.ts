@@ -138,14 +138,12 @@ async function loadSessions(): Promise<void> {
 export function openSettingsPanel(): void {
   const panel = getRequiredElement("settings-panel");
   panel.hidden = false;
-  document.body.style.overflow = "hidden";
   loadSessions();
 }
 
 export function closeSettingsPanel(): void {
   const panel = getRequiredElement("settings-panel");
   panel.hidden = true;
-  document.body.style.overflow = "";
 }
 
 let isSetup = false;
