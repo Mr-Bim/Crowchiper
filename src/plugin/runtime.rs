@@ -2,20 +2,23 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use wasmtime::component::{Component, Linker};
-use wasmtime::{Engine, Store};
+use wasmtime::{Engine, Store, StoreLimits, StoreLimitsBuilder};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
+use super::permissions::PluginPermission;
 use super::{Plugin, PluginError};
 
 /// Per-instance WASI state for a plugin.
 ///
-/// Each plugin gets its own sandboxed WASI context (filesystem, stdio, env)
-/// and resource table (handles for host resources like file descriptors).
+/// Each plugin gets its own sandboxed WASI context (filesystem, stdio, env),
+/// resource table (handles for host resources like file descriptors), and
+/// resource limits (memory, tables) to prevent unbounded allocation.
 /// The plugin cannot access anything outside what is explicitly granted here.
 struct PluginState {
     wasi: WasiCtx,
     table: ResourceTable,
+    limits: StoreLimits,
 }
 
 /// Implements the `WasiView` trait so wasmtime can access the WASI context
@@ -68,14 +71,23 @@ impl PluginRuntime {
     /// Returns [`PluginError::Load`] for I/O or compilation failures,
     /// [`PluginError::Runtime`] if instantiation or `config()` fails, and
     /// [`PluginError::InvalidConfig`] if the returned metadata is invalid.
-    pub fn load(path: &Path) -> Result<Self, PluginError> {
+    pub fn load(
+        path: &Path,
+        permissions: &[PluginPermission],
+        config: &[(String, String)],
+    ) -> Result<Self, PluginError> {
         // Step 1: Read the raw .wasm bytes from disk.
         let wasm_bytes = std::fs::read(path)
             .map_err(|e| PluginError::Load(format!("failed to read {}: {e}", path.display())))?;
 
-        // Step 2: Create a wasmtime engine and compile the bytes into a Component.
-        // The engine is configured with defaults (cranelift backend, no fuel metering).
-        let engine = Engine::default();
+        // Step 2: Create a wasmtime engine with resource limits and compile the
+        // bytes into a Component. Fuel metering caps CPU usage (each WASM instruction
+        // consumes ~1 fuel unit). Stack size is capped to prevent stack overflow.
+        let mut engine_config = wasmtime::Config::new();
+        engine_config.consume_fuel(true);
+        engine_config.max_wasm_stack(512 * 1024); // 512KB stack limit
+        let engine = Engine::new(&engine_config)
+            .map_err(|e| PluginError::Load(format!("failed to create engine: {e}")))?;
 
         let component = Component::new(&engine, &wasm_bytes)
             .map_err(|e| PluginError::Load(format!("failed to compile {}: {e}", path.display())))?;
@@ -86,13 +98,34 @@ impl PluginRuntime {
         wasmtime_wasi::p2::add_to_linker_sync(&mut linker)
             .map_err(|e| PluginError::Load(format!("failed to add WASI to linker: {e}")))?;
 
-        // Build a minimal WASI context: only stderr is captured into an in-memory
-        // pipe so we can read panic messages. No stdin, stdout, filesystem, env,
-        // or network access is granted — the plugin is fully sandboxed.
+        // Build the WASI context. By default only stderr is captured into an
+        // in-memory pipe so we can read panic messages. Additional capabilities
+        // (filesystem, network, env) are granted based on the plugin's permissions.
         let stderr = MemoryOutputPipe::new(4096);
-        let wasi = WasiCtxBuilder::new().stderr(stderr.clone()).build();
+        let mut wasi_builder = WasiCtxBuilder::new();
+        wasi_builder.stderr(stderr.clone());
+        apply_permissions(&mut wasi_builder, permissions)?;
+        let wasi = wasi_builder.build();
         let table = ResourceTable::new();
-        let mut store = Store::new(&engine, PluginState { wasi, table });
+
+        // Memory limits: cap each linear memory at 10MB to prevent OOM.
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(10 * 1024 * 1024)
+            .build();
+        let mut store = Store::new(
+            &engine,
+            PluginState {
+                wasi,
+                table,
+                limits,
+            },
+        );
+        store.limiter(|state| &mut state.limits);
+
+        // Fuel limit: ~10M instructions for the config() call.
+        store
+            .set_fuel(10_000_000)
+            .map_err(|e| PluginError::Load(format!("failed to set fuel limit: {e}")))?;
 
         // Step 4: Instantiate the component. This resolves all imports against
         // the linker and runs any WASI initialization (`_start` / `_initialize`).
@@ -102,7 +135,7 @@ impl PluginRuntime {
         // Step 5: Call the plugin's exported `config()` function to retrieve its
         // metadata (name, version, hooks). If the call traps (e.g. the guest
         // panics), we read stderr to produce a human-friendly error message.
-        let config = instance.call_config(&mut store).map_err(|e| {
+        let config = instance.call_config(&mut store, config).map_err(|e| {
             let stderr_bytes = stderr.contents();
             let stderr_output = String::from_utf8_lossy(&stderr_bytes);
             // In verbose mode (RUST_BACKTRACE set), include the full stderr dump.
@@ -148,6 +181,85 @@ impl PluginRuntime {
     pub fn hooks(&self) -> &HashSet<String> {
         &self.hooks
     }
+}
+
+/// Apply granted permissions to the WASI context builder.
+///
+/// Each permission maps to a specific `WasiCtxBuilder` method:
+/// - `FsRead` → `preopened_dir` with read-only perms
+/// - `FsWrite` → `preopened_dir` with read+write perms
+/// - `Net` → `inherit_network`
+/// - `Env` → `inherit_env`
+fn apply_permissions(
+    builder: &mut WasiCtxBuilder,
+    permissions: &[PluginPermission],
+) -> Result<(), PluginError> {
+    use wasmtime_wasi::{DirPerms, FilePerms};
+
+    for perm in permissions {
+        match perm {
+            PluginPermission::FsRead(host_path) => {
+                let canonical = canonicalize_plugin_path(host_path)?;
+                let guest_path = canonical.to_str().ok_or_else(|| {
+                    PluginError::Load(format!(
+                        "filesystem path is not valid UTF-8: {}",
+                        canonical.display()
+                    ))
+                })?;
+                builder
+                    .preopened_dir(&canonical, guest_path, DirPerms::READ, FilePerms::READ)
+                    .map_err(|e| {
+                        PluginError::Load(format!(
+                            "failed to preopen directory '{}': {e}",
+                            canonical.display()
+                        ))
+                    })?;
+            }
+            PluginPermission::FsWrite(host_path) => {
+                let canonical = canonicalize_plugin_path(host_path)?;
+                let guest_path = canonical.to_str().ok_or_else(|| {
+                    PluginError::Load(format!(
+                        "filesystem path is not valid UTF-8: {}",
+                        canonical.display()
+                    ))
+                })?;
+                builder
+                    .preopened_dir(
+                        &canonical,
+                        guest_path,
+                        DirPerms::READ | DirPerms::MUTATE,
+                        FilePerms::READ | FilePerms::WRITE,
+                    )
+                    .map_err(|e| {
+                        PluginError::Load(format!(
+                            "failed to preopen directory '{}': {e}",
+                            canonical.display()
+                        ))
+                    })?;
+            }
+            PluginPermission::Net => {
+                builder.inherit_network();
+            }
+            PluginPermission::Env => {
+                builder.inherit_env();
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Canonicalize a filesystem path for plugin preopening.
+///
+/// Resolves symlinks and `..` components so the WASI sandbox operates on the
+/// real path. This prevents a plugin from escaping its sandbox via symlinks
+/// or path traversal in the preopened directory.
+fn canonicalize_plugin_path(path: &std::path::Path) -> Result<std::path::PathBuf, PluginError> {
+    std::fs::canonicalize(path).map_err(|e| {
+        PluginError::Load(format!(
+            "failed to resolve filesystem path '{}': {e}",
+            path.display()
+        ))
+    })
 }
 
 /// Extract structured panic info from WASI stderr output.

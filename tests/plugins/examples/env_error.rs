@@ -6,7 +6,7 @@ wit_bindgen::generate!({
 struct EnvErrorPlugin;
 
 impl Guest for EnvErrorPlugin {
-    fn config() -> PluginConfig {
+    fn config(_config: Vec<(String, String)>) -> PluginConfig {
         std::env::var("SECRET").unwrap();
         PluginConfig {
             name: "env-error".to_string(),

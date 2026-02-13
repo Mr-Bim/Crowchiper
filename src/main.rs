@@ -21,12 +21,15 @@ async fn main() {
         std::process::exit(1);
     };
 
-    for plugin_path in &args.plugin {
-        let path = plugin_path.clone();
-        let result = tokio::task::spawn_blocking(move || PluginRuntime::load(&path)).await;
+    for plugin_spec in &args.plugin {
+        let spec = plugin_spec.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            PluginRuntime::load(&spec.path, &spec.permissions, &spec.config)
+        })
+        .await;
         match result {
             Err(e) => {
-                error!(path = %plugin_path.display(), error = %e, "Plugin loading task panicked");
+                error!(path = %plugin_spec.path.display(), error = %e, "Plugin loading task panicked");
                 std::process::exit(1);
             }
             Ok(Ok(plugin)) => {
@@ -34,11 +37,11 @@ async fn main() {
             }
             Ok(Err(e)) => match args.plugin_error {
                 PluginErrorMode::Abort => {
-                    error!(path = %plugin_path.display(), error = %e, "Failed to load plugin");
+                    error!(path = %plugin_spec.path.display(), error = %e, "Failed to load plugin");
                     std::process::exit(1);
                 }
                 PluginErrorMode::Warn => {
-                    warn!(path = %plugin_path.display(), error = %e, "Failed to load plugin, skipping");
+                    warn!(path = %plugin_spec.path.display(), error = %e, "Failed to load plugin, skipping");
                 }
             },
         }

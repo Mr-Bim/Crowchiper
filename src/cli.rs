@@ -3,6 +3,7 @@
 use crate::ServerConfig;
 use crate::db::Database;
 use crate::names::generate_name;
+use crate::plugin::{PluginSpec, parse_plugin_spec};
 use clap::Parser;
 use tracing::{error, info};
 use url::Url;
@@ -184,9 +185,11 @@ pub struct Args {
     #[arg(short, long, value_enum)]
     pub ip_header: Option<ClientIpHeader>,
 
-    /// Path to a WASM plugin file (.wasm), can be specified multiple times
-    #[arg(long)]
-    pub plugin: Vec<std::path::PathBuf>,
+    /// Plugin with optional permissions and config: path.wasm[:perm1,var-key=val,...]
+    /// Permissions: net, env, fs-read=<path>, fs-write=<path>
+    /// Config variables: var-<key>=<value> (passed to plugin's config function)
+    #[arg(long, value_parser = parse_plugin_spec)]
+    pub plugin: Vec<PluginSpec>,
 
     /// Behavior when a plugin fails to load: abort (default) or warn
     #[arg(long, default_value = "abort", value_enum)]

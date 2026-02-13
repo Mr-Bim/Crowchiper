@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crowchiper::plugin::{PluginError, PluginRuntime};
+use crowchiper::plugin::{PluginError, PluginPermission, PluginRuntime};
 
 fn wasm_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/plugins/wasm")
@@ -103,14 +103,15 @@ fn spawn_expect_listening(args: &[&str]) -> (String, String) {
 
 #[test]
 fn test_good_plugin_loads_successfully() {
-    let plugin = PluginRuntime::load(&wasm_path("good")).expect("good plugin should load");
+    let plugin =
+        PluginRuntime::load(&wasm_path("good"), &[], &[]).expect("good plugin should load");
     assert_eq!(plugin.name(), "good");
     assert_eq!(plugin.version(), "1.0.0");
 }
 
 #[test]
 fn test_good_plugin_has_hooks() {
-    let plugin = PluginRuntime::load(&wasm_path("good")).unwrap();
+    let plugin = PluginRuntime::load(&wasm_path("good"), &[], &[]).unwrap();
     assert!(
         plugin.hooks().contains("test-hook"),
         "should contain test-hook"
@@ -122,7 +123,7 @@ fn test_good_plugin_has_hooks() {
 
 #[test]
 fn test_fs_error_contains_file_descriptor_message() {
-    let err = PluginRuntime::load(&wasm_path("fs-error")).unwrap_err();
+    let err = PluginRuntime::load(&wasm_path("fs-error"), &[], &[]).unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "filesystem access should cause a runtime error, got: {err}"
@@ -144,7 +145,7 @@ fn test_fs_error_contains_file_descriptor_message() {
 
 #[test]
 fn test_net_error_contains_unsupported_message() {
-    let err = PluginRuntime::load(&wasm_path("net-error")).unwrap_err();
+    let err = PluginRuntime::load(&wasm_path("net-error"), &[], &[]).unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "network access should cause a runtime error, got: {err}"
@@ -164,7 +165,7 @@ fn test_net_error_contains_unsupported_message() {
 
 #[test]
 fn test_env_error_contains_not_present_message() {
-    let err = PluginRuntime::load(&wasm_path("env-error")).unwrap_err();
+    let err = PluginRuntime::load(&wasm_path("env-error"), &[], &[]).unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "env access should cause a runtime error, got: {err}"
@@ -184,7 +185,7 @@ fn test_env_error_contains_not_present_message() {
 
 #[test]
 fn test_fs_error_includes_source_location() {
-    let msg = PluginRuntime::load(&wasm_path("fs-error"))
+    let msg = PluginRuntime::load(&wasm_path("fs-error"), &[], &[])
         .unwrap_err()
         .to_string();
     assert!(
@@ -195,7 +196,7 @@ fn test_fs_error_includes_source_location() {
 
 #[test]
 fn test_net_error_includes_source_location() {
-    let msg = PluginRuntime::load(&wasm_path("net-error"))
+    let msg = PluginRuntime::load(&wasm_path("net-error"), &[], &[])
         .unwrap_err()
         .to_string();
     assert!(
@@ -206,7 +207,7 @@ fn test_net_error_includes_source_location() {
 
 #[test]
 fn test_env_error_includes_source_location() {
-    let msg = PluginRuntime::load(&wasm_path("env-error"))
+    let msg = PluginRuntime::load(&wasm_path("env-error"), &[], &[])
         .unwrap_err()
         .to_string();
     assert!(
@@ -310,7 +311,7 @@ fn test_cli_clean_mode_omits_backtrace() {
 
 #[test]
 fn test_empty_name_plugin_is_rejected() {
-    let err = PluginRuntime::load(&wasm_path("empty-name")).unwrap_err();
+    let err = PluginRuntime::load(&wasm_path("empty-name"), &[], &[]).unwrap_err();
     assert!(
         matches!(&err, PluginError::InvalidConfig(_)),
         "empty name should cause an InvalidConfig error, got: {err}"
@@ -331,7 +332,7 @@ fn test_empty_name_plugin_is_rejected() {
 #[test]
 fn test_nonexistent_file_includes_path() {
     let bad_path = Path::new("/nonexistent/plugin.wasm");
-    let err = PluginRuntime::load(bad_path).unwrap_err();
+    let err = PluginRuntime::load(bad_path, &[], &[]).unwrap_err();
     assert!(
         matches!(&err, PluginError::Load(_)),
         "missing file should cause a load error, got: {err}"
@@ -352,7 +353,7 @@ fn test_invalid_wasm_includes_path() {
     let tmp = std::env::temp_dir().join(format!("bad_plugin_{}.wasm", std::process::id()));
     std::fs::write(&tmp, b"this is not valid wasm").unwrap();
 
-    let err = PluginRuntime::load(&tmp).unwrap_err();
+    let err = PluginRuntime::load(&tmp, &[], &[]).unwrap_err();
     let msg = err.to_string();
     std::fs::remove_file(&tmp).ok();
 
@@ -374,7 +375,7 @@ fn test_invalid_wasm_includes_path() {
 
 #[test]
 fn test_error_display_prefixes() {
-    let load_msg = PluginRuntime::load(Path::new("/nope.wasm"))
+    let load_msg = PluginRuntime::load(Path::new("/nope.wasm"), &[], &[])
         .unwrap_err()
         .to_string();
     assert!(
@@ -382,7 +383,7 @@ fn test_error_display_prefixes() {
         "Load variant should use 'plugin load error:' prefix, got: {load_msg}"
     );
 
-    let runtime_msg = PluginRuntime::load(&wasm_path("fs-error"))
+    let runtime_msg = PluginRuntime::load(&wasm_path("fs-error"), &[], &[])
         .unwrap_err()
         .to_string();
     assert!(
@@ -390,7 +391,7 @@ fn test_error_display_prefixes() {
         "Runtime variant should use 'plugin runtime error:' prefix, got: {runtime_msg}"
     );
 
-    let config_msg = PluginRuntime::load(&wasm_path("empty-name"))
+    let config_msg = PluginRuntime::load(&wasm_path("empty-name"), &[], &[])
         .unwrap_err()
         .to_string();
     assert!(
@@ -533,5 +534,229 @@ fn test_cli_abort_logs_plugin_path() {
     assert!(
         stdout.contains("fs-error.wasm"),
         "log should include the plugin file path, got: {stdout}"
+    );
+}
+
+// ── Permission: filesystem ───────────────────────────────────────────
+
+fn fs_test_dir() -> PathBuf {
+    std::env::temp_dir().join("crowchiper-plugin-test")
+}
+
+#[test]
+fn test_fs_success_with_write_permission() {
+    let dir = fs_test_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // Use the canonicalized path for the config var so it matches the
+    // guest-visible preopened directory (canonicalize resolves symlinks,
+    // e.g. /tmp → /private/tmp on macOS).
+    let canonical_dir = std::fs::canonicalize(&dir).unwrap();
+    let perms = vec![PluginPermission::FsWrite(dir.clone())];
+    let config = vec![(
+        "path".to_string(),
+        canonical_dir.to_str().unwrap().to_string(),
+    )];
+    let result = PluginRuntime::load(&wasm_path("fs-success"), &perms, &config);
+    std::fs::remove_dir_all(&dir).ok();
+
+    let plugin = result.expect("fs-success should load with fs-write permission");
+    assert_eq!(plugin.name(), "fs-success");
+}
+
+#[test]
+fn test_fs_success_without_permission_fails() {
+    let result = PluginRuntime::load(&wasm_path("fs-success"), &[], &[]);
+    assert!(
+        result.is_err(),
+        "fs-success should fail without permissions"
+    );
+}
+
+#[test]
+fn test_fs_success_with_read_only_permission_fails() {
+    let dir = fs_test_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let canonical_dir = std::fs::canonicalize(&dir).unwrap();
+    let perms = vec![PluginPermission::FsRead(dir.clone())];
+    let config = vec![(
+        "path".to_string(),
+        canonical_dir.to_str().unwrap().to_string(),
+    )];
+    let result = PluginRuntime::load(&wasm_path("fs-success"), &perms, &config);
+    std::fs::remove_dir_all(&dir).ok();
+
+    assert!(
+        result.is_err(),
+        "fs-success needs write access, read-only should fail"
+    );
+}
+
+#[test]
+fn test_fs_permission_nonexistent_dir_fails_at_load() {
+    let perms = vec![PluginPermission::FsRead(PathBuf::from(
+        "/nonexistent/dir/for/plugin",
+    ))];
+    let err = PluginRuntime::load(&wasm_path("good"), &perms, &[]).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("failed to resolve filesystem path"),
+        "error should mention path resolution failure, got: {msg}"
+    );
+}
+
+// ── Permission: environment ──────────────────────────────────────────
+
+#[test]
+fn test_env_success_with_permission() {
+    // SAFETY: single-threaded test runner (--test-threads=1)
+    unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
+    let perms = vec![PluginPermission::Env];
+    let plugin = PluginRuntime::load(&wasm_path("env-success"), &perms, &[])
+        .expect("env-success should load with env permission");
+    assert!(
+        plugin.name().contains("hello"),
+        "plugin name should contain the env var value, got: {}",
+        plugin.name()
+    );
+    unsafe { std::env::remove_var("TEST_PLUGIN_VAR") };
+}
+
+#[test]
+fn test_env_success_without_permission_fails() {
+    let result = PluginRuntime::load(&wasm_path("env-success"), &[], &[]);
+    assert!(
+        result.is_err(),
+        "env-success should fail without env permission"
+    );
+}
+
+// ── Permission: network ──────────────────────────────────────────────
+
+#[test]
+fn test_net_success_with_permission() {
+    // wasmtime-wasi sync networking needs an ambient tokio runtime
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+
+    let perms = vec![PluginPermission::Net];
+    let plugin = PluginRuntime::load(&wasm_path("net-success"), &perms, &[])
+        .expect("net-success should load with net permission");
+    assert_eq!(plugin.name(), "net-success");
+}
+
+#[test]
+fn test_net_success_without_permission_fails() {
+    let result = PluginRuntime::load(&wasm_path("net-success"), &[], &[]);
+    assert!(
+        result.is_err(),
+        "net-success should fail without net permission"
+    );
+}
+
+// ── CLI: permissions ─────────────────────────────────────────────────
+
+#[test]
+fn test_cli_plugin_with_permissions_loads() {
+    let (stdout, _stderr) = spawn_expect_listening(&[
+        "--plugin",
+        &format!("{}:net,env", wasm_path("good").to_str().unwrap()),
+        "--port",
+        "0",
+    ]);
+    assert!(
+        stdout.contains("Plugin loaded"),
+        "plugin should load with permissions, got: {stdout}"
+    );
+}
+
+#[test]
+fn test_cli_invalid_permission_rejected() {
+    let (_stdout, stderr, success) = run_cli(&["--plugin", "a.wasm:bogus", "--port", "0"]);
+    assert!(!success, "invalid permission should cause exit");
+    assert!(
+        stderr.contains("unknown permission"),
+        "error should mention unknown permission, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_cli_fs_permission_nonexistent_dir() {
+    let plugin_arg = format!(
+        "{}:fs-read=/nonexistent/dir/for/plugin",
+        wasm_path("good").to_str().unwrap()
+    );
+    let (stdout, _stderr, success) = run_cli(&["--plugin", &plugin_arg, "--port", "0"]);
+    assert!(!success, "nonexistent fs path should cause load failure");
+    assert!(
+        stdout.contains("failed to resolve filesystem path"),
+        "error should mention path resolution failure, got: {stdout}"
+    );
+}
+
+// ── Resource exhaustion ──────────────────────────────────────────────
+
+#[test]
+fn test_infinite_loop_exhausts_fuel() {
+    let err = PluginRuntime::load(&wasm_path("infinite-loop"), &[], &[]).unwrap_err();
+    assert!(
+        matches!(&err, PluginError::Runtime(_)),
+        "infinite loop should cause a runtime error, got: {err}"
+    );
+    // Wasmtime traps with "all fuel consumed" or similar when fuel runs out.
+    // The error passes through our generic "failed to call config()" handler.
+    let msg = err.to_string();
+    assert!(
+        msg.contains("fuel") || msg.contains("wasm backtrace"),
+        "error should indicate execution was interrupted, got: {msg}"
+    );
+}
+
+#[test]
+fn test_memory_hog_hits_limit() {
+    let err = PluginRuntime::load(&wasm_path("memory-hog"), &[], &[]).unwrap_err();
+    assert!(
+        matches!(&err, PluginError::Runtime(_)),
+        "memory hog should cause a runtime error, got: {err}"
+    );
+}
+
+#[test]
+fn test_stack_overflow_is_caught() {
+    let err = PluginRuntime::load(&wasm_path("stack-overflow"), &[], &[]).unwrap_err();
+    assert!(
+        matches!(&err, PluginError::Runtime(_)),
+        "stack overflow should cause a runtime error, got: {err}"
+    );
+}
+
+// ── Path validation ──────────────────────────────────────────────────
+
+#[test]
+fn test_relative_path_fs_read_rejected() {
+    let err = crowchiper::plugin::parse_plugin_spec("a.wasm:fs-read=../etc").unwrap_err();
+    assert!(
+        err.contains("absolute path"),
+        "error should mention absolute path requirement, got: {err}"
+    );
+}
+
+#[test]
+fn test_relative_path_fs_write_rejected() {
+    let err = crowchiper::plugin::parse_plugin_spec("a.wasm:fs-write=data/subdir").unwrap_err();
+    assert!(
+        err.contains("absolute path"),
+        "error should mention absolute path requirement, got: {err}"
+    );
+}
+
+#[test]
+fn test_cli_relative_path_rejected() {
+    let (_stdout, stderr, success) = run_cli(&["--plugin", "a.wasm:fs-read=../etc", "--port", "0"]);
+    assert!(!success, "relative path should be rejected");
+    assert!(
+        stderr.contains("absolute path"),
+        "error should mention absolute path requirement, got: {stderr}"
     );
 }

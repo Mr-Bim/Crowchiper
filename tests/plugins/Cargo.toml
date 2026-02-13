@@ -33,3 +33,33 @@ crate-type = ["cdylib"]
 name = "empty-name"
 path = "examples/empty_name.rs"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "fs-success"
+path = "examples/fs_success.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "net-success"
+path = "examples/net_success.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "env-success"
+path = "examples/env_success.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "infinite-loop"
+path = "examples/infinite_loop.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "memory-hog"
+path = "examples/memory_hog.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "stack-overflow"
+path = "examples/stack_overflow.rs"
+crate-type = ["cdylib"]

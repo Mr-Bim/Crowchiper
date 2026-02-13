@@ -6,7 +6,7 @@ wit_bindgen::generate!({
 struct NetErrorPlugin;
 
 impl Guest for NetErrorPlugin {
-    fn config() -> PluginConfig {
+    fn config(_config: Vec<(String, String)>) -> PluginConfig {
         std::net::TcpStream::connect("127.0.0.1:80").unwrap();
         PluginConfig {
             name: "net-error".to_string(),

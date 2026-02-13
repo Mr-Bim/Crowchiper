@@ -7,5 +7,5 @@ world plugin {
         hooks: list<string>,
     }
 
-    export config: func() -> plugin-config;
+    export config: func(config: list<tuple<string, string>>) -> plugin-config;
 }

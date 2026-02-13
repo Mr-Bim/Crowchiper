@@ -6,7 +6,7 @@ wit_bindgen::generate!({
 struct FsErrorPlugin;
 
 impl Guest for FsErrorPlugin {
-    fn config() -> PluginConfig {
+    fn config(_config: Vec<(String, String)>) -> PluginConfig {
         std::fs::write("a.txt", "hello world").unwrap();
         PluginConfig {
             name: "fs-error".to_string(),

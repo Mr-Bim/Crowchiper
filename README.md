@@ -64,6 +64,48 @@ crowchiper [OPTIONS]
 | `--csp-nonce` | Add random nonce to CSP headers (for Cloudflare compatibility) |
 | `--jwt-secret-file <PATH>` | Read JWT secret from file instead of env var |
 
+### Plugins (Experimental)
+
+Load WASM plugins at startup with optional permissions and config variables:
+
+| Option | Description |
+|--------|-------------|
+| `--plugin <SPEC>` | Load a WASM plugin. Can be repeated for multiple plugins. |
+| `--plugin-error <MODE>` | Behavior on plugin load failure: `abort` (default) or `warn` |
+
+Plugin spec format: `path.wasm[:perm1,perm2,var-key=value,...]`
+
+**Permissions** (none granted by default):
+
+| Permission | Description |
+|------------|-------------|
+| `net` | TCP/UDP network access |
+| `env` | Host environment variables |
+| `fs-read=<path>` | Read-only filesystem access to an absolute path |
+| `fs-write=<path>` | Read+write filesystem access to an absolute path |
+
+**Config variables** are passed to the plugin's `config()` function as key-value pairs:
+
+| Syntax | Description |
+|--------|-------------|
+| `var-<key>=<value>` | Passed to plugin as `(key, value)` |
+
+```bash
+# Load a plugin with no permissions (fully sandboxed)
+cargo run -- --plugin my-plugin.wasm
+
+# Load with network and env access
+cargo run -- --plugin "my-plugin.wasm:net,env"
+
+# Load with filesystem write access and a config variable
+cargo run -- --plugin "my-plugin.wasm:fs-write=/data,var-path=/data"
+
+# Multiple plugins, continue on failure
+cargo run -- --plugin a.wasm --plugin b.wasm --plugin-error warn
+```
+
+Plugins run in a WASI sandbox with resource limits (10M fuel/CPU instructions, 10MB memory, 512KB stack). Filesystem paths must be absolute and are canonicalized at load time.
+
 ### Examples
 
 ```bash
