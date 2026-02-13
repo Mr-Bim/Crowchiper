@@ -21,6 +21,7 @@ async fn main() {
         std::process::exit(1);
     };
 
+    let mut plugins = Vec::new();
     for plugin_spec in &args.plugin {
         let spec = plugin_spec.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -34,6 +35,7 @@ async fn main() {
             }
             Ok(Ok(plugin)) => {
                 info!(name = %plugin.name(), version = %plugin.version(), "Plugin loaded");
+                plugins.push(plugin);
             }
             Ok(Err(e)) => match args.plugin_error {
                 PluginErrorMode::Abort => {
@@ -77,6 +79,7 @@ async fn main() {
         args.no_signup,
         args.csp_nonce,
         args.ip_header,
+        plugins,
     );
 
     // Run cleanup on startup and spawn hourly scheduler

@@ -9,6 +9,7 @@ use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 /// Version embedded at compile time from Cargo.toml
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -23,6 +24,7 @@ pub struct ConfigState {
     pub db: Database,
     pub secure_cookies: bool,
     pub ip_extractor: Option<IpExtractor>,
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 impl_has_auth_state!(ConfigState);

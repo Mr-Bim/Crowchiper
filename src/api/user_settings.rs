@@ -12,6 +12,7 @@ use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 /// State for user settings endpoint.
 #[derive(Clone)]
@@ -20,6 +21,7 @@ pub struct UserSettingsState {
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
     pub ip_extractor: Option<IpExtractor>,
+    pub plugin_manager: Option<Arc<PluginManager>>,
     pub dashboard_path: &'static str,
 }
 

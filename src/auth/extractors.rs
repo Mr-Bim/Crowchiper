@@ -32,6 +32,7 @@ use super::ip::extract_client_ip;
 use super::state::{HasAssetAuthState, HasAuthState};
 use super::types::{ActivatedAuthenticatedUser, AuthenticatedUser, AuthenticatedUserWithSession};
 use crate::db::UserRole;
+use crate::plugin::{Hook, ServerHook};
 
 tokio::task_local! {
     pub static NEW_ACCESS_TOKEN_COOKIE: RefCell<Option<String>>;
@@ -148,6 +149,28 @@ where
             .await
         {
             tracing::warn!("Failed to update token IP: {}", e);
+        }
+
+        // Fire ip-change hook to notify plugins.
+        let ip_change_hook = Hook::Server(ServerHook::IpChange);
+        if let Some(pm) = state
+            .plugin_manager()
+            .filter(|pm| pm.has_hook(&ip_change_hook))
+        {
+            let old_ip = active_token.last_ip.clone().unwrap_or_default();
+            let new_ip = client_ip.clone();
+            let user_uuid = refresh_claims.sub.clone();
+            let pm = pm.clone();
+            tokio::task::spawn_blocking(move || {
+                pm.fire_hook(
+                    ip_change_hook,
+                    vec![
+                        ("old_ip".into(), old_ip),
+                        ("new_ip".into(), new_ip),
+                        ("user_uuid".into(), user_uuid),
+                    ],
+                );
+            });
         }
     }
 

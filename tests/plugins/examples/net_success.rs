@@ -22,8 +22,13 @@ impl Guest for NetSuccessPlugin {
         PluginConfig {
             name: "net-success".to_string(),
             version: "1.0.0".to_string(),
+            target: HookTarget::Server,
             hooks: vec![],
         }
+    }
+
+    fn on_hook(_event: HookEvent) -> Result<(), String> {
+        Ok(())
     }
 }
 

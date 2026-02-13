@@ -112,11 +112,13 @@ fn test_good_plugin_loads_successfully() {
 #[test]
 fn test_good_plugin_has_hooks() {
     let plugin = PluginRuntime::load(&wasm_path("good"), &[], &[]).unwrap();
-    assert!(
-        plugin.hooks().contains("test-hook"),
-        "should contain test-hook"
-    );
     assert_eq!(plugin.hooks().len(), 1, "should have exactly one hook");
+    assert!(
+        plugin.hooks().contains(&crowchiper::plugin::Hook::Server(
+            crowchiper::plugin::ServerHook::IpChange
+        )),
+        "should contain ip-change server hook"
+    );
 }
 
 // ── Sandbox enforcement: error messages ──────────────────────────────
@@ -772,4 +774,90 @@ fn test_cli_relative_path_rejected() {
         stderr.contains("absolute path"),
         "error should mention absolute path requirement, got: {stderr}"
     );
+}
+
+// ── Hook system ──────────────────────────────────────────────────────
+
+use crowchiper::plugin::{Hook, PluginManager, ServerHook};
+
+#[test]
+fn test_call_hook_invokes_registered_plugin() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-echo"), &[], &[]).unwrap();
+    assert_eq!(plugin.name(), "hook-echo");
+
+    let event = crowchiper::plugin::HookEvent {
+        hook: Hook::Server(ServerHook::IpChange),
+        time: 1234567890,
+        target: crowchiper::plugin::HookTarget::Server,
+        values: vec![
+            ("old_ip".into(), "1.2.3.4".into()),
+            ("new_ip".into(), "5.6.7.8".into()),
+            ("user_uuid".into(), "test-uuid".into()),
+        ],
+    };
+    let result = plugin.call_hook(&event);
+    assert!(result.is_ok(), "hook-echo should succeed, got: {result:?}");
+}
+
+#[test]
+fn test_call_hook_returns_plugin_error() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-error"), &[], &[]).unwrap();
+    assert_eq!(plugin.name(), "hook-error");
+
+    let event = crowchiper::plugin::HookEvent {
+        hook: Hook::Server(ServerHook::IpChange),
+        time: 0,
+        target: crowchiper::plugin::HookTarget::Server,
+        values: vec![],
+    };
+    let result = plugin.call_hook(&event);
+    assert!(result.is_err(), "hook-error should return an error");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("test hook error"),
+        "error should contain the plugin's error message, got: {msg}"
+    );
+}
+
+#[test]
+fn test_fire_hook_skips_unregistered_plugin() {
+    // Verify PluginManager doesn't panic with no matching plugins
+    let manager = PluginManager::new(vec![]);
+    manager.fire_hook(
+        Hook::Server(ServerHook::IpChange),
+        vec![("old_ip".into(), "1.1.1.1".into())],
+    );
+    // No panic = success
+}
+
+#[test]
+fn test_fire_hook_logs_error_but_does_not_panic() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-error"), &[], &[]).unwrap();
+    let manager = PluginManager::new(vec![plugin]);
+    // Should not panic even though the plugin returns an error
+    manager.fire_hook(
+        Hook::Server(ServerHook::IpChange),
+        vec![
+            ("old_ip".into(), "1.2.3.4".into()),
+            ("new_ip".into(), "5.6.7.8".into()),
+            ("user_uuid".into(), "test-uuid".into()),
+        ],
+    );
+}
+
+#[test]
+fn test_call_hook_can_be_called_multiple_times() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-echo"), &[], &[]).unwrap();
+    let event = crowchiper::plugin::HookEvent {
+        hook: Hook::Server(ServerHook::IpChange),
+        time: 0,
+        target: crowchiper::plugin::HookTarget::Server,
+        values: vec![],
+    };
+    // Call multiple times to verify store is properly reusable
+    for _ in 0..5 {
+        plugin
+            .call_hook(&event)
+            .expect("repeated hook call should succeed");
+    }
 }

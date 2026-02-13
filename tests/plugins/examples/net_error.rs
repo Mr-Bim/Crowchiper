@@ -11,8 +11,13 @@ impl Guest for NetErrorPlugin {
         PluginConfig {
             name: "net-error".to_string(),
             version: "0.1.0".to_string(),
+            target: HookTarget::Server,
             hooks: vec![],
         }
+    }
+
+    fn on_hook(_event: HookEvent) -> Result<(), String> {
+        Ok(())
     }
 }
 

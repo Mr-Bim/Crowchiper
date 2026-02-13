@@ -1,5 +1,7 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, Store, StoreLimits, StoreLimitsBuilder};
@@ -7,7 +9,7 @@ use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use super::permissions::PluginPermission;
-use super::{Plugin, PluginError};
+use super::{Hook, HookEvent, HookTarget, Plugin, PluginError};
 
 /// Per-instance WASI state for a plugin.
 ///
@@ -53,12 +55,28 @@ impl WasiView for PluginState {
 /// If any step fails, a descriptive `PluginError` is returned. When `config()`
 /// panics inside the WASM guest, stderr is inspected to produce a clean error
 /// message (or a verbose one when `RUST_BACKTRACE` is set).
-#[derive(Debug)]
 pub struct PluginRuntime {
     plugin_name: String,
     plugin_version: String,
-    /// The set of hook names this plugin registered for (e.g. "on-request").
-    hooks: HashSet<String>,
+    target: HookTarget,
+    /// Hooks this plugin registered for. All must match `target`.
+    hooks: Vec<Hook>,
+    /// Live store and instance created at load time.
+    /// Each plugin has its own Mutex so different plugins can run in parallel.
+    /// A single plugin serializes its hook calls (WASM is single-threaded).
+    instance: Mutex<(Store<PluginState>, Plugin)>,
+    stderr: MemoryOutputPipe,
+}
+
+impl std::fmt::Debug for PluginRuntime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginRuntime")
+            .field("plugin_name", &self.plugin_name)
+            .field("plugin_version", &self.plugin_version)
+            .field("target", &self.target)
+            .field("hooks", &self.hooks)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PluginRuntime {
@@ -74,7 +92,7 @@ impl PluginRuntime {
     pub fn load(
         path: &Path,
         permissions: &[PluginPermission],
-        config: &[(String, String)],
+        config_vars: &[(String, String)],
     ) -> Result<Self, PluginError> {
         // Step 1: Read the raw .wasm bytes from disk.
         let wasm_bytes = std::fs::read(path)
@@ -135,7 +153,7 @@ impl PluginRuntime {
         // Step 5: Call the plugin's exported `config()` function to retrieve its
         // metadata (name, version, hooks). If the call traps (e.g. the guest
         // panics), we read stderr to produce a human-friendly error message.
-        let config = instance.call_config(&mut store, config).map_err(|e| {
+        let config = instance.call_config(&mut store, config_vars).map_err(|e| {
             let stderr_bytes = stderr.contents();
             let stderr_output = String::from_utf8_lossy(&stderr_bytes);
             // In verbose mode (RUST_BACKTRACE set), include the full stderr dump.
@@ -159,14 +177,29 @@ impl PluginRuntime {
             return Err(PluginError::InvalidConfig("plugin name is empty".into()));
         }
 
-        let hooks: HashSet<String> = config.hooks.into_iter().collect();
+        // Validate that all hooks match the declared target.
+        for hook in &config.hooks {
+            let hook_target = hook_target(hook);
+            if hook_target != config.target {
+                return Err(PluginError::InvalidConfig(format!(
+                    "hook {hook:?} has target {hook_target:?} but plugin declared target {:?}",
+                    config.target
+                )));
+            }
+        }
 
-        // The engine, store, and instance are dropped here — we only keep the
-        // metadata. Plugins will be re-instantiated when hooks are actually invoked.
+        // Refuel the store for future hook calls (config() consumed some fuel).
+        store
+            .set_fuel(10_000_000)
+            .map_err(|e| PluginError::Load(format!("failed to reset fuel: {e}")))?;
+
         Ok(Self {
             plugin_name: config.name,
             plugin_version: config.version,
-            hooks,
+            target: config.target,
+            hooks: config.hooks,
+            instance: Mutex::new((store, instance)),
+            stderr,
         })
     }
 
@@ -178,8 +211,144 @@ impl PluginRuntime {
         &self.plugin_version
     }
 
-    pub fn hooks(&self) -> &HashSet<String> {
+    pub fn hooks(&self) -> &[Hook] {
         &self.hooks
+    }
+
+    pub fn target(&self) -> &HookTarget {
+        &self.target
+    }
+
+    /// Call the plugin's `on-hook` export with the given event.
+    ///
+    /// Uses the instance created at load time. Refuels the store before each
+    /// call to ensure the plugin has a fresh CPU budget.
+    pub fn call_hook(&self, event: &HookEvent) -> Result<(), PluginError> {
+        let mut guard = self
+            .instance
+            .lock()
+            .map_err(|_| PluginError::Hook("plugin mutex poisoned".into()))?;
+        let (store, instance) = &mut *guard;
+
+        // Refuel before each hook call.
+        store
+            .set_fuel(10_000_000)
+            .map_err(|e| PluginError::Hook(format!("failed to set fuel limit: {e}")))?;
+
+        let result = instance.call_on_hook(store, event).map_err(|e| {
+            let stderr_bytes = self.stderr.contents();
+            let stderr_output = String::from_utf8_lossy(&stderr_bytes);
+            let verbose = std::env::var_os("RUST_BACKTRACE").is_some();
+            let msg = if verbose {
+                let mut msg = format!("failed to call on_hook(): {e}");
+                if !stderr_output.is_empty() {
+                    msg = format!("{msg}\n\nplugin stderr:\n{stderr_output}");
+                }
+                msg
+            } else {
+                extract_panic_message(&stderr_output)
+                    .unwrap_or_else(|| format!("failed to call on_hook(): {e}"))
+            };
+            PluginError::Hook(msg)
+        })?;
+
+        match result {
+            Ok(()) => Ok(()),
+            Err(msg) => Err(PluginError::Hook(msg)),
+        }
+    }
+}
+
+/// Manages all loaded plugins and dispatches hook events.
+///
+/// Maintains a pre-built index from hook to registered plugins so
+/// `fire_hook` and `has_hook` are O(1) lookups instead of iterating all plugins.
+pub struct PluginManager {
+    plugins: Vec<PluginRuntime>,
+    /// Maps each hook to the indices of plugins registered for it.
+    hook_index: HashMap<Hook, Vec<usize>>,
+}
+
+impl PluginManager {
+    pub fn new(plugins: Vec<PluginRuntime>) -> Self {
+        let mut hook_index: HashMap<Hook, Vec<usize>> = HashMap::new();
+        for (i, plugin) in plugins.iter().enumerate() {
+            for hook in &plugin.hooks {
+                hook_index.entry(hook.clone()).or_default().push(i);
+            }
+        }
+        Self {
+            plugins,
+            hook_index,
+        }
+    }
+
+    /// Returns true if any loaded plugin is registered for the given hook.
+    pub fn has_hook(&self, hook: &Hook) -> bool {
+        self.hook_index.contains_key(hook)
+    }
+
+    /// Fire a hook synchronously across all plugins registered for it.
+    ///
+    /// Errors from individual plugins are logged but do not stop other plugins
+    /// from receiving the event.
+    pub fn fire_hook(&self, hook: Hook, values: Vec<(String, String)>) {
+        let indices = match self.hook_index.get(&hook) {
+            Some(indices) => indices,
+            None => return,
+        };
+
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let event = HookEvent {
+            hook: hook.clone(),
+            time,
+            target: hook_target(&hook),
+            values,
+        };
+
+        if indices.len() <= 1 {
+            for &i in indices {
+                let plugin = &self.plugins[i];
+                if let Err(e) = plugin.call_hook(&event) {
+                    tracing::warn!(
+                        plugin = %plugin.plugin_name,
+                        hook = ?hook,
+                        error = %e,
+                        "Plugin hook failed"
+                    );
+                }
+            }
+        } else {
+            // Multiple plugins: run in parallel with scoped threads.
+            std::thread::scope(|s| {
+                for &i in indices {
+                    let plugin = &self.plugins[i];
+                    let event = &event;
+                    let hook = &hook;
+                    s.spawn(move || {
+                        if let Err(e) = plugin.call_hook(event) {
+                            tracing::warn!(
+                                plugin = %plugin.plugin_name,
+                                hook = ?hook,
+                                error = %e,
+                                "Plugin hook failed"
+                            );
+                        }
+                    });
+                }
+            });
+        }
+    }
+}
+
+/// Derive the target from a hook variant.
+fn hook_target(hook: &Hook) -> HookTarget {
+    match hook {
+        Hook::Server(_) => HookTarget::Server,
     }
 }
 

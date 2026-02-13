@@ -11,6 +11,7 @@ use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 /// State for admin endpoints.
 #[derive(Clone)]
@@ -19,6 +20,7 @@ pub struct AdminState {
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
     pub ip_extractor: Option<IpExtractor>,
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 impl_has_auth_state!(AdminState);

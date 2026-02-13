@@ -29,6 +29,7 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -588,6 +589,7 @@ async fn test_posts_with_base_path() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 

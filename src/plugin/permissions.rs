@@ -121,10 +121,6 @@ fn validate_fs_path(path: &str, perm_name: &str) -> Result<(), String> {
 fn parse_single_permission(s: &str) -> Result<PluginPermission, String> {
     match s {
         "net" => Ok(PluginPermission::Net),
-        "env" => Err(
-            "bare 'env' permission is no longer supported; use env-<VAR_NAME> (e.g., env-HOME)"
-                .to_string(),
-        ),
         _ if s.starts_with("env-") => {
             let var_name = &s["env-".len()..];
             if var_name.is_empty() {
@@ -197,8 +193,7 @@ mod tests {
     #[test]
     fn parse_bare_env_rejected() {
         let err = parse_plugin_spec("a.wasm:env").unwrap_err();
-        assert!(err.contains("no longer supported"), "got: {err}");
-        assert!(err.contains("env-"), "got: {err}");
+        assert!(err.contains("unknown permission"), "got: {err}");
     }
 
     #[test]

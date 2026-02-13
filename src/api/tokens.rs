@@ -24,6 +24,7 @@ use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 #[derive(Clone)]
 pub struct TokensState {
@@ -31,6 +32,7 @@ pub struct TokensState {
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
     pub ip_extractor: Option<IpExtractor>,
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 impl_has_auth_state!(TokensState);

@@ -9,6 +9,7 @@ use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 use super::csp::{APP_CSP_HEADER, DASHBOARD_CSP_HEADER, LOGIN_CSP_HEADER};
 use super::embed::{AppAssets, DashboardAssets, LoginAssets};
@@ -162,6 +163,7 @@ pub struct AssetsState {
     pub secure_cookies: bool,
     /// IP extraction strategy
     pub ip_extractor: Option<IpExtractor>,
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 impl_has_auth_state!(AssetsState);
@@ -192,6 +194,7 @@ impl AssetsState {
         db: Database,
         secure_cookies: bool,
         ip_extractor: Option<IpExtractor>,
+        plugin_manager: Option<Arc<PluginManager>>,
     ) -> Result<Self, &'static str> {
         let base: &'static str = leak_string(base_path.unwrap_or("").to_string());
         let api_path: &'static str = leak_string(format!("{}/api", base));
@@ -247,6 +250,7 @@ impl AssetsState {
             db,
             secure_cookies,
             ip_extractor,
+            plugin_manager,
         })
     }
 

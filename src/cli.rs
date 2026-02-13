@@ -3,7 +3,7 @@
 use crate::ServerConfig;
 use crate::db::Database;
 use crate::names::generate_name;
-use crate::plugin::{PluginSpec, parse_plugin_spec};
+use crate::plugin::{PluginManager, PluginRuntime, PluginSpec, parse_plugin_spec};
 use clap::Parser;
 use tracing::{error, info};
 use url::Url;
@@ -180,7 +180,7 @@ pub struct Args {
     #[arg(long)]
     pub no_signup: bool,
 
-    /// Add random nonce to CSP headers (for Cloudflare)
+    /// Add random nonce to CSP headers
     #[arg(long)]
     pub csp_nonce: bool,
 
@@ -192,10 +192,7 @@ pub struct Args {
     #[arg(short, long, value_enum)]
     pub ip_header: Option<ClientIpHeader>,
 
-    /// Plugin with optional permissions and config: path.wasm[:perm1,var-key=val,...]
-    /// Permissions: net, env-<VAR_NAME>, fs-read=<path>, fs-write=<path>
-    /// Note: net grants full TCP/UDP access (host/port restriction not supported by WASI)
-    /// Config variables: var-<key>=<value> (passed to plugin's config function)
+    /// WASM plugin. See README for details. Format: path.wasm[:net,env-VAR,fs-read=/p,fs-write=/p,var-k=v]
     #[arg(long, value_parser = parse_plugin_spec)]
     pub plugin: Vec<PluginSpec>,
 
@@ -353,8 +350,15 @@ pub fn build_config(
     no_signup: bool,
     csp_nonce: bool,
     ip_header: Option<ClientIpHeader>,
+    plugins: Vec<PluginRuntime>,
 ) -> ServerConfig {
     let secure_cookies = rp_origin.scheme() == "https";
+
+    let plugin_manager = if plugins.is_empty() {
+        None
+    } else {
+        Some(std::sync::Arc::new(PluginManager::new(plugins)))
+    };
 
     ServerConfig {
         base,
@@ -366,6 +370,7 @@ pub fn build_config(
         no_signup,
         csp_nonce,
         ip_extractor: ip_header.map(IpExtractor::from),
+        plugin_manager,
     }
 }
 

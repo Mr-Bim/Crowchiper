@@ -20,6 +20,7 @@ use crate::cli::IpExtractor;
 use crate::db::{Database, attachments::CreateAttachmentInput};
 use crate::impl_has_auth_state;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 /// Encryption version 0 means unencrypted data
 const UNENCRYPTED_VERSION: i32 = 0;
@@ -31,6 +32,7 @@ pub struct AttachmentsState {
     pub jwt: Arc<JwtConfig>,
     pub secure_cookies: bool,
     pub ip_extractor: Option<IpExtractor>,
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 impl_has_auth_state!(AttachmentsState);

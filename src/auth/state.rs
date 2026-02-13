@@ -1,8 +1,11 @@
 //! Authentication state traits and macro.
 
+use std::sync::Arc;
+
 use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 
 /// Trait for state types that support API authentication.
 pub trait HasAuthState {
@@ -10,6 +13,7 @@ pub trait HasAuthState {
     fn db(&self) -> &Database;
     fn secure_cookies(&self) -> bool;
     fn ip_extractor(&self) -> Option<&IpExtractor>;
+    fn plugin_manager(&self) -> Option<&Arc<PluginManager>>;
 }
 
 /// Trait for state types that support asset authentication.
@@ -25,6 +29,7 @@ pub trait HasAssetAuthState: HasAuthState {
 /// - `db: Database`
 /// - `secure_cookies: bool`
 /// - `ip_extractor: Option<IpExtractor>`
+/// - `plugin_manager: Option<Arc<PluginManager>>`
 ///
 /// # Example
 /// ```ignore
@@ -36,6 +41,7 @@ pub trait HasAssetAuthState: HasAuthState {
 ///     pub jwt: Arc<JwtConfig>,
 ///     pub secure_cookies: bool,
 ///     pub ip_extractor: Option<IpExtractor>,
+///     pub plugin_manager: Option<Arc<PluginManager>>,
 ///     // ... other fields
 /// }
 ///
@@ -56,6 +62,9 @@ macro_rules! impl_has_auth_state {
             }
             fn ip_extractor(&self) -> Option<&$crate::cli::IpExtractor> {
                 self.ip_extractor.as_ref()
+            }
+            fn plugin_manager(&self) -> Option<&std::sync::Arc<$crate::plugin::PluginManager>> {
+                self.plugin_manager.as_ref()
             }
         }
     };

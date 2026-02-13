@@ -18,6 +18,7 @@ use webauthn_rs::prelude::*;
 use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
+use crate::plugin::PluginManager;
 use crate::rate_limit::RateLimitConfig;
 
 pub use users::UsersState;
@@ -30,6 +31,7 @@ pub fn create_api_router(
     secure_cookies: bool,
     no_signup: bool,
     ip_extractor: Option<IpExtractor>,
+    plugin_manager: Option<Arc<PluginManager>>,
     dashboard_path: &'static str,
 ) -> Router {
     let rate_limit_config = Arc::new(RateLimitConfig::new(ip_extractor.clone()));
@@ -47,6 +49,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
     };
 
     let encryption_state = encryption::EncryptionState {
@@ -54,6 +57,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
     };
 
     let attachments_state = attachments::AttachmentsState {
@@ -61,6 +65,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
     };
 
     let tokens_state = tokens::TokensState {
@@ -68,6 +73,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
     };
 
     #[cfg(feature = "test-mode")]
@@ -82,6 +88,7 @@ pub fn create_api_router(
         db: db.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
     };
 
     let admin_state = admin::AdminState {
@@ -89,6 +96,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
     };
 
     let user_settings_state = user_settings::UserSettingsState {
@@ -96,6 +104,7 @@ pub fn create_api_router(
         jwt: jwt.clone(),
         secure_cookies,
         ip_extractor: ip_extractor.clone(),
+        plugin_manager: plugin_manager.clone(),
         dashboard_path,
     };
 
@@ -104,6 +113,7 @@ pub fn create_api_router(
         jwt,
         secure_cookies,
         ip_extractor,
+        plugin_manager,
         no_signup,
         rate_limit_config: rate_limit_config.clone(),
     };

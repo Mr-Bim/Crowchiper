@@ -9,7 +9,8 @@ echo "Building all test plugins..."
 (cd "$SCRIPT_DIR" && cargo build --examples --release --target wasm32-wasip2)
 
 EXAMPLES_DIR="$SCRIPT_DIR/target/wasm32-wasip2/release/examples"
-for name in good fs_error net_error env_error empty_name fs_success net_success env_success infinite_loop memory_hog stack_overflow; do
+OUTPUT=$(find examples -maxdepth 1 -type f -name "*.rs" -exec basename {} .rs \;)
+for name in $OUTPUT; do
     dest_name="${name//_/-}"
     cp "$EXAMPLES_DIR/${name}.wasm" "$WASM_DIR/${dest_name}.wasm"
 done

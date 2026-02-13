@@ -12,6 +12,10 @@ impl Guest for MemoryHogPlugin {
             vecs.push(vec![0u8; 1_000_000]);
         }
     }
+
+    fn on_hook(_event: HookEvent) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 export!(MemoryHogPlugin);

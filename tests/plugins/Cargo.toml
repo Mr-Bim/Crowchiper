@@ -63,3 +63,13 @@ crate-type = ["cdylib"]
 name = "stack-overflow"
 path = "examples/stack_overflow.rs"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "hook-echo"
+path = "examples/hook_echo.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "hook-error"
+path = "examples/hook_error.rs"
+crate-type = ["cdylib"]

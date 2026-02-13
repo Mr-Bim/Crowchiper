@@ -19,6 +19,7 @@ use auth::add_access_token_cookie;
 use axum::{Router, middleware, response::Redirect, routing::get};
 use db::Database;
 use jwt::JwtConfig;
+use plugin::PluginManager;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -44,6 +45,8 @@ pub struct ServerConfig {
     pub csp_nonce: bool,
     /// IP extraction strategy (requires running behind a proxy)
     pub ip_extractor: Option<cli::IpExtractor>,
+    /// Plugin manager for dispatching hooks to loaded WASM plugins
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 /// Create the application router with the given configuration.
@@ -59,6 +62,7 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.db.clone(),
         config.secure_cookies,
         config.ip_extractor.clone(),
+        config.plugin_manager.clone(),
     )
     .expect("Failed to initialize assets");
 
@@ -83,6 +87,7 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.secure_cookies,
         config.no_signup,
         config.ip_extractor.clone(),
+        config.plugin_manager.clone(),
         dashboard_path,
     )
     .layer(middleware::from_fn(add_access_token_cookie));
