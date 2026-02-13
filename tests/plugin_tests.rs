@@ -612,7 +612,7 @@ fn test_fs_permission_nonexistent_dir_fails_at_load() {
 fn test_env_success_with_permission() {
     // SAFETY: single-threaded test runner (--test-threads=1)
     unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
-    let perms = vec![PluginPermission::Env];
+    let perms = vec![PluginPermission::Env("TEST_PLUGIN_VAR".to_string())];
     let plugin = PluginRuntime::load(&wasm_path("env-success"), &perms, &[])
         .expect("env-success should load with env permission");
     assert!(
@@ -621,6 +621,19 @@ fn test_env_success_with_permission() {
         plugin.name()
     );
     unsafe { std::env::remove_var("TEST_PLUGIN_VAR") };
+}
+
+#[test]
+fn test_env_with_wrong_var_name_fails() {
+    // SAFETY: single-threaded test runner (--test-threads=1)
+    unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
+    let perms = vec![PluginPermission::Env("WRONG_VAR".to_string())];
+    let result = PluginRuntime::load(&wasm_path("env-success"), &perms, &[]);
+    unsafe { std::env::remove_var("TEST_PLUGIN_VAR") };
+    assert!(
+        result.is_err(),
+        "env-success should fail when only WRONG_VAR is allowed"
+    );
 }
 
 #[test]
@@ -661,7 +674,7 @@ fn test_net_success_without_permission_fails() {
 fn test_cli_plugin_with_permissions_loads() {
     let (stdout, _stderr) = spawn_expect_listening(&[
         "--plugin",
-        &format!("{}:net,env", wasm_path("good").to_str().unwrap()),
+        &format!("{}:net,env-HOME", wasm_path("good").to_str().unwrap()),
         "--port",
         "0",
     ]);

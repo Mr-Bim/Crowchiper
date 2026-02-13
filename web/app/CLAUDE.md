@@ -5,10 +5,15 @@
 - `src/main.ts` - App entry point
 - `src/setup-encryption.ts` - Encryption setup page
 - `src/websocket.ts` - WebSocket client with auto-reconnect
+- `src/reactive.ts` - Minimal signal implementation
+- `src/toast.ts` - Toast notifications
+- `src/spellcheck.ts` - Spellcheck toggle
+- `src/settings-panel.ts` - Session management UI (token list, logout). Uses `escapeHtml()` for all user-controlled data (IPs, JTIs) rendered via innerHTML.
 - `src/api/` - API clients
 - `src/crypto/` - Encryption utilities
 - `src/editor/` - CodeMirror 6 editor
 - `src/posts/` - Posts management
+- `src/shared/` - App-specific shared code (attachment utils, image cache)
 - `src/unlock/` - Passkey unlock modal
 
 ## Crypto Module
@@ -22,17 +27,37 @@ Key functions: `deriveEncryptionKeyFromPrf()`, `encryptContent()`, `decryptConte
 ## Editor Module
 
 - `setup.ts` - Editor initialization, theme, and content reset
-- `attachment-widget.ts` - Inline image widget with thumbnail-first display
 - `checkbox-widget.ts` - Interactive checkboxes
 - `slash-commands.ts` - Command palette
+- `date-shortcuts.ts` - Date shortcut expansion
+- `compress-worker.ts` - Image compression web worker
+- `heic-convert.ts` - HEIC conversion (lazy-loaded)
+- `attachment-widget/` - Inline image widget subsystem (see below)
 
 Key functions:
 - `createEditor()` - Create new editor instance
 - `resetEditorContent()` - Reset editor with new content (reuses DOM, clears undo history)
 
-## Posts Module Structure
+### Attachment Widget (`editor/attachment-widget/`)
 
-The posts module is organized into focused submodules:
+Image display and upload subsystem with gallery support:
+
+- `index.ts` - Public exports
+- `widget.ts` - CodeMirror widget for inline images
+- `widget-upload.ts` - Upload widget with progress display
+- `upload.ts` - Multi-stage upload logic (converting/compressing/encrypting/uploading)
+- `decorations.ts` - Editor decorations
+- `gallery-helpers.ts` - Gallery insertion/deletion helpers
+- `patterns.ts` - Gallery syntax parsing (`::gallery{}..::`)
+- `progress.ts` - Upload progress tracking
+- `thumbnail.ts` - Thumbnail display with lazy loading
+- `lightbox.ts` - Full-size image lightbox
+- `cache.ts` - Thumbnail/image caching
+- `keyboard.ts` - Keyboard navigation within galleries
+- `types.ts` - Type definitions
+- `utils.ts` - Shared utilities
+
+## Posts Module Structure
 
 ```
 src/posts/

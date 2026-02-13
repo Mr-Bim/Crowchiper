@@ -40,3 +40,16 @@ export function getOptionalElement<T extends HTMLElement>(
   }
   return el as T;
 }
+
+/**
+ * Escape HTML special characters to prevent XSS when inserting
+ * user-controlled strings into innerHTML templates.
+ */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}

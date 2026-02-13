@@ -79,8 +79,12 @@ pub async fn rate_limit_login_start(
     request: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&request, config.ip_extractor.as_ref())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let ip = match extract_client_ip(&request, config.ip_extractor.as_ref()) {
+        Ok(ip) => ip,
+        Err(_) => {
+            return (StatusCode::FORBIDDEN, "Unable to determine client IP.").into_response();
+        }
+    };
 
     match config.login_start.check_key(&ip) {
         Ok(_) => next.run(request).await,
@@ -98,8 +102,12 @@ pub async fn rate_limit_login_finish(
     request: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&request, config.ip_extractor.as_ref())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let ip = match extract_client_ip(&request, config.ip_extractor.as_ref()) {
+        Ok(ip) => ip,
+        Err(_) => {
+            return (StatusCode::FORBIDDEN, "Unable to determine client IP.").into_response();
+        }
+    };
 
     match config.login_finish.check_key(&ip) {
         Ok(_) => next.run(request).await,
@@ -117,8 +125,12 @@ pub async fn rate_limit_user_create(
     request: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&request, config.ip_extractor.as_ref())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let ip = match extract_client_ip(&request, config.ip_extractor.as_ref()) {
+        Ok(ip) => ip,
+        Err(_) => {
+            return (StatusCode::FORBIDDEN, "Unable to determine client IP.").into_response();
+        }
+    };
 
     match config.user_create.check_key(&ip) {
         Ok(_) => next.run(request).await,

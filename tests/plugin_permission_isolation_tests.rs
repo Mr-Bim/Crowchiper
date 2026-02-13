@@ -99,10 +99,13 @@ fn spawn_expect_listening(args: &[&str]) -> (String, String) {
 /// when env-success itself has no permissions.
 #[test]
 fn test_env_permission_not_shared_between_plugins() {
-    // good.wasm gets env, env-success.wasm gets nothing → env-success should fail
+    // good.wasm gets env-TEST_PLUGIN_VAR, env-success.wasm gets nothing → env-success should fail
     let (stdout, _stderr, success) = run_cli(&[
         "--plugin",
-        &format!("{}:env", wasm_path("good").to_str().unwrap()),
+        &format!(
+            "{}:env-TEST_PLUGIN_VAR",
+            wasm_path("good").to_str().unwrap()
+        ),
         "--plugin",
         wasm_path("env-success").to_str().unwrap(),
         "--port",
@@ -124,7 +127,10 @@ fn test_env_permission_not_shared_reversed_order() {
         "--plugin",
         wasm_path("env-success").to_str().unwrap(),
         "--plugin",
-        &format!("{}:env", wasm_path("good").to_str().unwrap()),
+        &format!(
+            "{}:env-TEST_PLUGIN_VAR",
+            wasm_path("good").to_str().unwrap()
+        ),
         "--port",
         "0",
     ]);
@@ -141,9 +147,9 @@ fn test_env_permission_not_shared_reversed_order() {
 fn test_both_plugins_with_env_permission_succeed() {
     let (stdout, _stderr) = spawn_expect_listening(&[
         "--plugin",
-        &format!("{}:env", wasm_path("good").to_str().unwrap()),
+        &format!("{}:env-HOME", wasm_path("good").to_str().unwrap()),
         "--plugin",
-        &format!("{}:env", wasm_path("good").to_str().unwrap()),
+        &format!("{}:env-HOME", wasm_path("good").to_str().unwrap()),
         "--port",
         "0",
     ]);
@@ -219,7 +225,7 @@ fn test_full_permissions_on_one_plugin_dont_leak_to_other() {
     std::fs::create_dir_all(&dir).ok();
 
     let good_arg = format!(
-        "{}:net,env,fs-write={}",
+        "{}:net,env-HOME,fs-write={}",
         wasm_path("good").to_str().unwrap(),
         dir.to_str().unwrap()
     );
@@ -256,7 +262,10 @@ fn test_full_permissions_on_one_plugin_dont_leak_to_other() {
 fn test_warn_mode_isolates_permissions_and_continues() {
     let (stdout, _stderr) = spawn_expect_listening(&[
         "--plugin",
-        &format!("{}:env", wasm_path("good").to_str().unwrap()),
+        &format!(
+            "{}:env-TEST_PLUGIN_VAR",
+            wasm_path("good").to_str().unwrap()
+        ),
         "--plugin",
         wasm_path("env-success").to_str().unwrap(),
         "--plugin-error",

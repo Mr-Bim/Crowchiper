@@ -21,18 +21,22 @@ pub enum AuthErrorKind {
 
 /// API authentication errors (returns JSON and clears cookies).
 #[derive(Debug)]
-pub struct ApiAuthError(pub(super) AuthErrorKind);
-
-impl From<AuthErrorKind> for ApiAuthError {
-    fn from(kind: AuthErrorKind) -> Self {
-        Self(kind)
-    }
+pub struct ApiAuthError {
+    pub(super) kind: AuthErrorKind,
+    pub(super) secure_cookies: bool,
 }
 
 impl ApiAuthError {
+    pub(super) fn new(kind: AuthErrorKind, secure_cookies: bool) -> Self {
+        Self {
+            kind,
+            secure_cookies,
+        }
+    }
+
     fn status_code(&self) -> axum::http::StatusCode {
         use axum::http::StatusCode;
-        match self.0 {
+        match self.kind {
             AuthErrorKind::NotAuthenticated
             | AuthErrorKind::InvalidToken
             | AuthErrorKind::TokenRevoked
@@ -45,7 +49,7 @@ impl ApiAuthError {
     }
 
     fn message(&self) -> &'static str {
-        match self.0 {
+        match self.kind {
             AuthErrorKind::NotAuthenticated => "Not authenticated",
             AuthErrorKind::InvalidToken => "Invalid or expired token",
             AuthErrorKind::TokenRevoked => "Token has been revoked",
@@ -69,13 +73,14 @@ impl IntoResponse for ApiAuthError {
         }
 
         // Clear both cookies on auth errors
+        let secure = if self.secure_cookies { "; Secure" } else { "" };
         let clear_access = format!(
-            "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
-            ACCESS_COOKIE_NAME
+            "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
+            ACCESS_COOKIE_NAME, secure
         );
         let clear_refresh = format!(
-            "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
-            REFRESH_COOKIE_NAME
+            "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
+            REFRESH_COOKIE_NAME, secure
         );
 
         let mut response = (

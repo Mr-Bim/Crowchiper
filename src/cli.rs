@@ -85,24 +85,31 @@ pub fn local_ip_extractor() -> IpExtractor {
     IpExtractor::from(ClientIpHeader::Local)
 }
 
+/// Validate that a string is a valid IP address (IPv4 or IPv6).
+fn validate_ip(ip: &str) -> Result<String, &'static str> {
+    ip.parse::<std::net::IpAddr>()
+        .map(|addr| addr.to_string())
+        .map_err(|_| "IP header contains invalid IP address")
+}
+
 /// Parse a single IP value (CF-Connecting-IP, X-Real-IP).
 fn parse_single_ip(value: &str) -> Result<String, &'static str> {
     let ip = value.trim();
     if ip.is_empty() {
         return Err("IP header is empty");
     }
-    Ok(ip.to_string())
+    validate_ip(ip)
 }
 
 /// Parse X-Forwarded-For header (comma-separated list, take first).
 fn parse_x_forwarded_for(value: &str) -> Result<String, &'static str> {
-    value
+    let ip = value
         .split(',')
         .next()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .ok_or("X-Forwarded-For header has no valid IP")
+        .ok_or("X-Forwarded-For header has no valid IP")?;
+    validate_ip(ip)
 }
 
 /// Parse RFC 7239 Forwarded header.
@@ -126,7 +133,7 @@ fn parse_forwarded(value: &str) -> Result<String, &'static str> {
                     ip
                 };
                 if !ip.is_empty() {
-                    return Ok(ip.to_string());
+                    return validate_ip(ip);
                 }
             }
         }
@@ -186,7 +193,8 @@ pub struct Args {
     pub ip_header: Option<ClientIpHeader>,
 
     /// Plugin with optional permissions and config: path.wasm[:perm1,var-key=val,...]
-    /// Permissions: net, env, fs-read=<path>, fs-write=<path>
+    /// Permissions: net, env-<VAR_NAME>, fs-read=<path>, fs-write=<path>
+    /// Note: net grants full TCP/UDP access (host/port restriction not supported by WASI)
     /// Config variables: var-<key>=<value> (passed to plugin's config function)
     #[arg(long, value_parser = parse_plugin_spec)]
     pub plugin: Vec<PluginSpec>,

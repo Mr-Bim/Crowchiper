@@ -192,6 +192,7 @@ async fn ensure_activated<S>(
 where
     S: HasAuthState + Send + Sync,
 {
+    let secure = state.secure_cookies();
     let id = match user.user_id {
         Some(id) => id,
         None => {
@@ -200,11 +201,14 @@ where
                 .users()
                 .get_by_uuid(&user.claims.sub)
                 .await
-                .map_err(|_| ApiAuthError(AuthErrorKind::DatabaseError))?
-                .ok_or(ApiAuthError(AuthErrorKind::UserNotFound))?;
+                .map_err(|_| ApiAuthError::new(AuthErrorKind::DatabaseError, secure))?
+                .ok_or(ApiAuthError::new(AuthErrorKind::UserNotFound, secure))?;
 
             if !db_user.activated {
-                return Err(ApiAuthError(AuthErrorKind::AccountNotActivated));
+                return Err(ApiAuthError::new(
+                    AuthErrorKind::AccountNotActivated,
+                    secure,
+                ));
             }
             db_user.id
         }
@@ -239,12 +243,13 @@ where
     type Rejection = ApiAuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let secure = state.secure_cookies();
         let user = authenticate_request(parts, state)
             .await
-            .map_err(ApiAuthError::from)?;
+            .map_err(|kind| ApiAuthError::new(kind, secure))?;
 
         if !R::check(user.claims.role) {
-            return Err(ApiAuthError(AuthErrorKind::InsufficientRole));
+            return Err(ApiAuthError::new(AuthErrorKind::InsufficientRole, secure));
         }
 
         let (activated, _) = ensure_activated(user, state).await?;
@@ -274,12 +279,13 @@ where
     type Rejection = ApiAuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let secure = state.secure_cookies();
         let user = authenticate_request(parts, state)
             .await
-            .map_err(ApiAuthError::from)?;
+            .map_err(|kind| ApiAuthError::new(kind, secure))?;
 
         if !R::check(user.claims.role) {
-            return Err(ApiAuthError(AuthErrorKind::InsufficientRole));
+            return Err(ApiAuthError::new(AuthErrorKind::InsufficientRole, secure));
         }
 
         // If authenticate_request already went through the refresh path, we have the JTI.
@@ -288,20 +294,20 @@ where
             Some(jti) => jti,
             None => {
                 let refresh_token = get_cookie(&parts.headers, REFRESH_COOKIE_NAME)
-                    .ok_or(ApiAuthError(AuthErrorKind::NotAuthenticated))?;
+                    .ok_or(ApiAuthError::new(AuthErrorKind::NotAuthenticated, secure))?;
 
                 let refresh_claims = state
                     .jwt()
                     .validate_refresh_token(refresh_token)
-                    .map_err(|_| ApiAuthError(AuthErrorKind::InvalidToken))?;
+                    .map_err(|_| ApiAuthError::new(AuthErrorKind::InvalidToken, secure))?;
 
                 state
                     .db()
                     .tokens()
                     .get_by_jti(&refresh_claims.jti)
                     .await
-                    .map_err(|_| ApiAuthError(AuthErrorKind::DatabaseError))?
-                    .ok_or(ApiAuthError(AuthErrorKind::TokenRevoked))?;
+                    .map_err(|_| ApiAuthError::new(AuthErrorKind::DatabaseError, secure))?
+                    .ok_or(ApiAuthError::new(AuthErrorKind::TokenRevoked, secure))?;
 
                 refresh_claims.jti
             }
@@ -346,16 +352,15 @@ where
     type Rejection = AssetAuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let login_path = state.login_path().to_string();
         let user = authenticate_request(parts, state)
             .await
             .map_err(|_| AssetAuthError {
-                login_path: state.login_path().to_string(),
+                login_path: login_path.clone(),
             })?;
 
         if !R::check(user.claims.role) {
-            return Err(AssetAuthError {
-                login_path: state.login_path().to_string(),
-            });
+            return Err(AssetAuthError { login_path });
         }
 
         Ok(ProtectedAsset(user, PhantomData))

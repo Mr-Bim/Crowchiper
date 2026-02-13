@@ -10,8 +10,8 @@ pub enum PluginPermission {
     FsWrite(PathBuf),
     /// TCP and UDP network access.
     Net,
-    /// Access to host environment variables.
-    Env,
+    /// Access to a specific host environment variable.
+    Env(String),
 }
 
 impl fmt::Display for PluginPermission {
@@ -20,7 +20,7 @@ impl fmt::Display for PluginPermission {
             PluginPermission::FsRead(p) => write!(f, "fs-read={}", p.display()),
             PluginPermission::FsWrite(p) => write!(f, "fs-write={}", p.display()),
             PluginPermission::Net => write!(f, "net"),
-            PluginPermission::Env => write!(f, "env"),
+            PluginPermission::Env(var) => write!(f, "env-{var}"),
         }
     }
 }
@@ -121,7 +121,17 @@ fn validate_fs_path(path: &str, perm_name: &str) -> Result<(), String> {
 fn parse_single_permission(s: &str) -> Result<PluginPermission, String> {
     match s {
         "net" => Ok(PluginPermission::Net),
-        "env" => Ok(PluginPermission::Env),
+        "env" => Err(
+            "bare 'env' permission is no longer supported; use env-<VAR_NAME> (e.g., env-HOME)"
+                .to_string(),
+        ),
+        _ if s.starts_with("env-") => {
+            let var_name = &s["env-".len()..];
+            if var_name.is_empty() {
+                return Err("env- requires a variable name (e.g., env-HOME)".to_string());
+            }
+            Ok(PluginPermission::Env(var_name.to_string()))
+        }
         _ if s.starts_with("fs-read=") => {
             let path = &s["fs-read=".len()..];
             validate_fs_path(path, "fs-read")?;
@@ -133,7 +143,7 @@ fn parse_single_permission(s: &str) -> Result<PluginPermission, String> {
             Ok(PluginPermission::FsWrite(PathBuf::from(path)))
         }
         _ => Err(format!(
-            "unknown permission '{s}'. Valid: net, env, fs-read=<path>, fs-write=<path>, var-<key>=<value>"
+            "unknown permission '{s}'. Valid: net, env-<VAR>, fs-read=<path>, fs-write=<path>, var-<key>=<value>"
         )),
     }
 }
@@ -177,16 +187,49 @@ mod tests {
 
     #[test]
     fn parse_env() {
-        let spec = parse_plugin_spec("a.wasm:env").unwrap();
-        assert_eq!(spec.permissions, vec![PluginPermission::Env]);
+        let spec = parse_plugin_spec("a.wasm:env-HOME").unwrap();
+        assert_eq!(
+            spec.permissions,
+            vec![PluginPermission::Env("HOME".to_string())]
+        );
+    }
+
+    #[test]
+    fn parse_bare_env_rejected() {
+        let err = parse_plugin_spec("a.wasm:env").unwrap_err();
+        assert!(err.contains("no longer supported"), "got: {err}");
+        assert!(err.contains("env-"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_env_empty_var_rejected() {
+        let err = parse_plugin_spec("a.wasm:env-").unwrap_err();
+        assert!(err.contains("requires a variable name"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_multiple_env_vars() {
+        let spec = parse_plugin_spec("a.wasm:env-HOME,env-PATH").unwrap();
+        assert_eq!(spec.permissions.len(), 2);
+        assert!(
+            spec.permissions
+                .contains(&PluginPermission::Env("HOME".to_string()))
+        );
+        assert!(
+            spec.permissions
+                .contains(&PluginPermission::Env("PATH".to_string()))
+        );
     }
 
     #[test]
     fn parse_multiple() {
-        let spec = parse_plugin_spec("a.wasm:net,env,fs-read=/data").unwrap();
+        let spec = parse_plugin_spec("a.wasm:net,env-PATH,fs-read=/data").unwrap();
         assert_eq!(spec.permissions.len(), 3);
         assert!(spec.permissions.contains(&PluginPermission::Net));
-        assert!(spec.permissions.contains(&PluginPermission::Env));
+        assert!(
+            spec.permissions
+                .contains(&PluginPermission::Env("PATH".to_string()))
+        );
         assert!(
             spec.permissions
                 .contains(&PluginPermission::FsRead(PathBuf::from("/data")))
@@ -243,12 +286,12 @@ mod tests {
 
     #[test]
     fn display_roundtrip() {
-        let spec = parse_plugin_spec("a.wasm:net,env,fs-read=/data").unwrap();
+        let spec = parse_plugin_spec("a.wasm:net,env-HOME,fs-read=/data").unwrap();
         let displayed = spec.to_string();
-        assert!(displayed.contains("a.wasm"));
-        assert!(displayed.contains("net"));
-        assert!(displayed.contains("env"));
-        assert!(displayed.contains("fs-read=/data"));
+        assert!(displayed.contains("a.wasm"), "got: {displayed}");
+        assert!(displayed.contains("net"), "got: {displayed}");
+        assert!(displayed.contains("env-HOME"), "got: {displayed}");
+        assert!(displayed.contains("fs-read=/data"), "got: {displayed}");
     }
 
     #[test]
@@ -263,10 +306,13 @@ mod tests {
 
     #[test]
     fn parse_var_mixed_with_permissions() {
-        let spec = parse_plugin_spec("a.wasm:net,var-path=/data,env").unwrap();
+        let spec = parse_plugin_spec("a.wasm:net,var-path=/data,env-HOME").unwrap();
         assert_eq!(
             spec.permissions,
-            vec![PluginPermission::Net, PluginPermission::Env]
+            vec![
+                PluginPermission::Net,
+                PluginPermission::Env("HOME".to_string())
+            ]
         );
         assert_eq!(spec.config, vec![("path".to_string(), "/data".to_string())]);
     }

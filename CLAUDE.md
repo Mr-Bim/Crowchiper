@@ -20,7 +20,7 @@ cargo run -- --base /app   # With base path for reverse proxy
 cargo run -- --no-signup   # Disable signups
 cargo run -- --csp-nonce   # Add random nonce to CSP headers (for Cloudflare bot detection)
 cargo run -- --plugin a.wasm --plugin b.wasm  # Load WASM plugins on startup
-cargo run -- --plugin "a.wasm:net,env"        # Plugin with network + env permissions
+cargo run -- --plugin "a.wasm:net,env-HOME"    # Plugin with network + env permission (per-variable)
 cargo run -- --plugin "a.wasm:fs-read=/data"  # Plugin with read-only filesystem access
 cargo run -- --plugin "a.wasm:fs-write=/tmp"  # Plugin with read+write filesystem access
 cargo run -- --plugin "a.wasm:var-key=value"  # Plugin with config variables
@@ -103,8 +103,8 @@ Set in `inline.ts`, available via `declare const`:
 - **Uploads**: Multi-stage progress (converting/compressing/encrypting/uploading). Gallery patterns in `patterns.ts`. HEIC conversion lazy-loaded.
 - **DB layer**: `_tx` associated functions for cross-store transactions. `Database` has coordinating methods. API handlers must NOT contain raw SQL.
 - **Build plugins**: `build-plugins/` folder. CSS minification, IIFE inlining, SRI, HTML processing.
-- **Tests**: Rust tests in `tests/`. E2E in `e2e/` (see `e2e/CLAUDE.md`). PRF injection for WebAuthn testing. Plugin tests in `tests/plugin_tests.rs` (39 tests) and `tests/plugin_permission_isolation_tests.rs` (7 tests verifying permissions don't leak between plugins).
-- **Plugin system (WIP)**: Wasmtime + WIT component model. `--plugin path.wasm[:perm1,perm2,var-key=val]` CLI flag. Per-plugin permissions: `net`, `env`, `fs-read=<path>`, `fs-write=<path>`. Config variables via `var-<key>=<value>` passed as `list<tuple<string, string>>` to the plugin's `config()` function. Resource limits: 10M fuel (CPU), 10MB memory, 512KB stack. Filesystem paths must be absolute and are canonicalized at load time. Permissions module in `src/plugin/permissions.rs`. Test plugins built with `wit-bindgen 0.53` targeting `wasm32-wasip2`. Build with `tests/plugins/build.sh`.
+- **Tests**: Rust tests in `tests/`. E2E in `e2e/` (see `e2e/CLAUDE.md`). PRF injection for WebAuthn testing. Plugin tests in `tests/plugin_tests.rs` (40 tests) and `tests/plugin_permission_isolation_tests.rs` (7 tests verifying permissions don't leak between plugins).
+- **Plugin system (WIP)**: Wasmtime + WIT component model. `--plugin path.wasm[:perm1,perm2,var-key=val]` CLI flag. Per-plugin permissions: `net`, `env-<VAR_NAME>`, `fs-read=<path>`, `fs-write=<path>`. Bare `env` is rejected — must specify variable name. `net` grants full TCP/UDP (wasmtime WASI limitation). Config variables via `var-<key>=<value>` passed as `list<tuple<string, string>>` to the plugin's `config()` function. Resource limits: 10M fuel (CPU), 10MB memory, 512KB stack. Filesystem paths must be absolute and are canonicalized at load time. Permissions module in `src/plugin/permissions.rs`. Test plugins built with `wit-bindgen 0.53` targeting `wasm32-wasip2`. Build with `tests/plugins/build.sh`.
 - **CI/CD**: `.github/workflows/` — CI on push/PR, release on version tag. Tag must match Cargo.toml version.
 
 ## Playwright E2E Tests

@@ -240,8 +240,10 @@ fn apply_permissions(
             PluginPermission::Net => {
                 builder.inherit_network();
             }
-            PluginPermission::Env => {
-                builder.inherit_env();
+            PluginPermission::Env(var_name) => {
+                if let Ok(value) = std::env::var(var_name) {
+                    builder.env(var_name, &value);
+                }
             }
         }
     }

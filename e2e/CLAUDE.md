@@ -19,18 +19,26 @@ All relative imports MUST include the `.ts` extension:
 
 ```typescript
 // Correct
-import { test, expect, Server } from "./fixtures.ts";
+import { test, expect, Server } from "../utils/fixtures.ts";
 
 // Wrong - will fail
-import { test, expect } from "./fixtures";
+import { test, expect } from "../utils/fixtures";
 ```
 
-## Files
+## Directory Structure
 
-- `fixtures.ts` - Test fixtures and utilities
-- `server.ts` - Server manager with `Server` enum
-- `global-setup.ts` - Pre-starts all server configurations
-- `global-teardown.ts` - Stops all servers
+```
+e2e/
+├── utils/
+│   ├── fixtures.ts      # Test fixtures and utilities
+│   └── server.ts        # Server manager with Server enum
+├── setup/
+│   ├── global-setup.ts  # Pre-starts all server configurations
+│   └── global-teardown.ts # Stops all servers
+├── specs/               # Test spec files
+│   └── nested-posts/    # Nested post test suite with shared helpers
+└── assets/              # Test assets (images, etc.)
+```
 
 ## Writing Parallel-Safe Tests
 
@@ -39,7 +47,7 @@ Tests across different files run in parallel. To avoid conflicts:
 ### 1. Always use `testId` for usernames
 
 ```typescript
-import { test, expect } from "./fixtures.ts";
+import { test, expect } from "../utils/fixtures.ts";
 
 test("register user", async ({ page, baseUrl, testId }) => {
   const username = `mytest_${testId}`;
@@ -51,7 +59,7 @@ test("register user", async ({ page, baseUrl, testId }) => {
 ### 2. Use the `Server` enum for different server configs
 
 ```typescript
-import { test, expect, Server } from "./fixtures.ts";
+import { test, expect, Server } from "../utils/fixtures.ts";
 
 // Default server
 test("basic test", async ({ page, baseUrl }) => {
@@ -91,8 +99,8 @@ import {
   createUser,
   uniqueTestId,
   CreateUserResult,
-} from "./fixtures.ts";
-import { getServer, Server } from "./server.ts";
+} from "../utils/fixtures.ts";
+import { getServer, Server } from "../utils/server.ts";
 import { BrowserContext, Page } from "@playwright/test";
 
 test.describe("My feature tests", () => {
@@ -149,62 +157,60 @@ test.describe("My feature tests", () => {
 
 ## Available Server Configurations
 
-Defined in `Server` enum:
+Defined in `Server` enum (`utils/server.ts`):
 - `Server.Default` - Standard server
 - `Server.NoSignup` - Server with `--no-signup` flag
 - `Server.BasePath` - Server with `--base /crow-chipher`
 
 ## Adding a New Server Configuration
 
-1. Add to `Server` enum in `server.ts`
+1. Add to `Server` enum in `utils/server.ts`
 2. Add config to `SERVER_CONFIGS` object
 3. It will be auto-started in global setup
 
-## Test Files
+## Test Spec Files
 
-- **`register.spec.ts`** - User registration flow tests
-- **`login.spec.ts`** - Login flow and navigation tests
-- **`encryption.spec.ts`** - Encryption setup and usage tests
-- **`app-auth.spec.ts`** - Authentication, JWT, and authorization tests
-- **`admin-claim.spec.ts`** - Admin claim flow with encryption setup
-- **`admin-dashboard.spec.ts`** - Admin dashboard access control and users table tests
-- **`tokens.spec.ts`** - Comprehensive token system tests (see below)
-- **`post-navigation.spec.ts`** - Post switching, save behavior, editor state tests
-- **`reorder.spec.ts`** - Drag and drop post reordering tests
-- **`upload.spec.ts`** - Single image upload with progress feedback and encryption
-- **`multi-upload.spec.ts`** - Multi-image upload, individual/gallery deletion, add to existing gallery
-- **`nested-posts/*.spec.ts`** - Hierarchical post structure tests
+### Authentication & Users
+- `register.spec.ts` - User registration flow
+- `login.spec.ts` - Login flow and navigation
+- `logout.spec.ts` - Logout behavior
+- `app-auth.spec.ts` - Authentication, JWT, and authorization
+- `claim.spec.ts` - Account claim flow
+- `reclaim.spec.ts` - Account reclaim flow
 
-### Token Tests (`tokens.spec.ts`)
+### Admin
+- `admin-claim.spec.ts` - Admin claim flow with encryption setup
+- `admin-dashboard.spec.ts` - Admin dashboard access control and users table
 
-Comprehensive E2E tests for the dual-token authentication system:
+### Posts
+- `post-navigation.spec.ts` - Post switching, save behavior, editor state
+- `new-post-sibling.spec.ts` - Creating sibling posts
+- `last-selected-post.spec.ts` - Remembering last selected post
+- `reorder.spec.ts` - Drag and drop post reordering
 
-**Token Issuance:**
-- Registration issues refresh token cookie
-- Login issues new refresh token when none exists
-- Login reuses existing valid refresh token (redirects to app)
+### Nested Posts (`specs/nested-posts/`)
+- `nested-posts-basic.spec.ts` - Hierarchical post structure
+- `nested-posts-delete.spec.ts` - Deleting nested posts
+- `nested-posts-drag-drop.spec.ts` - Drag and drop for nested posts
+- `nested-posts-expand-collapse.spec.ts` - Expand/collapse behavior
+- `nested-posts-persistence.spec.ts` - Persistence of nested structure
+- `nested-posts-reorder.spec.ts` - Reordering within nested structure
+- `nested-posts-visual.spec.ts` - Visual rendering of nested posts
+- `nested-posts-helpers.ts` - Shared helpers for nested post tests
 
-**Token Refresh Flow:**
-- Expired access token triggers automatic refresh via refresh token
-- Missing refresh token returns 401
-- Revoked refresh token returns 401
+### Uploads
+- `upload.spec.ts` - Single image upload with progress and encryption
+- `multi-upload.spec.ts` - Multi-image upload, gallery deletion, add to gallery
 
-**Multiple Sessions:**
-- User can have multiple active sessions
-- Logging out one session doesn't affect others
+### Security & Tokens
+- `encryption.spec.ts` - Encryption setup and usage
+- `tokens.spec.ts` - Dual-token auth system (issuance, refresh, multi-session, revocation, login token rotation)
 
-**Logout:**
-- Logout clears both cookies
-- Logout revokes refresh token in database
-- Logout succeeds even without valid token
+### UI Features
+- `sidebar.spec.ts` - Sidebar behavior
+- `settings-panel.spec.ts` - Settings panel UI
+- `theme.spec.ts` - Theme switching
+- `spellcheck.spec.ts` - Spellcheck toggle
 
-**Token List API:**
-- Users can only see their own tokens
-
-**User Isolation:**
-- Users cannot access each other's data
-- Users cannot revoke each other's tokens
-
-**Token Type Security:**
-- Refresh token cannot be used as access token
-- Access token cannot be used as refresh token
+### Infrastructure
+- `base-path.spec.ts` - Base path (`--base`) support

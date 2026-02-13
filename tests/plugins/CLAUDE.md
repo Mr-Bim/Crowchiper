@@ -1,16 +1,22 @@
 # Test WASM Plugins
 
-Test plugins for verifying plugin sandbox error handling. All plugins are `[[example]]` targets in a single Cargo crate, compiled to `wasm32-wasip2`.
+Test plugins for verifying plugin sandbox, permissions, and resource limits. All plugins are `[[example]]` targets in a single Cargo crate, compiled to `wasm32-wasip2`.
 
 ## Plugins
 
 | Plugin | Purpose |
 |--------|---------|
-| `good` | Valid plugin — loads successfully |
-| `fs-error` | Tries `std::fs::write` — no filesystem access |
-| `net-error` | Tries `std::net::TcpStream::connect` — no network access |
-| `env-error` | Tries `std::env::var("SECRET").unwrap()` — no env vars |
-| `empty-name` | Returns empty plugin name — config validation error |
+| `good` | Valid plugin -- loads successfully |
+| `fs-error` | Tries `std::fs::write` -- no filesystem access |
+| `fs-success` | Writes to filesystem with proper `fs-write` permission |
+| `net-error` | Tries `std::net::TcpStream::connect` -- no network access |
+| `net-success` | Attempts TCP connection with `net` permission |
+| `env-error` | Tries `std::env::var("SECRET").unwrap()` -- no env vars |
+| `env-success` | Reads env var with `env-<VAR>` permission (per-variable) |
+| `empty-name` | Returns empty plugin name -- config validation error |
+| `infinite-loop` | Tests fuel/CPU limit (10M fuel) |
+| `memory-hog` | Allocates memory in a loop (10MB limit) |
+| `stack-overflow` | Recursive calls to test stack limit (512KB) |
 
 ## Rebuilding
 

@@ -220,19 +220,19 @@ test.describe("Token issuance on login", () => {
     await context.close();
   });
 
-  test("login reuses existing valid refresh token", async ({
+  test("login revokes old refresh token and issues new one", async ({
     browser,
     baseUrl,
     testId,
   }) => {
-    const username = `login_reuse_${testId}`;
+    const username = `login_reissue_${testId}`;
 
-    // Register user in first context
     const context1 = await browser.newContext();
     const page1 = await context1.newPage();
     const client1 = await page1.context().newCDPSession(page1);
     await addVirtualAuthenticator(client1);
 
+    // Register user
     await page1.goto(`${baseUrl}/login/register.html`);
     await expect(page1.locator("#register-button")).toBeEnabled({
       timeout: 5000,
@@ -244,24 +244,58 @@ test.describe("Token issuance on login", () => {
       timeout: 10000,
     });
 
-    // Get the refresh token after registration
     const refreshToken1 = await getCookie(context1, "refresh_token");
     expect(refreshToken1).toBeDefined();
 
-    // When navigating to login page with valid refresh token, the IIFE config
-    // detects authentication and redirects to app. This verifies the token is valid.
+    // Clear all cookies so login page IIFE doesn't auto-redirect
+    await client1.send("Network.clearBrowserCookies");
+
+    // Navigate to login page without any cookies (no auto-redirect)
     await page1.goto(`${baseUrl}/login/index.html`);
+    await expect(page1.locator("#login-button")).toBeEnabled({ timeout: 5000 });
 
-    // Should redirect to app (because already authenticated with valid refresh token)
-    await expect(page1).toHaveURL(new RegExp(APP_PATH), {
-      timeout: 10000,
-    });
+    // Re-add the refresh token cookie AFTER page load so the login POST
+    // sends it (server checks for existing refresh token to revoke)
+    await context1.addCookies([
+      {
+        name: "refresh_token",
+        value: refreshToken1!,
+        domain: new URL(baseUrl).hostname,
+        path: "/",
+      },
+    ]);
 
-    // The refresh token should still be the same (not replaced)
+    // Login again — server should revoke old token and issue new one
+    await page1.fill("#username", username);
+    await page1.click("#login-button");
+
+    await expect(page1).toHaveURL(
+      new RegExp(`${APP_PATH}/setup-encryption.html`),
+      { timeout: 10000 },
+    );
+
+    // A new refresh token should have been issued (old one revoked)
     const refreshToken2 = await getCookie(context1, "refresh_token");
-    expect(refreshToken2).toBe(refreshToken1);
+    expect(refreshToken2).toBeDefined();
+    expect(refreshToken2).not.toBe(refreshToken1);
+
+    // Old token should no longer work
+    const context2 = await browser.newContext();
+    const page2 = await context2.newPage();
+    await page2.goto(`${baseUrl}/login/index.html`);
+    await context2.addCookies([
+      {
+        name: "refresh_token",
+        value: refreshToken1!,
+        domain: new URL(baseUrl).hostname,
+        path: "/",
+      },
+    ]);
+    const response = await page2.request.get(`${baseUrl}/api/tokens/verify`);
+    expect(response.status()).toBe(401);
 
     await context1.close();
+    await context2.close();
   });
 });
 
