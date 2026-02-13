@@ -1,0 +1,11 @@
+package crowchiper:plugin;
+
+world plugin {
+    record plugin-config {
+        name: string,
+        version: string,
+        hooks: list<string>,
+    }
+
+    export config: func() -> plugin-config;
+}

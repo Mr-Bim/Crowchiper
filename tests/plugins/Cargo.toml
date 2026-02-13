@@ -1,0 +1,35 @@
+[package]
+name = "test-plugins"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+wit-bindgen = { version = "0.53", default-features = false, features = ["macros"] }
+
+[[example]]
+name = "good"
+path = "examples/good.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "fs-error"
+path = "examples/fs_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "net-error"
+path = "examples/net_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "env-error"
+path = "examples/env_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "empty-name"
+path = "examples/empty_name.rs"
+crate-type = ["cdylib"]

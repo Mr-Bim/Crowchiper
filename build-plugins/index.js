@@ -54,7 +54,7 @@ export function buildPlugin(options = {}) {
     apply: "build",
     async closeBundle() {
       const buildType = process.env.BUILD || "login";
-      const rootDir = import.meta.dirname.replace("/plugins", "");
+      const rootDir = import.meta.dirname.replace("/build-plugins", "");
       const distDir = join(rootDir, "dist", buildType);
       const distRoot = join(rootDir, "dist");
 
@@ -63,7 +63,6 @@ export function buildPlugin(options = {}) {
         const config = JSON.parse(
           readFileSync(join(rootDir, "config.json"), "utf-8"),
         );
-
         // 0. Check entry chunk size (app build only)
         if (buildType === "app") {
           const entryChunks = globSync(`${distDir}/assets/index-*.js`);

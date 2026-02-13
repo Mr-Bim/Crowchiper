@@ -183,6 +183,23 @@ pub struct Args {
     /// Extract client IP from header (requires reverse proxy)
     #[arg(short, long, value_enum)]
     pub ip_header: Option<ClientIpHeader>,
+
+    /// Path to a WASM plugin file (.wasm), can be specified multiple times
+    #[arg(long)]
+    pub plugin: Vec<std::path::PathBuf>,
+
+    /// Behavior when a plugin fails to load: abort (default) or warn
+    #[arg(long, default_value = "abort", value_enum)]
+    pub plugin_error: PluginErrorMode,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, Default)]
+pub enum PluginErrorMode {
+    /// Abort startup if a plugin fails to load
+    #[default]
+    Abort,
+    /// Log a warning and continue without the plugin
+    Warn,
 }
 
 fn validate_base_path(s: &str) -> Result<String, String> {

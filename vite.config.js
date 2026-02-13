@@ -2,8 +2,8 @@
 import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
-import { buildPlugin } from "./plugins/index.js";
-import { devServerPlugin } from "./plugins/dev-server.js";
+import { buildPlugin } from "./build-plugins/index.js";
+import { devServerPlugin } from "./build-plugins/dev-server.js";
 
 const config = JSON.parse(readFileSync("./config.json", "utf-8"));
 

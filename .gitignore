@@ -8,6 +8,7 @@ crowchiper.db
 sync
 
 .cargo-container
+.zed/
 
 # Playwright
 /test-results/
@@ -15,3 +16,8 @@ sync
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/plugin
+
+*/target/
+target/
+*/src/bindings.rs

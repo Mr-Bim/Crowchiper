@@ -1,10 +1,11 @@
 use clap::Parser;
 use crowchiper::cli::{
-    Args, build_config, handle_create_admin, init_logging, load_jwt_secret, open_database,
-    validate_rp_origin,
+    Args, PluginErrorMode, build_config, handle_create_admin, init_logging, load_jwt_secret,
+    open_database, validate_rp_origin,
 };
+use crowchiper::plugin::PluginRuntime;
 use crowchiper::{init_cleanup, run_server};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -19,6 +20,29 @@ async fn main() {
     let Some(db) = open_database(&args.database).await else {
         std::process::exit(1);
     };
+
+    for plugin_path in &args.plugin {
+        let path = plugin_path.clone();
+        let result = tokio::task::spawn_blocking(move || PluginRuntime::load(&path)).await;
+        match result {
+            Err(e) => {
+                error!(path = %plugin_path.display(), error = %e, "Plugin loading task panicked");
+                std::process::exit(1);
+            }
+            Ok(Ok(plugin)) => {
+                info!(name = %plugin.name(), version = %plugin.version(), "Plugin loaded");
+            }
+            Ok(Err(e)) => match args.plugin_error {
+                PluginErrorMode::Abort => {
+                    error!(path = %plugin_path.display(), error = %e, "Failed to load plugin");
+                    std::process::exit(1);
+                }
+                PluginErrorMode::Warn => {
+                    warn!(path = %plugin_path.display(), error = %e, "Failed to load plugin, skipping");
+                }
+            },
+        }
+    }
 
     if args.create_admin {
         handle_create_admin(&db, &args.rp_origin, args.base.as_deref()).await;
