@@ -8,6 +8,7 @@ pub mod jwt;
 pub mod names;
 pub mod plugin;
 pub mod rate_limit;
+pub mod server_config;
 
 // Re-export test-mode utilities for easier access in tests
 #[cfg(feature = "test-mode")]
@@ -51,6 +52,13 @@ pub struct ServerConfig {
 
 /// Create the application router with the given configuration.
 pub fn create_app(config: &ServerConfig) -> Router {
+    // Initialize global server config (idempotent — safe for tests)
+    server_config::init(
+        config.secure_cookies,
+        config.ip_extractor.clone(),
+        config.plugin_manager.clone(),
+    );
+
     // Create JWT config
     let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));
 
@@ -60,9 +68,6 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.csp_nonce,
         jwt.clone(),
         config.db.clone(),
-        config.secure_cookies,
-        config.ip_extractor.clone(),
-        config.plugin_manager.clone(),
     )
     .expect("Failed to initialize assets");
 
@@ -84,10 +89,7 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.db.clone(),
         webauthn,
         jwt.clone(),
-        config.secure_cookies,
         config.no_signup,
-        config.ip_extractor.clone(),
-        config.plugin_manager.clone(),
         dashboard_path,
     )
     .layer(middleware::from_fn(add_access_token_cookie));

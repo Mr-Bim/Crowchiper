@@ -4,12 +4,10 @@ use std::sync::Arc;
 use rust_embed::Embed;
 use tracing::info;
 
-use crate::auth::HasAssetAuthState;
-use crate::cli::IpExtractor;
+use crate::auth::HasAssetAuthBackend;
 use crate::db::Database;
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::plugin::PluginManager;
 
 use super::csp::{APP_CSP_HEADER, DASHBOARD_CSP_HEADER, LOGIN_CSP_HEADER};
 use super::embed::{AppAssets, DashboardAssets, LoginAssets};
@@ -160,15 +158,11 @@ pub struct AssetsState {
     pub(super) login_index_html: &'static str,
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
-    pub secure_cookies: bool,
-    /// IP extraction strategy
-    pub ip_extractor: Option<IpExtractor>,
-    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
-impl_has_auth_state!(AssetsState);
+impl_has_auth_backend!(AssetsState);
 
-impl HasAssetAuthState for AssetsState {
+impl HasAssetAuthBackend for AssetsState {
     fn login_path(&self) -> &str {
         self.login.path
     }
@@ -182,8 +176,6 @@ impl AssetsState {
     /// * `csp_nonce` - Whether to add random nonces to CSP headers
     /// * `jwt` - JWT configuration for token validation
     /// * `db` - Database connection
-    /// * `secure_cookies` - Whether to set Secure flag on cookies
-    /// * `ip_extractor` - Optional IP extraction strategy
     ///
     /// # Returns
     /// Returns an error if login/index.html is missing from embedded assets.
@@ -192,9 +184,6 @@ impl AssetsState {
         csp_nonce: bool,
         jwt: Arc<JwtConfig>,
         db: Database,
-        secure_cookies: bool,
-        ip_extractor: Option<IpExtractor>,
-        plugin_manager: Option<Arc<PluginManager>>,
     ) -> Result<Self, &'static str> {
         let base: &'static str = leak_string(base_path.unwrap_or("").to_string());
         let api_path: &'static str = leak_string(format!("{}/api", base));
@@ -248,9 +237,6 @@ impl AssetsState {
             login_index_html,
             jwt,
             db,
-            secure_cookies,
-            ip_extractor,
-            plugin_manager,
         })
     }
 

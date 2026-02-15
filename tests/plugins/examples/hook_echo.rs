@@ -16,9 +16,12 @@ impl Guest for HookEchoPlugin {
     }
 
     fn on_hook(event: HookEvent) -> Result<(), String> {
-        eprintln!("hook={:?} time={}", event.hook, event.time);
+        log(
+            LogLevel::Info,
+            &format!("hook={:?} time={}", event.hook, event.time),
+        );
         for (key, value) in &event.values {
-            eprintln!("  {key}={value}");
+            log(LogLevel::Info, &format!("  {key}={value}"));
         }
         Ok(())
     }

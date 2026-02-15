@@ -73,3 +73,13 @@ crate-type = ["cdylib"]
 name = "hook-error"
 path = "examples/hook_error.rs"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "log-test"
+path = "examples/log_test.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "slow-hook"
+path = "examples/slow_hook.rs"
+crate-type = ["cdylib"]

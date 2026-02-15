@@ -16,11 +16,9 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{AnyRole, Auth};
-use crate::cli::IpExtractor;
 use crate::db::{Database, attachments::CreateAttachmentInput};
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::plugin::PluginManager;
 
 /// Encryption version 0 means unencrypted data
 const UNENCRYPTED_VERSION: i32 = 0;
@@ -30,12 +28,9 @@ const UNENCRYPTED_VERSION: i32 = 0;
 pub struct AttachmentsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
-    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
-impl_has_auth_state!(AttachmentsState);
+impl_has_auth_backend!(AttachmentsState);
 
 pub fn router(state: AttachmentsState) -> Router {
     Router::new()

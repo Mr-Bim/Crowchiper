@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crowchiper::plugin::{PluginError, PluginPermission, PluginRuntime};
+use crowchiper::plugin::{DEFAULT_HOOK_TIMEOUT, PluginError, PluginPermission, PluginRuntime};
 
 fn wasm_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/plugins/wasm")
@@ -101,17 +101,20 @@ fn spawn_expect_listening(args: &[&str]) -> (String, String) {
 
 // ── Good plugin ──────────────────────────────────────────────────────
 
-#[test]
-fn test_good_plugin_loads_successfully() {
-    let plugin =
-        PluginRuntime::load(&wasm_path("good"), &[], &[]).expect("good plugin should load");
+#[tokio::test]
+async fn test_good_plugin_loads_successfully() {
+    let plugin = PluginRuntime::load(&wasm_path("good"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .expect("good plugin should load");
     assert_eq!(plugin.name(), "good");
     assert_eq!(plugin.version(), "1.0.0");
 }
 
-#[test]
-fn test_good_plugin_has_hooks() {
-    let plugin = PluginRuntime::load(&wasm_path("good"), &[], &[]).unwrap();
+#[tokio::test]
+async fn test_good_plugin_has_hooks() {
+    let plugin = PluginRuntime::load(&wasm_path("good"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap();
     assert_eq!(plugin.hooks().len(), 1, "should have exactly one hook");
     assert!(
         plugin.hooks().contains(&crowchiper::plugin::Hook::Server(
@@ -123,9 +126,11 @@ fn test_good_plugin_has_hooks() {
 
 // ── Sandbox enforcement: error messages ──────────────────────────────
 
-#[test]
-fn test_fs_error_contains_file_descriptor_message() {
-    let err = PluginRuntime::load(&wasm_path("fs-error"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_fs_error_contains_file_descriptor_message() {
+    let err = PluginRuntime::load(&wasm_path("fs-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "filesystem access should cause a runtime error, got: {err}"
@@ -145,9 +150,11 @@ fn test_fs_error_contains_file_descriptor_message() {
     );
 }
 
-#[test]
-fn test_net_error_contains_unsupported_message() {
-    let err = PluginRuntime::load(&wasm_path("net-error"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_net_error_contains_unsupported_message() {
+    let err = PluginRuntime::load(&wasm_path("net-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "network access should cause a runtime error, got: {err}"
@@ -165,9 +172,11 @@ fn test_net_error_contains_unsupported_message() {
     );
 }
 
-#[test]
-fn test_env_error_contains_not_present_message() {
-    let err = PluginRuntime::load(&wasm_path("env-error"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_env_error_contains_not_present_message() {
+    let err = PluginRuntime::load(&wasm_path("env-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "env access should cause a runtime error, got: {err}"
@@ -185,9 +194,10 @@ fn test_env_error_contains_not_present_message() {
 
 // ── Sandbox enforcement: source location ─────────────────────────────
 
-#[test]
-fn test_fs_error_includes_source_location() {
-    let msg = PluginRuntime::load(&wasm_path("fs-error"), &[], &[])
+#[tokio::test]
+async fn test_fs_error_includes_source_location() {
+    let msg = PluginRuntime::load(&wasm_path("fs-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .unwrap_err()
         .to_string();
     assert!(
@@ -196,9 +206,10 @@ fn test_fs_error_includes_source_location() {
     );
 }
 
-#[test]
-fn test_net_error_includes_source_location() {
-    let msg = PluginRuntime::load(&wasm_path("net-error"), &[], &[])
+#[tokio::test]
+async fn test_net_error_includes_source_location() {
+    let msg = PluginRuntime::load(&wasm_path("net-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .unwrap_err()
         .to_string();
     assert!(
@@ -207,9 +218,10 @@ fn test_net_error_includes_source_location() {
     );
 }
 
-#[test]
-fn test_env_error_includes_source_location() {
-    let msg = PluginRuntime::load(&wasm_path("env-error"), &[], &[])
+#[tokio::test]
+async fn test_env_error_includes_source_location() {
+    let msg = PluginRuntime::load(&wasm_path("env-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .unwrap_err()
         .to_string();
     assert!(
@@ -311,9 +323,11 @@ fn test_cli_clean_mode_omits_backtrace() {
 
 // ── Config validation ────────────────────────────────────────────────
 
-#[test]
-fn test_empty_name_plugin_is_rejected() {
-    let err = PluginRuntime::load(&wasm_path("empty-name"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_empty_name_plugin_is_rejected() {
+    let err = PluginRuntime::load(&wasm_path("empty-name"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::InvalidConfig(_)),
         "empty name should cause an InvalidConfig error, got: {err}"
@@ -331,10 +345,12 @@ fn test_empty_name_plugin_is_rejected() {
 
 // ── Load errors ──────────────────────────────────────────────────────
 
-#[test]
-fn test_nonexistent_file_includes_path() {
+#[tokio::test]
+async fn test_nonexistent_file_includes_path() {
     let bad_path = Path::new("/nonexistent/plugin.wasm");
-    let err = PluginRuntime::load(bad_path, &[], &[]).unwrap_err();
+    let err = PluginRuntime::load(bad_path, &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Load(_)),
         "missing file should cause a load error, got: {err}"
@@ -350,12 +366,14 @@ fn test_nonexistent_file_includes_path() {
     );
 }
 
-#[test]
-fn test_invalid_wasm_includes_path() {
+#[tokio::test]
+async fn test_invalid_wasm_includes_path() {
     let tmp = std::env::temp_dir().join(format!("bad_plugin_{}.wasm", std::process::id()));
     std::fs::write(&tmp, b"this is not valid wasm").unwrap();
 
-    let err = PluginRuntime::load(&tmp, &[], &[]).unwrap_err();
+    let err = PluginRuntime::load(&tmp, &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     std::fs::remove_file(&tmp).ok();
 
@@ -375,9 +393,10 @@ fn test_invalid_wasm_includes_path() {
 
 // ── Error variant Display prefixes ───────────────────────────────────
 
-#[test]
-fn test_error_display_prefixes() {
-    let load_msg = PluginRuntime::load(Path::new("/nope.wasm"), &[], &[])
+#[tokio::test]
+async fn test_error_display_prefixes() {
+    let load_msg = PluginRuntime::load(Path::new("/nope.wasm"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .unwrap_err()
         .to_string();
     assert!(
@@ -385,7 +404,8 @@ fn test_error_display_prefixes() {
         "Load variant should use 'plugin load error:' prefix, got: {load_msg}"
     );
 
-    let runtime_msg = PluginRuntime::load(&wasm_path("fs-error"), &[], &[])
+    let runtime_msg = PluginRuntime::load(&wasm_path("fs-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .unwrap_err()
         .to_string();
     assert!(
@@ -393,7 +413,8 @@ fn test_error_display_prefixes() {
         "Runtime variant should use 'plugin runtime error:' prefix, got: {runtime_msg}"
     );
 
-    let config_msg = PluginRuntime::load(&wasm_path("empty-name"), &[], &[])
+    let config_msg = PluginRuntime::load(&wasm_path("empty-name"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .unwrap_err()
         .to_string();
     assert!(
@@ -545,8 +566,8 @@ fn fs_test_dir() -> PathBuf {
     std::env::temp_dir().join("crowchiper-plugin-test")
 }
 
-#[test]
-fn test_fs_success_with_write_permission() {
+#[tokio::test]
+async fn test_fs_success_with_write_permission() {
     let dir = fs_test_dir();
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -559,24 +580,31 @@ fn test_fs_success_with_write_permission() {
         "path".to_string(),
         canonical_dir.to_str().unwrap().to_string(),
     )];
-    let result = PluginRuntime::load(&wasm_path("fs-success"), &perms, &config);
+    let result = PluginRuntime::load(
+        &wasm_path("fs-success"),
+        &perms,
+        &config,
+        DEFAULT_HOOK_TIMEOUT,
+    )
+    .await;
     std::fs::remove_dir_all(&dir).ok();
 
     let plugin = result.expect("fs-success should load with fs-write permission");
     assert_eq!(plugin.name(), "fs-success");
 }
 
-#[test]
-fn test_fs_success_without_permission_fails() {
-    let result = PluginRuntime::load(&wasm_path("fs-success"), &[], &[]);
+#[tokio::test]
+async fn test_fs_success_without_permission_fails() {
+    let result =
+        PluginRuntime::load(&wasm_path("fs-success"), &[], &[], DEFAULT_HOOK_TIMEOUT).await;
     assert!(
         result.is_err(),
         "fs-success should fail without permissions"
     );
 }
 
-#[test]
-fn test_fs_success_with_read_only_permission_fails() {
+#[tokio::test]
+async fn test_fs_success_with_read_only_permission_fails() {
     let dir = fs_test_dir();
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -586,7 +614,13 @@ fn test_fs_success_with_read_only_permission_fails() {
         "path".to_string(),
         canonical_dir.to_str().unwrap().to_string(),
     )];
-    let result = PluginRuntime::load(&wasm_path("fs-success"), &perms, &config);
+    let result = PluginRuntime::load(
+        &wasm_path("fs-success"),
+        &perms,
+        &config,
+        DEFAULT_HOOK_TIMEOUT,
+    )
+    .await;
     std::fs::remove_dir_all(&dir).ok();
 
     assert!(
@@ -595,12 +629,14 @@ fn test_fs_success_with_read_only_permission_fails() {
     );
 }
 
-#[test]
-fn test_fs_permission_nonexistent_dir_fails_at_load() {
+#[tokio::test]
+async fn test_fs_permission_nonexistent_dir_fails_at_load() {
     let perms = vec![PluginPermission::FsRead(PathBuf::from(
         "/nonexistent/dir/for/plugin",
     ))];
-    let err = PluginRuntime::load(&wasm_path("good"), &perms, &[]).unwrap_err();
+    let err = PluginRuntime::load(&wasm_path("good"), &perms, &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("failed to resolve filesystem path"),
@@ -610,12 +646,13 @@ fn test_fs_permission_nonexistent_dir_fails_at_load() {
 
 // ── Permission: environment ──────────────────────────────────────────
 
-#[test]
-fn test_env_success_with_permission() {
+#[tokio::test]
+async fn test_env_success_with_permission() {
     // SAFETY: single-threaded test runner (--test-threads=1)
     unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
     let perms = vec![PluginPermission::Env("TEST_PLUGIN_VAR".to_string())];
-    let plugin = PluginRuntime::load(&wasm_path("env-success"), &perms, &[])
+    let plugin = PluginRuntime::load(&wasm_path("env-success"), &perms, &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .expect("env-success should load with env permission");
     assert!(
         plugin.name().contains("hello"),
@@ -625,12 +662,13 @@ fn test_env_success_with_permission() {
     unsafe { std::env::remove_var("TEST_PLUGIN_VAR") };
 }
 
-#[test]
-fn test_env_with_wrong_var_name_fails() {
+#[tokio::test]
+async fn test_env_with_wrong_var_name_fails() {
     // SAFETY: single-threaded test runner (--test-threads=1)
     unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
     let perms = vec![PluginPermission::Env("WRONG_VAR".to_string())];
-    let result = PluginRuntime::load(&wasm_path("env-success"), &perms, &[]);
+    let result =
+        PluginRuntime::load(&wasm_path("env-success"), &perms, &[], DEFAULT_HOOK_TIMEOUT).await;
     unsafe { std::env::remove_var("TEST_PLUGIN_VAR") };
     assert!(
         result.is_err(),
@@ -638,9 +676,10 @@ fn test_env_with_wrong_var_name_fails() {
     );
 }
 
-#[test]
-fn test_env_success_without_permission_fails() {
-    let result = PluginRuntime::load(&wasm_path("env-success"), &[], &[]);
+#[tokio::test]
+async fn test_env_success_without_permission_fails() {
+    let result =
+        PluginRuntime::load(&wasm_path("env-success"), &[], &[], DEFAULT_HOOK_TIMEOUT).await;
     assert!(
         result.is_err(),
         "env-success should fail without env permission"
@@ -649,21 +688,19 @@ fn test_env_success_without_permission_fails() {
 
 // ── Permission: network ──────────────────────────────────────────────
 
-#[test]
-fn test_net_success_with_permission() {
-    // wasmtime-wasi sync networking needs an ambient tokio runtime
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let _guard = rt.enter();
-
+#[tokio::test]
+async fn test_net_success_with_permission() {
     let perms = vec![PluginPermission::Net];
-    let plugin = PluginRuntime::load(&wasm_path("net-success"), &perms, &[])
+    let plugin = PluginRuntime::load(&wasm_path("net-success"), &perms, &[], DEFAULT_HOOK_TIMEOUT)
+        .await
         .expect("net-success should load with net permission");
     assert_eq!(plugin.name(), "net-success");
 }
 
-#[test]
-fn test_net_success_without_permission_fails() {
-    let result = PluginRuntime::load(&wasm_path("net-success"), &[], &[]);
+#[tokio::test]
+async fn test_net_success_without_permission_fails() {
+    let result =
+        PluginRuntime::load(&wasm_path("net-success"), &[], &[], DEFAULT_HOOK_TIMEOUT).await;
     assert!(
         result.is_err(),
         "net-success should fail without net permission"
@@ -712,9 +749,11 @@ fn test_cli_fs_permission_nonexistent_dir() {
 
 // ── Resource exhaustion ──────────────────────────────────────────────
 
-#[test]
-fn test_infinite_loop_exhausts_fuel() {
-    let err = PluginRuntime::load(&wasm_path("infinite-loop"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_infinite_loop_exhausts_fuel() {
+    let err = PluginRuntime::load(&wasm_path("infinite-loop"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "infinite loop should cause a runtime error, got: {err}"
@@ -728,18 +767,22 @@ fn test_infinite_loop_exhausts_fuel() {
     );
 }
 
-#[test]
-fn test_memory_hog_hits_limit() {
-    let err = PluginRuntime::load(&wasm_path("memory-hog"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_memory_hog_hits_limit() {
+    let err = PluginRuntime::load(&wasm_path("memory-hog"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "memory hog should cause a runtime error, got: {err}"
     );
 }
 
-#[test]
-fn test_stack_overflow_is_caught() {
-    let err = PluginRuntime::load(&wasm_path("stack-overflow"), &[], &[]).unwrap_err();
+#[tokio::test]
+async fn test_stack_overflow_is_caught() {
+    let err = PluginRuntime::load(&wasm_path("stack-overflow"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap_err();
     assert!(
         matches!(&err, PluginError::Runtime(_)),
         "stack overflow should cause a runtime error, got: {err}"
@@ -780,9 +823,11 @@ fn test_cli_relative_path_rejected() {
 
 use crowchiper::plugin::{Hook, PluginManager, ServerHook};
 
-#[test]
-fn test_call_hook_invokes_registered_plugin() {
-    let plugin = PluginRuntime::load(&wasm_path("hook-echo"), &[], &[]).unwrap();
+#[tokio::test]
+async fn test_call_hook_invokes_registered_plugin() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-echo"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap();
     assert_eq!(plugin.name(), "hook-echo");
 
     let event = crowchiper::plugin::HookEvent {
@@ -795,13 +840,15 @@ fn test_call_hook_invokes_registered_plugin() {
             ("user_uuid".into(), "test-uuid".into()),
         ],
     };
-    let result = plugin.call_hook(&event);
+    let result = plugin.call_hook(&event).await;
     assert!(result.is_ok(), "hook-echo should succeed, got: {result:?}");
 }
 
-#[test]
-fn test_call_hook_returns_plugin_error() {
-    let plugin = PluginRuntime::load(&wasm_path("hook-error"), &[], &[]).unwrap();
+#[tokio::test]
+async fn test_call_hook_returns_plugin_error() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap();
     assert_eq!(plugin.name(), "hook-error");
 
     let event = crowchiper::plugin::HookEvent {
@@ -810,7 +857,7 @@ fn test_call_hook_returns_plugin_error() {
         target: crowchiper::plugin::HookTarget::Server,
         values: vec![],
     };
-    let result = plugin.call_hook(&event);
+    let result = plugin.call_hook(&event).await;
     assert!(result.is_err(), "hook-error should return an error");
     let msg = result.unwrap_err().to_string();
     assert!(
@@ -819,35 +866,43 @@ fn test_call_hook_returns_plugin_error() {
     );
 }
 
-#[test]
-fn test_fire_hook_skips_unregistered_plugin() {
+#[tokio::test]
+async fn test_fire_hook_skips_unregistered_plugin() {
     // Verify PluginManager doesn't panic with no matching plugins
     let manager = PluginManager::new(vec![]);
-    manager.fire_hook(
-        Hook::Server(ServerHook::IpChange),
-        vec![("old_ip".into(), "1.1.1.1".into())],
-    );
+    manager
+        .fire_hook(
+            Hook::Server(ServerHook::IpChange),
+            vec![("old_ip".into(), "1.1.1.1".into())],
+        )
+        .await;
     // No panic = success
 }
 
-#[test]
-fn test_fire_hook_logs_error_but_does_not_panic() {
-    let plugin = PluginRuntime::load(&wasm_path("hook-error"), &[], &[]).unwrap();
+#[tokio::test]
+async fn test_fire_hook_logs_error_but_does_not_panic() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-error"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap();
     let manager = PluginManager::new(vec![plugin]);
     // Should not panic even though the plugin returns an error
-    manager.fire_hook(
-        Hook::Server(ServerHook::IpChange),
-        vec![
-            ("old_ip".into(), "1.2.3.4".into()),
-            ("new_ip".into(), "5.6.7.8".into()),
-            ("user_uuid".into(), "test-uuid".into()),
-        ],
-    );
+    manager
+        .fire_hook(
+            Hook::Server(ServerHook::IpChange),
+            vec![
+                ("old_ip".into(), "1.2.3.4".into()),
+                ("new_ip".into(), "5.6.7.8".into()),
+                ("user_uuid".into(), "test-uuid".into()),
+            ],
+        )
+        .await;
 }
 
-#[test]
-fn test_call_hook_can_be_called_multiple_times() {
-    let plugin = PluginRuntime::load(&wasm_path("hook-echo"), &[], &[]).unwrap();
+#[tokio::test]
+async fn test_call_hook_can_be_called_multiple_times() {
+    let plugin = PluginRuntime::load(&wasm_path("hook-echo"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap();
     let event = crowchiper::plugin::HookEvent {
         hook: Hook::Server(ServerHook::IpChange),
         time: 0,
@@ -858,6 +913,87 @@ fn test_call_hook_can_be_called_multiple_times() {
     for _ in 0..5 {
         plugin
             .call_hook(&event)
+            .await
             .expect("repeated hook call should succeed");
     }
+}
+
+// ── Plugin host log import ───────────────────────────────────────────
+
+#[tokio::test]
+async fn test_log_plugin_loads_and_hooks() {
+    let plugin = PluginRuntime::load(&wasm_path("log-test"), &[], &[], DEFAULT_HOOK_TIMEOUT)
+        .await
+        .unwrap();
+    assert_eq!(plugin.name(), "log-test");
+
+    let event = crowchiper::plugin::HookEvent {
+        hook: Hook::Server(ServerHook::IpChange),
+        time: 0,
+        target: crowchiper::plugin::HookTarget::Server,
+        values: vec![],
+    };
+    let result = plugin.call_hook(&event).await;
+    assert!(
+        result.is_ok(),
+        "log-test hook should succeed, got: {result:?}"
+    );
+}
+
+// ── Wall-clock timeout ────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_slow_hook_times_out() {
+    // slow-hook loads fast (config returns immediately) but sleeps 60s in on_hook().
+    // The default 5s timeout should terminate it well before 60s.
+    let timeout = Duration::from_millis(50);
+    let plugin = PluginRuntime::load(&wasm_path("slow-hook"), &[], &[], timeout)
+        .await
+        .expect("slow-hook should load (config is fast)");
+
+    let event = crowchiper::plugin::HookEvent {
+        hook: Hook::Server(ServerHook::IpChange),
+        time: 0,
+        target: crowchiper::plugin::HookTarget::Server,
+        values: vec![],
+    };
+
+    let start = Instant::now();
+    let err = plugin.call_hook(&event).await.unwrap_err();
+    let elapsed = start.elapsed();
+
+    assert!(
+        matches!(&err, PluginError::Hook(_)),
+        "slow hook should produce a Hook error, got: {err}"
+    );
+    assert!(
+        err.to_string().contains("timed out"),
+        "error should mention timeout, got: {err}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "should complete in ~2s, not 60s, took: {elapsed:?}"
+    );
+
+    // After a timeout, the plugin reloads from disk. The next call should
+    // also time out (the plugin still sleeps 60s), but the reload itself works.
+    let err2 = plugin.call_hook(&event).await.unwrap_err();
+    assert!(
+        err2.to_string().contains("timed out"),
+        "second call should also time out (plugin reloads but still sleeps), got: {err2}"
+    );
+}
+
+#[test]
+fn test_cli_log_plugin_output_appears_in_server_log() {
+    let (stdout, _stderr) = spawn_expect_listening(&[
+        "--plugin",
+        wasm_path("log-test").to_str().unwrap(),
+        "--port",
+        "0",
+    ]);
+    assert!(
+        stdout.contains("config called"),
+        "server log should contain plugin log output from config(), got: {stdout}"
+    );
 }

@@ -6,6 +6,7 @@ use axum::{
 };
 
 use super::cookie::{ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME};
+use crate::server_config;
 
 /// Internal auth error kind used by the core authentication logic.
 #[derive(Debug)]
@@ -23,15 +24,11 @@ pub enum AuthErrorKind {
 #[derive(Debug)]
 pub struct ApiAuthError {
     pub(super) kind: AuthErrorKind,
-    pub(super) secure_cookies: bool,
 }
 
 impl ApiAuthError {
-    pub(super) fn new(kind: AuthErrorKind, secure_cookies: bool) -> Self {
-        Self {
-            kind,
-            secure_cookies,
-        }
+    pub(super) fn new(kind: AuthErrorKind) -> Self {
+        Self { kind }
     }
 
     fn status_code(&self) -> axum::http::StatusCode {
@@ -73,7 +70,11 @@ impl IntoResponse for ApiAuthError {
         }
 
         // Clear both cookies on auth errors
-        let secure = if self.secure_cookies { "; Secure" } else { "" };
+        let secure = if server_config::secure_cookies() {
+            "; Secure"
+        } else {
+            ""
+        };
         let clear_access = format!(
             "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
             ACCESS_COOKIE_NAME, secure

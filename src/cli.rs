@@ -1,5 +1,7 @@
 //! CLI argument parsing, validation, and startup helpers.
 
+use std::sync::Arc;
+
 use crate::ServerConfig;
 use crate::db::Database;
 use crate::names::generate_name;
@@ -192,7 +194,8 @@ pub struct Args {
     #[arg(short, long, value_enum)]
     pub ip_header: Option<ClientIpHeader>,
 
-    /// WASM plugin. See README for details. Format: path.wasm[:net,env-VAR,fs-read=/p,fs-write=/p,var-k=v]
+    /// WASM plugin. Format: path.wasm[:perm,timeout=5|500ms,var-k=v]
+    /// Permissions: net, env-VAR, fs-read=/p, fs-write=/p. Timeout default: 5s, min: 10ms.
     #[arg(long, value_parser = parse_plugin_spec)]
     pub plugin: Vec<PluginSpec>,
 
@@ -357,7 +360,7 @@ pub fn build_config(
     let plugin_manager = if plugins.is_empty() {
         None
     } else {
-        Some(std::sync::Arc::new(PluginManager::new(plugins)))
+        Some(Arc::new(PluginManager::new(plugins)))
     };
 
     ServerConfig {

@@ -7,23 +7,18 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{AdminOnly, Auth};
-use crate::cli::IpExtractor;
 use crate::db::Database;
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::plugin::PluginManager;
 
 /// State for admin endpoints.
 #[derive(Clone)]
 pub struct AdminState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
-    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
-impl_has_auth_state!(AdminState);
+impl_has_auth_backend!(AdminState);
 
 pub fn router(state: AdminState) -> Router {
     Router::new()

@@ -9,23 +9,18 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{AnyRole, Auth};
-use crate::cli::IpExtractor;
 use crate::db::Database;
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::plugin::PluginManager;
 
 /// State for encryption endpoints.
 #[derive(Clone)]
 pub struct EncryptionState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
-    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
-impl_has_auth_state!(EncryptionState);
+impl_has_auth_backend!(EncryptionState);
 
 pub fn router(state: EncryptionState) -> Router {
     Router::new()

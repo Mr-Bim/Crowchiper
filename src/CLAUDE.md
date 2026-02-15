@@ -8,6 +8,7 @@
 - `jwt.rs` - JWT token generation/validation (HS256)
 - `cleanup.rs` - Scheduled cleanup (expired tokens, challenges, pending users, orphaned attachments)
 - `rate_limit.rs` - Per-IP rate limiting (token bucket)
+- `server_config.rs` - Global statics (secure_cookies, ip_extractor, plugin_manager)
 - `names.rs` - Random name generator (admin users)
 - `assets/` - Static file serving
 - `auth/` - Authentication system (dual-token, extractors, middleware)
@@ -72,7 +73,7 @@ Cross-store atomic ops use `_tx` associated functions. `Database` has coordinati
 
 **Auth flow**: Fast path (valid access token + matching IP) or slow path (refresh token validates against DB, issues new access token).
 
-**Cookie clearing**: `ApiAuthError` carries `secure_cookies: bool` from state. When clearing cookies on auth failure, `; Secure` is conditionally added to match how cookies were originally set.
+**Cookie clearing**: `ApiAuthError` reads `secure_cookies` from `server_config::secure_cookies()`. When clearing cookies on auth failure, `; Secure` is conditionally added to match how cookies were originally set.
 
 **Login re-authentication**: On successful login, any existing refresh token (from cookie) is revoked and a new one is always issued. This prevents stale sessions from persisting.
 
@@ -87,11 +88,13 @@ Role constraints: `AnyRole`, `AdminOnly`
 
 ### State Pattern
 
-Each API module has a state struct implementing `HasAuthState`:
+Each API module has a state struct implementing `HasDbJwt` (provides `jwt()` and `db()`):
 ```rust
-struct PostsState { db: Database, jwt: Arc<JwtConfig>, secure_cookies: bool, ip_extractor: Option<IpExtractor> }
-impl_has_auth_state!(PostsState);
+struct PostsState { db: Database, jwt: Arc<JwtConfig> }
+impl_has_db_jwt!(PostsState);
 ```
+
+Global server config (`secure_cookies`, `ip_extractor`, `plugin_manager`) is in `src/server_config.rs` as `OnceLock` statics (production) / `RwLock` (test mode). Initialized once via `server_config::init()` in `create_app()`. Accessed via `server_config::secure_cookies()`, `server_config::ip_extractor()`, `server_config::plugin_manager()`.
 
 ## Plugin System (`plugin/`)
 

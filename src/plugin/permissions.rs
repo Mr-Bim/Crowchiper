@@ -1,5 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// A single permission that can be granted to a plugin.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +26,12 @@ impl fmt::Display for PluginPermission {
     }
 }
 
+/// Default wall-clock timeout for plugin hook calls.
+pub const DEFAULT_HOOK_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Minimum allowed hook timeout (10ms).
+const MIN_HOOK_TIMEOUT: Duration = Duration::from_millis(10);
+
 /// A plugin path bundled with its granted permissions and config variables.
 #[derive(Debug, Clone)]
 pub struct PluginSpec {
@@ -33,24 +40,43 @@ pub struct PluginSpec {
     /// Key-value config pairs passed to the plugin's `config()` function.
     /// Parsed from `var-key=value` entries in the CLI spec.
     pub config: Vec<(String, String)>,
+    /// Wall-clock timeout for `config()` and `on-hook()` calls.
+    /// Parsed from `timeout=<N>` (seconds) or `timeout=<N>ms` (milliseconds).
+    /// Defaults to 5s. Minimum 10ms.
+    pub hook_timeout: Duration,
 }
 
 impl fmt::Display for PluginSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.path.display())?;
-        if !self.permissions.is_empty() || !self.config.is_empty() {
+        let has_timeout = self.hook_timeout != DEFAULT_HOOK_TIMEOUT;
+        if !self.permissions.is_empty() || !self.config.is_empty() || has_timeout {
             write!(f, ":")?;
-            for (i, perm) in self.permissions.iter().enumerate() {
-                if i > 0 {
+            let mut need_comma = false;
+            for perm in &self.permissions {
+                if need_comma {
                     write!(f, ",")?;
                 }
                 write!(f, "{perm}")?;
+                need_comma = true;
             }
-            for (i, (key, value)) in self.config.iter().enumerate() {
-                if i > 0 || !self.permissions.is_empty() {
+            for (key, value) in &self.config {
+                if need_comma {
                     write!(f, ",")?;
                 }
                 write!(f, "var-{key}={value}")?;
+                need_comma = true;
+            }
+            if has_timeout {
+                if need_comma {
+                    write!(f, ",")?;
+                }
+                let millis = self.hook_timeout.as_millis();
+                if millis % 1000 == 0 {
+                    write!(f, "timeout={}", millis / 1000)?;
+                } else {
+                    write!(f, "timeout={millis}ms")?;
+                }
             }
         }
         Ok(())
@@ -70,6 +96,7 @@ pub fn parse_plugin_spec(value: &str) -> Result<PluginSpec, String> {
 
     let mut permissions = Vec::new();
     let mut config = Vec::new();
+    let mut hook_timeout = DEFAULT_HOOK_TIMEOUT;
     if let Some(perms) = perms_str {
         for entry in perms.split(',') {
             let entry = entry.trim();
@@ -86,6 +113,8 @@ pub fn parse_plugin_spec(value: &str) -> Result<PluginSpec, String> {
                     ));
                 }
                 config.push((key.to_string(), value.to_string()));
+            } else if let Some(timeout_val) = entry.strip_prefix("timeout=") {
+                hook_timeout = parse_timeout(timeout_val)?;
             } else {
                 permissions.push(parse_single_permission(entry)?);
             }
@@ -96,6 +125,7 @@ pub fn parse_plugin_spec(value: &str) -> Result<PluginSpec, String> {
         path: PathBuf::from(path_str),
         permissions,
         config,
+        hook_timeout,
     })
 }
 
@@ -116,6 +146,35 @@ fn validate_fs_path(path: &str, perm_name: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Parse a timeout value like `"5"` (seconds) or `"500ms"` (milliseconds).
+///
+/// Returns an error if the value is not a valid number or below the minimum (10ms).
+fn parse_timeout(value: &str) -> Result<Duration, String> {
+    let duration = if let Some(ms_str) = value.strip_suffix("ms") {
+        let ms: u64 = ms_str.parse().map_err(|_| {
+            format!(
+                "invalid timeout '{value}': expected a number (e.g., timeout=5 or timeout=500ms)"
+            )
+        })?;
+        Duration::from_millis(ms)
+    } else {
+        let secs: u64 = value.parse().map_err(|_| {
+            format!(
+                "invalid timeout '{value}': expected a number (e.g., timeout=5 or timeout=500ms)"
+            )
+        })?;
+        Duration::from_secs(secs)
+    };
+    if duration < MIN_HOOK_TIMEOUT {
+        return Err(format!(
+            "timeout must be at least {}ms, got {}ms",
+            MIN_HOOK_TIMEOUT.as_millis(),
+            duration.as_millis()
+        ));
+    }
+    Ok(duration)
 }
 
 fn parse_single_permission(s: &str) -> Result<PluginPermission, String> {
@@ -139,7 +198,7 @@ fn parse_single_permission(s: &str) -> Result<PluginPermission, String> {
             Ok(PluginPermission::FsWrite(PathBuf::from(path)))
         }
         _ => Err(format!(
-            "unknown permission '{s}'. Valid: net, env-<VAR>, fs-read=<path>, fs-write=<path>, var-<key>=<value>"
+            "unknown permission '{s}'. Valid: net, env-<VAR>, fs-read=<path>, fs-write=<path>, var-<key>=<value>, timeout=<secs|ms>"
         )),
     }
 }
@@ -344,5 +403,79 @@ mod tests {
         let displayed = spec.to_string();
         assert!(displayed.contains("net"), "got: {displayed}");
         assert!(displayed.contains("var-path=/tmp"), "got: {displayed}");
+    }
+
+    // ── Timeout ──────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_default_timeout() {
+        let spec = parse_plugin_spec("a.wasm").unwrap();
+        assert_eq!(spec.hook_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn parse_timeout_seconds() {
+        let spec = parse_plugin_spec("a.wasm:timeout=10").unwrap();
+        assert_eq!(spec.hook_timeout, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn parse_timeout_milliseconds() {
+        let spec = parse_plugin_spec("a.wasm:timeout=500ms").unwrap();
+        assert_eq!(spec.hook_timeout, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn parse_timeout_minimum_10ms() {
+        let spec = parse_plugin_spec("a.wasm:timeout=10ms").unwrap();
+        assert_eq!(spec.hook_timeout, Duration::from_millis(10));
+    }
+
+    #[test]
+    fn parse_timeout_below_minimum_rejected() {
+        let err = parse_plugin_spec("a.wasm:timeout=5ms").unwrap_err();
+        assert!(err.contains("at least 10ms"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_timeout_zero_rejected() {
+        let err = parse_plugin_spec("a.wasm:timeout=0").unwrap_err();
+        assert!(err.contains("at least 10ms"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_timeout_invalid_number() {
+        let err = parse_plugin_spec("a.wasm:timeout=abc").unwrap_err();
+        assert!(err.contains("invalid timeout"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_timeout_mixed_with_permissions() {
+        let spec = parse_plugin_spec("a.wasm:net,timeout=2,env-HOME").unwrap();
+        assert_eq!(spec.hook_timeout, Duration::from_secs(2));
+        assert_eq!(spec.permissions.len(), 2);
+    }
+
+    #[test]
+    fn display_with_non_default_timeout_seconds() {
+        let spec = parse_plugin_spec("a.wasm:net,timeout=10").unwrap();
+        let displayed = spec.to_string();
+        assert!(displayed.contains("timeout=10"), "got: {displayed}");
+        // Should not have "ms" suffix for whole seconds
+        assert!(!displayed.contains("ms"), "got: {displayed}");
+    }
+
+    #[test]
+    fn display_with_non_default_timeout_ms() {
+        let spec = parse_plugin_spec("a.wasm:timeout=500ms").unwrap();
+        let displayed = spec.to_string();
+        assert!(displayed.contains("timeout=500ms"), "got: {displayed}");
+    }
+
+    #[test]
+    fn display_omits_default_timeout() {
+        let spec = parse_plugin_spec("a.wasm:net").unwrap();
+        let displayed = spec.to_string();
+        assert!(!displayed.contains("timeout"), "got: {displayed}");
     }
 }

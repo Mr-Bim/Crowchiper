@@ -21,23 +21,25 @@ async fn main() {
         std::process::exit(1);
     };
 
+    let Some(rp_origin) = validate_rp_origin(&args.rp_origin) else {
+        std::process::exit(1);
+    };
+
     let mut plugins = Vec::new();
     for plugin_spec in &args.plugin {
-        let spec = plugin_spec.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            PluginRuntime::load(&spec.path, &spec.permissions, &spec.config)
-        })
+        let result = PluginRuntime::load(
+            &plugin_spec.path,
+            &plugin_spec.permissions,
+            &plugin_spec.config,
+            plugin_spec.hook_timeout,
+        )
         .await;
         match result {
-            Err(e) => {
-                error!(path = %plugin_spec.path.display(), error = %e, "Plugin loading task panicked");
-                std::process::exit(1);
-            }
-            Ok(Ok(plugin)) => {
+            Ok(plugin) => {
                 info!(name = %plugin.name(), version = %plugin.version(), "Plugin loaded");
                 plugins.push(plugin);
             }
-            Ok(Err(e)) => match args.plugin_error {
+            Err(e) => match args.plugin_error {
                 PluginErrorMode::Abort => {
                     error!(path = %plugin_spec.path.display(), error = %e, "Failed to load plugin");
                     std::process::exit(1);
@@ -52,10 +54,6 @@ async fn main() {
     if args.create_admin {
         handle_create_admin(&db, &args.rp_origin, args.base.as_deref()).await;
     }
-
-    let Some(rp_origin) = validate_rp_origin(&args.rp_origin) else {
-        std::process::exit(1);
-    };
 
     let addr = format!("0.0.0.0:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&addr)

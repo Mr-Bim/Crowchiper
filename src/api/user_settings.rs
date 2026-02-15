@@ -8,24 +8,19 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{AnyRole, Auth};
-use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::plugin::PluginManager;
 
 /// State for user settings endpoint.
 #[derive(Clone)]
 pub struct UserSettingsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
-    pub plugin_manager: Option<Arc<PluginManager>>,
     pub dashboard_path: &'static str,
 }
 
-impl_has_auth_state!(UserSettingsState);
+impl_has_auth_backend!(UserSettingsState);
 
 pub fn router(state: UserSettingsState) -> Router {
     Router::new()

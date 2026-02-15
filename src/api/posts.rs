@@ -15,23 +15,18 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{AnyRole, Auth};
-use crate::cli::IpExtractor;
 use crate::db::{Database, PostNode, UpdatePostParams};
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::plugin::PluginManager;
 
 /// State for posts endpoints.
 #[derive(Clone)]
 pub struct PostsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
-    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
-impl_has_auth_state!(PostsState);
+impl_has_auth_backend!(PostsState);
 
 pub fn router(state: PostsState) -> Router {
     Router::new()

@@ -27,6 +27,15 @@ world plugin {
         values: list<tuple<string, string>>,
     }
 
+    enum log-level {
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    import log: func(level: log-level, msg: string);
+
     export config: func(config: list<tuple<string, string>>) -> plugin-config;
     export on-hook: func(event: hook-event) -> result<_, string>;
 }
