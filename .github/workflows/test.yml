@@ -80,7 +80,7 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: cargo-test
+          shared-key: cargo-test
 
       - name: Build frontend (test mode)
         run: npm run build:test
@@ -120,7 +120,7 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: cargo-test
+          shared-key: cargo-test
           save-if: false
 
       - name: Run Rust tests
@@ -149,6 +149,19 @@ jobs:
         with:
           name: crowchiper-test-binary
           path: target/debug
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v6
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Symlink dist for rust-embed debug resolution
+        run: |
+          # rust-embed in debug mode resolves dist/ relative to CARGO_MANIFEST_DIR
+          # which was /home/runner/work/Crowchiper/Crowchiper on the build runner
+          mkdir -p /home/runner/work/Crowchiper/Crowchiper
+          ln -s $PWD/dist /home/runner/work/Crowchiper/Crowchiper/dist
 
       - name: Make binary executable
         run: chmod +x target/debug/crowchiper
