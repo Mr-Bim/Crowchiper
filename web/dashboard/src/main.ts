@@ -1,3 +1,5 @@
+import { escapeHtml } from "../../shared/dom.ts";
+
 declare const API_PATH: string;
 declare const LOGIN_PATH: string;
 declare const APP_PATH: string;
@@ -59,12 +61,6 @@ function showError(message: string): void {
     errorEl.textContent = message;
     errorEl.hidden = false;
   }
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 function formatDate(dateStr: string): string {

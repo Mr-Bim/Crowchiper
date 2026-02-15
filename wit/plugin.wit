@@ -1,0 +1,41 @@
+package crowchiper:plugin;
+
+world plugin {
+    enum hook-target {
+        server,
+    }
+
+    enum server-hook {
+        ip-change,
+    }
+
+    variant hook {
+        server(server-hook),
+    }
+
+    record plugin-config {
+        name: string,
+        version: string,
+        target: hook-target,
+        hooks: list<hook>,
+    }
+
+    record hook-event {
+        hook: hook,
+        time: u64,
+        target: hook-target,
+        values: list<tuple<string, string>>,
+    }
+
+    enum log-level {
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    import log: func(level: log-level, msg: string);
+
+    export config: func(config: list<tuple<string, string>>) -> plugin-config;
+    export on-hook: func(event: hook-event) -> result<_, string>;
+}

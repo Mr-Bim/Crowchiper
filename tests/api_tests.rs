@@ -24,6 +24,7 @@ async fn create_test_app() -> axum::Router {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     create_app(&config)
 }
@@ -130,6 +131,7 @@ async fn test_create_user_duplicate() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -180,6 +182,7 @@ async fn test_delete_user_success() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -272,6 +275,7 @@ async fn test_delete_activated_user_requires_auth() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -313,6 +317,7 @@ async fn test_delete_activated_user_self() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -359,6 +364,7 @@ async fn test_delete_activated_user_other_forbidden() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -413,6 +419,7 @@ async fn test_delete_activated_user_admin() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -470,6 +477,7 @@ async fn test_register_start_default_authenticator_type() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -523,6 +531,7 @@ async fn test_register_start_passkey_authenticator_type() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -578,6 +587,7 @@ async fn test_register_start_security_key_authenticator_type() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -634,6 +644,7 @@ async fn test_create_user_with_base_path() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -667,6 +678,7 @@ async fn test_no_signup_blocks_user_creation() {
         no_signup: true,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -726,6 +738,7 @@ async fn test_config_endpoint_returns_no_signup_true() {
         no_signup: true,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -770,6 +783,7 @@ async fn test_no_signup_allows_delete_user() {
         no_signup: true,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 

@@ -6,7 +6,9 @@ pub mod cli;
 pub mod db;
 pub mod jwt;
 pub mod names;
+pub mod plugin;
 pub mod rate_limit;
+pub mod server_config;
 
 // Re-export test-mode utilities for easier access in tests
 #[cfg(feature = "test-mode")]
@@ -18,6 +20,7 @@ use auth::add_access_token_cookie;
 use axum::{Router, middleware, response::Redirect, routing::get};
 use db::Database;
 use jwt::JwtConfig;
+use plugin::PluginManager;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -43,10 +46,19 @@ pub struct ServerConfig {
     pub csp_nonce: bool,
     /// IP extraction strategy (requires running behind a proxy)
     pub ip_extractor: Option<cli::IpExtractor>,
+    /// Plugin manager for dispatching hooks to loaded WASM plugins
+    pub plugin_manager: Option<Arc<PluginManager>>,
 }
 
 /// Create the application router with the given configuration.
 pub fn create_app(config: &ServerConfig) -> Router {
+    // Initialize global server config (idempotent — safe for tests)
+    server_config::init(
+        config.secure_cookies,
+        config.ip_extractor.clone(),
+        config.plugin_manager.clone(),
+    );
+
     // Create JWT config
     let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));
 
@@ -56,8 +68,6 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.csp_nonce,
         jwt.clone(),
         config.db.clone(),
-        config.secure_cookies,
-        config.ip_extractor.clone(),
     )
     .expect("Failed to initialize assets");
 
@@ -79,9 +89,7 @@ pub fn create_app(config: &ServerConfig) -> Router {
         config.db.clone(),
         webauthn,
         jwt.clone(),
-        config.secure_cookies,
         config.no_signup,
-        config.ip_extractor.clone(),
         dashboard_path,
     )
     .layer(middleware::from_fn(add_access_token_cookie));

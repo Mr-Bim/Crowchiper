@@ -11,9 +11,8 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
 use crate::auth::OptionalAuth;
-use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
 use crate::rate_limit::{RateLimitConfig, rate_limit_user_create};
 
@@ -21,13 +20,11 @@ use crate::rate_limit::{RateLimitConfig, rate_limit_user_create};
 pub struct UsersState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
     pub no_signup: bool,
     pub rate_limit_config: Arc<RateLimitConfig>,
 }
 
-impl_has_auth_state!(UsersState);
+impl_has_auth_backend!(UsersState);
 
 pub fn router(state: UsersState) -> Router {
     let delete_router = Router::new()

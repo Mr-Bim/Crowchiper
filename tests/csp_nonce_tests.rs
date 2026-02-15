@@ -31,6 +31,7 @@ async fn create_app_with_nonce() -> (axum::Router, Database, JwtConfig) {
         no_signup: false,
         csp_nonce: true,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -50,6 +51,7 @@ async fn create_app_without_nonce() -> axum::Router {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: None,
+        plugin_manager: None,
     };
     create_app(&config)
 }

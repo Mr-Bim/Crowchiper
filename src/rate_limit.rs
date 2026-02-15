@@ -12,7 +12,7 @@ use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKey
 use std::{num::NonZeroU32, sync::Arc};
 
 use crate::auth::extract_client_ip;
-use crate::cli::IpExtractor;
+use crate::server_config;
 
 /// Per-IP rate limiter for stricter endpoint-specific limiting.
 pub type IpLimiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
@@ -26,14 +26,12 @@ pub struct RateLimitConfig {
     pub login_finish: Arc<IpLimiter>,
     /// Per-IP limiter for user creation (strict: 3 requests per minute)
     pub user_create: Arc<IpLimiter>,
-    /// IP extraction strategy (from CLI config)
-    pub ip_extractor: Option<IpExtractor>,
 }
 
 impl RateLimitConfig {
     /// Create rate limiters with default configuration.
     /// In test mode, limits are much higher to allow rapid test execution.
-    pub fn new(ip_extractor: Option<IpExtractor>) -> Self {
+    pub fn new() -> Self {
         #[cfg(feature = "test-mode")]
         const LOGIN_START_PER_SEC: u32 = 1000;
         #[cfg(not(feature = "test-mode"))]
@@ -68,7 +66,6 @@ impl RateLimitConfig {
             user_create: Arc::new(RateLimiter::keyed(Quota::per_minute(
                 NonZeroU32::new(USER_CREATE_PER_MIN).unwrap(),
             ))),
-            ip_extractor,
         }
     }
 }
@@ -79,8 +76,12 @@ pub async fn rate_limit_login_start(
     request: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&request, config.ip_extractor.as_ref())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let ip = match extract_client_ip(&request, server_config::ip_extractor().as_ref()) {
+        Ok(ip) => ip,
+        Err(_) => {
+            return (StatusCode::FORBIDDEN, "Unable to determine client IP.").into_response();
+        }
+    };
 
     match config.login_start.check_key(&ip) {
         Ok(_) => next.run(request).await,
@@ -98,8 +99,12 @@ pub async fn rate_limit_login_finish(
     request: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&request, config.ip_extractor.as_ref())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let ip = match extract_client_ip(&request, server_config::ip_extractor().as_ref()) {
+        Ok(ip) => ip,
+        Err(_) => {
+            return (StatusCode::FORBIDDEN, "Unable to determine client IP.").into_response();
+        }
+    };
 
     match config.login_finish.check_key(&ip) {
         Ok(_) => next.run(request).await,
@@ -117,8 +122,12 @@ pub async fn rate_limit_user_create(
     request: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&request, config.ip_extractor.as_ref())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let ip = match extract_client_ip(&request, server_config::ip_extractor().as_ref()) {
+        Ok(ip) => ip,
+        Err(_) => {
+            return (StatusCode::FORBIDDEN, "Unable to determine client IP.").into_response();
+        }
+    };
 
     match config.user_create.check_key(&ip) {
         Ok(_) => next.run(request).await,

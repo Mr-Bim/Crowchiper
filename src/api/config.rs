@@ -5,9 +5,8 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use crate::auth::OptionalAuth;
-use crate::cli::IpExtractor;
 use crate::db::Database;
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
 
 /// Version embedded at compile time from Cargo.toml
@@ -21,11 +20,9 @@ pub struct ConfigState {
     pub no_signup: bool,
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
 }
 
-impl_has_auth_state!(ConfigState);
+impl_has_auth_backend!(ConfigState);
 
 #[derive(Serialize)]
 struct ConfigResponse {

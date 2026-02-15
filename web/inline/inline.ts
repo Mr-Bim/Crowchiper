@@ -110,6 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create select element
     const select = document.createElement("select");
     select.id = "theme-select";
+    select.setAttribute("aria-label", "Theme");
 
     // Add options
     themes.forEach((theme) => {

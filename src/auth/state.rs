@@ -1,61 +1,48 @@
 //! Authentication state traits and macro.
 
-use crate::cli::IpExtractor;
 use crate::db::Database;
 use crate::jwt::JwtConfig;
 
-/// Trait for state types that support API authentication.
-pub trait HasAuthState {
+/// Trait for state types that provide database and JWT access for authentication.
+pub trait HasAuthBackend {
     fn jwt(&self) -> &JwtConfig;
     fn db(&self) -> &Database;
-    fn secure_cookies(&self) -> bool;
-    fn ip_extractor(&self) -> Option<&IpExtractor>;
 }
 
 /// Trait for state types that support asset authentication.
-/// Extends `HasAuthState` with the login path for redirects.
-pub trait HasAssetAuthState: HasAuthState {
+/// Extends `HasDbJwt` with the login path for redirects.
+pub trait HasAssetAuthBackend: HasAuthBackend {
     fn login_path(&self) -> &str;
 }
 
-/// Macro to implement `HasAuthState` for state structs with the standard fields.
+/// Macro to implement `HasDbJwt` for state structs with the standard fields.
 ///
 /// The struct must have these fields:
 /// - `jwt: Arc<JwtConfig>`
 /// - `db: Database`
-/// - `secure_cookies: bool`
-/// - `ip_extractor: Option<IpExtractor>`
 ///
 /// # Example
 /// ```ignore
-/// use crate::impl_has_auth_state;
+/// use crate::impl_has_db_jwt;
 ///
 /// #[derive(Clone)]
 /// pub struct MyState {
 ///     pub db: Database,
 ///     pub jwt: Arc<JwtConfig>,
-///     pub secure_cookies: bool,
-///     pub ip_extractor: Option<IpExtractor>,
 ///     // ... other fields
 /// }
 ///
-/// impl_has_auth_state!(MyState);
+/// impl_has_db_jwt!(MyState);
 /// ```
 #[macro_export]
-macro_rules! impl_has_auth_state {
+macro_rules! impl_has_auth_backend {
     ($state_type:ty) => {
-        impl $crate::auth::HasAuthState for $state_type {
+        impl $crate::auth::HasAuthBackend for $state_type {
             fn jwt(&self) -> &$crate::jwt::JwtConfig {
                 &self.jwt
             }
             fn db(&self) -> &$crate::db::Database {
                 &self.db
-            }
-            fn secure_cookies(&self) -> bool {
-                self.secure_cookies
-            }
-            fn ip_extractor(&self) -> Option<&$crate::cli::IpExtractor> {
-                self.ip_extractor.as_ref()
             }
         }
     };

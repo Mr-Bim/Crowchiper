@@ -1,10 +1,11 @@
 use clap::Parser;
 use crowchiper::cli::{
-    Args, build_config, handle_create_admin, init_logging, load_jwt_secret, open_database,
-    validate_rp_origin,
+    Args, PluginErrorMode, build_config, handle_create_admin, init_logging, load_jwt_secret,
+    open_database, validate_rp_origin,
 };
+use crowchiper::plugin::PluginRuntime;
 use crowchiper::{init_cleanup, run_server};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -20,13 +21,39 @@ async fn main() {
         std::process::exit(1);
     };
 
-    if args.create_admin {
-        handle_create_admin(&db, &args.rp_origin, args.base.as_deref()).await;
-    }
-
     let Some(rp_origin) = validate_rp_origin(&args.rp_origin) else {
         std::process::exit(1);
     };
+
+    let mut plugins = Vec::new();
+    for plugin_spec in &args.plugin {
+        let result = PluginRuntime::load(
+            &plugin_spec.path,
+            &plugin_spec.permissions,
+            &plugin_spec.config,
+            plugin_spec.hook_timeout,
+        )
+        .await;
+        match result {
+            Ok(plugin) => {
+                info!(name = %plugin.name(), version = %plugin.version(), "Plugin loaded");
+                plugins.push(plugin);
+            }
+            Err(e) => match args.plugin_error {
+                PluginErrorMode::Abort => {
+                    error!(path = %plugin_spec.path.display(), error = %e, "Failed to load plugin");
+                    std::process::exit(1);
+                }
+                PluginErrorMode::Warn => {
+                    warn!(path = %plugin_spec.path.display(), error = %e, "Failed to load plugin, skipping");
+                }
+            },
+        }
+    }
+
+    if args.create_admin {
+        handle_create_admin(&db, &args.rp_origin, args.base.as_deref()).await;
+    }
 
     let addr = format!("0.0.0.0:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -50,6 +77,7 @@ async fn main() {
         args.no_signup,
         args.csp_nonce,
         args.ip_header,
+        plugins,
     );
 
     // Run cleanup on startup and spawn hourly scheduler

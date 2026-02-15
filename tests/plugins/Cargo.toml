@@ -1,0 +1,85 @@
+[package]
+name = "test-plugins"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+wit-bindgen = { version = "0.53", default-features = false, features = ["macros"] }
+
+[[example]]
+name = "good"
+path = "examples/good.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "fs-error"
+path = "examples/fs_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "net-error"
+path = "examples/net_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "env-error"
+path = "examples/env_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "empty-name"
+path = "examples/empty_name.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "fs-success"
+path = "examples/fs_success.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "net-success"
+path = "examples/net_success.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "env-success"
+path = "examples/env_success.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "infinite-loop"
+path = "examples/infinite_loop.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "memory-hog"
+path = "examples/memory_hog.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "stack-overflow"
+path = "examples/stack_overflow.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "hook-echo"
+path = "examples/hook_echo.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "hook-error"
+path = "examples/hook_error.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "log-test"
+path = "examples/log_test.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "slow-hook"
+path = "examples/slow_hook.rs"
+crate-type = ["cdylib"]

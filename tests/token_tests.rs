@@ -43,6 +43,7 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -64,6 +65,7 @@ async fn create_test_app_with_ip_header() -> (axum::Router, Database, JwtConfig)
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(IpExtractor::from(ClientIpHeader::XForwardFor)),
+        plugin_manager: None,
     };
     (create_app(&config), db, jwt_config)
 }
@@ -444,6 +446,7 @@ async fn test_revoking_one_session_doesnt_affect_others() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -600,6 +603,7 @@ async fn test_user_cannot_revoke_other_users_tokens() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -648,6 +652,7 @@ async fn test_admin_can_revoke_any_users_tokens() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 
@@ -828,6 +833,7 @@ async fn test_list_tokens_returns_only_own_tokens() {
         no_signup: false,
         csp_nonce: false,
         ip_extractor: Some(local_ip_extractor()),
+        plugin_manager: None,
     };
     let app = create_app(&config);
 

@@ -82,8 +82,8 @@
 /* Scandinavian - Dark */
 [data-theme="scandi-dark"] {
     color-scheme: dark;
-    --accent: oklch(0.72 0.17 55);
-    --accent-hover: oklch(0.78 0.14 60);
+    --accent: oklch(0.62 0.19 55);
+    --accent-hover: oklch(0.55 0.2 50);
     --bg: oklch(0.15 0 0);
     --surface: oklch(0.2 0 0);
     --text: oklch(0.96 0 0);
@@ -119,8 +119,8 @@
 /* Paper/Stationery - Dark */
 [data-theme="paper-dark"] {
     color-scheme: dark;
-    --accent: oklch(0.72 0.15 55);
-    --accent-hover: oklch(0.78 0.12 60);
+    --accent: oklch(0.62 0.17 55);
+    --accent-hover: oklch(0.55 0.18 50);
     --bg: oklch(0.22 0.008 60);
     --surface: oklch(0.28 0.01 55);
     --text: oklch(0.92 0.005 70);

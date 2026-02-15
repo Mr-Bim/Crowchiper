@@ -157,8 +157,9 @@ test.describe("Session revocation via settings panel", () => {
     expect(token1).toBeDefined();
 
     // Clear cookies and create second session (simulating another device)
-    await client1.send("Network.clearBrowserCookies");
+    await context1.clearCookies();
 
+    // Navigate to login without cookies (no auto-redirect)
     await page1.goto(`${baseUrl}/login/index.html`);
     await expect(page1.locator("#login-button")).toBeEnabled({ timeout: 5000 });
     await page1.fill("#username", username);

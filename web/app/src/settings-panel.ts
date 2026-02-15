@@ -5,7 +5,11 @@
  */
 
 import { fetchWithAuth } from "./api/auth.ts";
-import { getRequiredElement, getOptionalElement } from "../../shared/dom.ts";
+import {
+  getRequiredElement,
+  getOptionalElement,
+  escapeHtml,
+} from "../../shared/dom.ts";
 
 declare const API_PATH: string;
 
@@ -50,16 +54,17 @@ function renderSessions(tokens: TokenInfo[]): void {
 
   container.innerHTML = sorted
     .map((token) => {
-      const ipDisplay = token.last_ip || "Unknown IP";
+      const ipDisplay = escapeHtml(token.last_ip || "Unknown IP");
+      const escapedJti = escapeHtml(token.jti);
       const currentBadge = token.is_current
         ? '<span class="session-current-badge" data-testid="test-session-current">Current</span>'
         : "";
       const revokeBtn = token.is_current
         ? ""
-        : `<button class="session-revoke-btn" data-testid="test-session-revoke" data-jti="${token.jti}">Revoke</button>`;
+        : `<button class="session-revoke-btn" data-testid="test-session-revoke" data-jti="${escapedJti}">Revoke</button>`;
 
       return `
-      <div class="session-item" data-testid="test-session-item" data-current="${token.is_current}" data-jti="${token.jti}">
+      <div class="session-item" data-testid="test-session-item" data-current="${token.is_current}" data-jti="${escapedJti}">
         <div class="session-info">
           <div class="session-ip">${ipDisplay}${currentBadge}</div>
           <div class="session-details">

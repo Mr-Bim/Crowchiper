@@ -1,8 +1,11 @@
 //! CLI argument parsing, validation, and startup helpers.
 
+use std::sync::Arc;
+
 use crate::ServerConfig;
 use crate::db::Database;
 use crate::names::generate_name;
+use crate::plugin::{PluginManager, PluginRuntime, PluginSpec, parse_plugin_spec};
 use clap::Parser;
 use tracing::{error, info};
 use url::Url;
@@ -84,24 +87,31 @@ pub fn local_ip_extractor() -> IpExtractor {
     IpExtractor::from(ClientIpHeader::Local)
 }
 
+/// Validate that a string is a valid IP address (IPv4 or IPv6).
+fn validate_ip(ip: &str) -> Result<String, &'static str> {
+    ip.parse::<std::net::IpAddr>()
+        .map(|addr| addr.to_string())
+        .map_err(|_| "IP header contains invalid IP address")
+}
+
 /// Parse a single IP value (CF-Connecting-IP, X-Real-IP).
 fn parse_single_ip(value: &str) -> Result<String, &'static str> {
     let ip = value.trim();
     if ip.is_empty() {
         return Err("IP header is empty");
     }
-    Ok(ip.to_string())
+    validate_ip(ip)
 }
 
 /// Parse X-Forwarded-For header (comma-separated list, take first).
 fn parse_x_forwarded_for(value: &str) -> Result<String, &'static str> {
-    value
+    let ip = value
         .split(',')
         .next()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .ok_or("X-Forwarded-For header has no valid IP")
+        .ok_or("X-Forwarded-For header has no valid IP")?;
+    validate_ip(ip)
 }
 
 /// Parse RFC 7239 Forwarded header.
@@ -125,7 +135,7 @@ fn parse_forwarded(value: &str) -> Result<String, &'static str> {
                     ip
                 };
                 if !ip.is_empty() {
-                    return Ok(ip.to_string());
+                    return validate_ip(ip);
                 }
             }
         }
@@ -172,7 +182,7 @@ pub struct Args {
     #[arg(long)]
     pub no_signup: bool,
 
-    /// Add random nonce to CSP headers (for Cloudflare)
+    /// Add random nonce to CSP headers
     #[arg(long)]
     pub csp_nonce: bool,
 
@@ -183,6 +193,24 @@ pub struct Args {
     /// Extract client IP from header (requires reverse proxy)
     #[arg(short, long, value_enum)]
     pub ip_header: Option<ClientIpHeader>,
+
+    /// WASM plugin. Format: path.wasm[:perm,timeout=5|500ms,var-k=v]
+    /// Permissions: net, env-VAR, fs-read=/p, fs-write=/p. Timeout default: 5s, min: 10ms.
+    #[arg(long, value_parser = parse_plugin_spec)]
+    pub plugin: Vec<PluginSpec>,
+
+    /// Behavior when a plugin fails to load: abort (default) or warn
+    #[arg(long, default_value = "abort", value_enum)]
+    pub plugin_error: PluginErrorMode,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, Default)]
+pub enum PluginErrorMode {
+    /// Abort startup if a plugin fails to load
+    #[default]
+    Abort,
+    /// Log a warning and continue without the plugin
+    Warn,
 }
 
 fn validate_base_path(s: &str) -> Result<String, String> {
@@ -325,8 +353,15 @@ pub fn build_config(
     no_signup: bool,
     csp_nonce: bool,
     ip_header: Option<ClientIpHeader>,
+    plugins: Vec<PluginRuntime>,
 ) -> ServerConfig {
     let secure_cookies = rp_origin.scheme() == "https";
+
+    let plugin_manager = if plugins.is_empty() {
+        None
+    } else {
+        Some(Arc::new(PluginManager::new(plugins)))
+    };
 
     ServerConfig {
         base,
@@ -338,6 +373,7 @@ pub fn build_config(
         no_signup,
         csp_nonce,
         ip_extractor: ip_header.map(IpExtractor::from),
+        plugin_manager,
     }
 }
 

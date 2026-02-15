@@ -3,6 +3,7 @@
 //! - POST `/refresh` - Exchange refresh token for new access token
 //! - POST `/logout` - Revoke refresh token and clear cookies
 //! - GET `/` - List active refresh tokens for current user
+//! - DELETE `/` - Revoke ALL refresh tokens for current user (logout everywhere)
 //! - DELETE `/{jti}` - Revoke specific refresh token (own token or admin)
 
 use axum::{
@@ -19,24 +20,22 @@ use super::error::{ApiError, ResultExt};
 use crate::auth::{
     ACCESS_COOKIE_NAME, AnyRole, Auth, AuthWithSession, REFRESH_COOKIE_NAME, get_cookie,
 };
-use crate::cli::IpExtractor;
 use crate::db::{Database, UserRole};
-use crate::impl_has_auth_state;
+use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
+use crate::server_config;
 
 #[derive(Clone)]
 pub struct TokensState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
 }
 
-impl_has_auth_state!(TokensState);
+impl_has_auth_backend!(TokensState);
 
 pub fn router(state: TokensState) -> Router {
     Router::new()
-        .route("/", get(list_tokens))
+        .route("/", get(list_tokens).delete(revoke_all_tokens))
         .route("/verify", get(verify_token))
         .route("/logout", post(logout))
         .route("/{jti}", delete(revoke_token))
@@ -113,7 +112,11 @@ async fn logout(
 
     // Clear both cookies using AppendHeaders to send multiple Set-Cookie headers
     use axum::response::AppendHeaders;
-    let secure = if state.secure_cookies { "; Secure" } else { "" };
+    let secure = if server_config::secure_cookies() {
+        "; Secure"
+    } else {
+        ""
+    };
     let clear_access = format!(
         "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
         ACCESS_COOKIE_NAME, secure
@@ -127,6 +130,46 @@ async fn logout(
         StatusCode::OK,
         AppendHeaders([(SET_COOKIE, clear_access), (SET_COOKIE, clear_refresh)]),
         Json(serde_json::json!({ "success": true })),
+    ))
+}
+
+#[derive(Serialize)]
+struct RevokeAllResponse {
+    revoked_count: u64,
+}
+
+/// Revoke ALL refresh tokens for the current user (logout everywhere).
+/// Also clears the current session's cookies.
+async fn revoke_all_tokens(
+    State(state): State<TokensState>,
+    auth: AuthWithSession<AnyRole>,
+) -> Result<impl IntoResponse, ApiError> {
+    let revoked_count = state
+        .db
+        .tokens()
+        .delete_all_by_user(auth.user_id)
+        .await
+        .db_err("Failed to revoke tokens")?;
+
+    use axum::response::AppendHeaders;
+    let secure = if server_config::secure_cookies() {
+        "; Secure"
+    } else {
+        ""
+    };
+    let clear_access = format!(
+        "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
+        ACCESS_COOKIE_NAME, secure
+    );
+    let clear_refresh = format!(
+        "{}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{}",
+        REFRESH_COOKIE_NAME, secure
+    );
+
+    Ok((
+        StatusCode::OK,
+        AppendHeaders([(SET_COOKIE, clear_access), (SET_COOKIE, clear_refresh)]),
+        Json(RevokeAllResponse { revoked_count }),
     ))
 }
 

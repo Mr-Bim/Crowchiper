@@ -18,18 +18,16 @@ use webauthn_rs::prelude::*;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
 use crate::auth::{REFRESH_COOKIE_NAME, extract_client_ip, get_cookie};
-use crate::cli::IpExtractor;
 use crate::db::{AuthChallenge, Database, User};
 use crate::jwt::JwtConfig;
 use crate::rate_limit::{RateLimitConfig, rate_limit_login_finish, rate_limit_login_start};
+use crate::server_config;
 
 #[derive(Clone)]
 pub struct PasskeysState {
     pub db: Database,
     pub webauthn: Arc<Webauthn>,
     pub jwt: Arc<JwtConfig>,
-    pub secure_cookies: bool,
-    pub ip_extractor: Option<IpExtractor>,
 }
 
 /// Result of generating auth cookies, includes info needed for token tracking.
@@ -53,7 +51,11 @@ impl PasskeysState {
                 ApiError::internal("Failed to generate token")
             })?;
 
-        let secure = if self.secure_cookies { "; Secure" } else { "" };
+        let secure = if server_config::secure_cookies() {
+            "; Secure"
+        } else {
+            ""
+        };
 
         let refresh_cookie = format!(
             "{}={}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
@@ -285,7 +287,7 @@ async fn register_finish(
     let refresh_token = state.make_refresh_token(&user)?;
 
     // Store refresh token for tracking
-    let ip = extract_client_ip(&parts, state.ip_extractor.as_ref()).ok();
+    let ip = extract_client_ip(&parts, server_config::ip_extractor().as_ref()).ok();
     state
         .store_refresh_token(
             &refresh_token.refresh_jti,
@@ -403,34 +405,32 @@ async fn login_finish(
     }
 
     // Only generate JWT if user is activated
-    // Check if there's already a valid refresh token for this user
-    let ip = extract_client_ip(&parts, state.ip_extractor.as_ref()).ok();
-    let existing_refresh_valid =
-        check_existing_refresh_token(&state, &parts.headers, result.user.id).await;
+    let ip = extract_client_ip(&parts, server_config::ip_extractor().as_ref()).ok();
 
-    if existing_refresh_valid {
-        // User already has a valid refresh token, don't issue a new one
-        // The access token will be refreshed automatically by the auth middleware
-        Ok((StatusCode::OK, response).into_response())
-    } else {
-        // Issue a new refresh token
-        let refresh_token = state.make_refresh_token(&result.user)?;
-        state
-            .store_refresh_token(
-                &refresh_token.refresh_jti,
-                result.user.id,
-                ip.as_deref(),
-                refresh_token.refresh_issued_at,
-                refresh_token.refresh_expires_at,
-            )
-            .await?;
-        Ok((
-            StatusCode::OK,
-            [(SET_COOKIE, refresh_token.refresh_cookie)],
-            response,
-        )
-            .into_response())
+    // Revoke existing refresh token if present, then always issue a new one.
+    // This invalidates any stolen copies of the old token.
+    if let Some(refresh_token_str) = get_cookie(&parts.headers, REFRESH_COOKIE_NAME) {
+        if let Ok(claims) = state.jwt.validate_refresh_token(refresh_token_str) {
+            let _ = state.db.tokens().delete_by_jti(&claims.jti).await;
+        }
     }
+
+    let refresh_token = state.make_refresh_token(&result.user)?;
+    state
+        .store_refresh_token(
+            &refresh_token.refresh_jti,
+            result.user.id,
+            ip.as_deref(),
+            refresh_token.refresh_issued_at,
+            refresh_token.refresh_expires_at,
+        )
+        .await?;
+    Ok((
+        StatusCode::OK,
+        [(SET_COOKIE, refresh_token.refresh_cookie)],
+        response,
+    )
+        .into_response())
 }
 
 async fn delete_login_challenge(
@@ -439,32 +439,6 @@ async fn delete_login_challenge(
 ) -> impl IntoResponse {
     let _ = state.db.login_challenges().delete(&session_id).await;
     StatusCode::NO_CONTENT
-}
-
-/// Check if there's an existing valid refresh token in the request cookies for the given user.
-/// Returns true if a valid refresh token exists that belongs to the user.
-async fn check_existing_refresh_token(
-    state: &PasskeysState,
-    headers: &axum::http::HeaderMap,
-    user_id: i64,
-) -> bool {
-    // Try to get refresh token from cookie
-    let refresh_token = match get_cookie(headers, REFRESH_COOKIE_NAME) {
-        Some(token) => token,
-        None => return false,
-    };
-
-    // Validate the refresh token JWT
-    let claims = match state.jwt.validate_refresh_token(refresh_token) {
-        Ok(claims) => claims,
-        Err(_) => return false,
-    };
-
-    // Check if the token exists in the database (not revoked) and belongs to this user
-    match state.db.tokens().get_by_jti(&claims.jti).await {
-        Ok(Some(token)) => token.user_id == user_id,
-        _ => false,
-    }
 }
 
 /// Start the claim flow for users who have a passkey but aren't activated.
@@ -552,7 +526,7 @@ async fn claim_finish(
     let refresh_token = state.make_refresh_token(&result.user)?;
 
     // Store refresh token for tracking
-    let ip = extract_client_ip(&parts, state.ip_extractor.as_ref()).ok();
+    let ip = extract_client_ip(&parts, server_config::ip_extractor().as_ref()).ok();
     state
         .store_refresh_token(
             &refresh_token.refresh_jti,
