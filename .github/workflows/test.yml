@@ -150,6 +150,12 @@ jobs:
           name: crowchiper-test-binary
           path: target/debug
 
+      - name: Download frontend dist
+        uses: actions/download-artifact@v6
+        with:
+          name: frontend-dist
+          path: dist
+
       - name: Make binary executable
         run: chmod +x target/debug/crowchiper
 
