@@ -63,14 +63,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.58.0-noble
     steps:
-      - name: Install build dependencies
-        run: |
-          apt-get update
-          apt-get install -y build-essential
-
       - uses: actions/checkout@v6
 
       - name: Setup Node.js
@@ -102,6 +95,13 @@ jobs:
           path: target/debug/crowchiper
           retention-days: 1
 
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 1
+
   rust-tests:
     name: Rust Tests
     needs: build
@@ -109,17 +109,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download frontend dist
+        uses: actions/download-artifact@v6
         with:
-          node-version: "25"
-          cache: "npm"
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Build frontend (test mode)
-        run: npm run build:test
+          name: frontend-dist
+          path: dist
 
       - uses: dtolnay/rust-toolchain@stable
 
