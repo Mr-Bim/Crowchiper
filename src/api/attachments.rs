@@ -28,7 +28,7 @@ const UNENCRYPTED_VERSION: i32 = 0;
 pub struct AttachmentsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub settings: Arc<ServerSettings>,
+    pub settings: ServerSettings,
 }
 
 impl_has_auth_backend!(AttachmentsState);

@@ -20,7 +20,7 @@ pub struct ConfigState {
     pub no_signup: bool,
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
-    pub settings: Arc<ServerSettings>,
+    pub settings: ServerSettings,
 }
 
 impl_has_auth_backend!(ConfigState);

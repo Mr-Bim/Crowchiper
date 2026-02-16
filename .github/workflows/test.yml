@@ -115,6 +115,15 @@ jobs:
           name: frontend-dist
           path: dist
 
+      - name: Download binary
+        uses: actions/download-artifact@v6
+        with:
+          name: crowchiper-test-binary
+          path: target/debug
+
+      - name: Make binary executable
+        run: chmod +x target/debug/crowchiper
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo

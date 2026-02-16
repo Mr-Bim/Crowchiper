@@ -52,11 +52,11 @@ pub struct ServerConfig {
 /// Create the application router with the given configuration.
 pub fn create_app(config: &ServerConfig) -> Router {
     // Build per-app server settings (replaces process-global server_config)
-    let settings = Arc::new(ServerSettings {
+    let settings = ServerSettings {
         ip_extractor: config.ip_extractor.clone(),
         secure_cookies: config.secure_cookies,
         plugin_manager: config.plugin_manager.clone(),
-    });
+    };
 
     // Create JWT config
     let jwt = Arc::new(JwtConfig::new(&config.jwt_secret));

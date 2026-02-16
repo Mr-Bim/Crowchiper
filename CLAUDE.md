@@ -98,7 +98,7 @@ Set in `inline.ts`, available via `declare const`:
 
 ## Key Architecture (details in memory files)
 
-- **Auth**: Dual-token system (5min access + 2-week refresh). Auth module in `src/auth/`. Use `impl_has_auth_backend!` macro for API state structs — requires `jwt: Arc<JwtConfig>`, `db: Database`, and `settings: Arc<ServerSettings>` fields. Provides `jwt()`, `db()`, `ip_extractor()`, `secure_cookies()`, `plugin_manager()`. `ServerSettings` is created per-app in `create_app()` (no process-global state), enabling parallel tests.
+- **Auth**: Dual-token system (5min access + 2-week refresh). Auth module in `src/auth/`. Use `impl_has_auth_backend!` macro for API state structs — requires `jwt: Arc<JwtConfig>`, `db: Database`, and `settings: ServerSettings` fields. Provides `jwt()`, `db()`, `ip_extractor()`, `secure_cookies()`, `plugin_manager()`. `ServerSettings` is created per-app in `create_app()` (no process-global state), enabling parallel tests.
 - **Frontend**: Code-split with lazy-loaded chunks. 50KB entry chunk limit. CSP with SRI hashes. New lazy chunks need shared dependency for modulepreload (see memory).
 - **State**: Minimal reactive signals (`web/app/src/reactive.ts`). Autosave with 1.5s debounce. Eager encryption for pagehide safety.
 - **Posts**: Hierarchical tree structure with unlimited nesting. Drag-and-drop for reorder/reparent.

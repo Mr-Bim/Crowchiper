@@ -7,7 +7,8 @@ use crate::db::Database;
 use crate::jwt::JwtConfig;
 use crate::plugin::PluginManager;
 
-/// Server-level settings shared across all state structs via `Arc`.
+/// Server-level settings cloned into each state struct.
+/// Cheap to clone: a bool, an Option<fn pointer + &'static str>, and an Option<Arc>.
 #[derive(Clone)]
 pub struct ServerSettings {
     pub ip_extractor: Option<IpExtractor>,
@@ -35,7 +36,7 @@ pub trait HasAssetAuthBackend: HasAuthBackend {
 /// The struct must have these fields:
 /// - `jwt: Arc<JwtConfig>`
 /// - `db: Database`
-/// - `settings: Arc<ServerSettings>`
+/// - `settings: ServerSettings`
 ///
 /// # Example
 /// ```ignore
@@ -45,7 +46,7 @@ pub trait HasAssetAuthBackend: HasAuthBackend {
 /// pub struct MyState {
 ///     pub db: Database,
 ///     pub jwt: Arc<JwtConfig>,
-///     pub settings: Arc<ServerSettings>,
+///     pub settings: ServerSettings,
 ///     // ... other fields
 /// }
 ///

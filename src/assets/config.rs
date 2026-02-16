@@ -158,7 +158,7 @@ pub struct AssetsState {
     pub(super) login_index_html: &'static str,
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
-    pub settings: Arc<ServerSettings>,
+    pub settings: ServerSettings,
 }
 
 impl_has_auth_backend!(AssetsState);
@@ -185,7 +185,7 @@ impl AssetsState {
         csp_nonce: bool,
         jwt: Arc<JwtConfig>,
         db: Database,
-        settings: Arc<ServerSettings>,
+        settings: ServerSettings,
     ) -> Result<Self, &'static str> {
         let base: &'static str = leak_string(base_path.unwrap_or("").to_string());
         let api_path: &'static str = leak_string(format!("{}/api", base));

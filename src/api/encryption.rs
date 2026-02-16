@@ -18,7 +18,7 @@ use crate::jwt::JwtConfig;
 pub struct EncryptionState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub settings: Arc<ServerSettings>,
+    pub settings: ServerSettings,
 }
 
 impl_has_auth_backend!(EncryptionState);

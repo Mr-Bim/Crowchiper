@@ -20,7 +20,7 @@ use crate::rate_limit::{RateLimitConfig, rate_limit_user_create};
 pub struct UsersState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
-    pub settings: Arc<ServerSettings>,
+    pub settings: ServerSettings,
     pub no_signup: bool,
     pub rate_limit_config: Arc<RateLimitConfig>,
 }

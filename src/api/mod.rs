@@ -29,7 +29,7 @@ pub fn create_api_router(
     jwt: Arc<JwtConfig>,
     no_signup: bool,
     dashboard_path: &'static str,
-    settings: Arc<ServerSettings>,
+    settings: ServerSettings,
 ) -> Router {
     let rate_limit_config = Arc::new(RateLimitConfig::new(settings.ip_extractor.clone()));
 

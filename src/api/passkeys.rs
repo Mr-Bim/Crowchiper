@@ -27,7 +27,7 @@ pub struct PasskeysState {
     pub db: Database,
     pub webauthn: Arc<Webauthn>,
     pub jwt: Arc<JwtConfig>,
-    pub settings: Arc<ServerSettings>,
+    pub settings: ServerSettings,
 }
 
 /// Result of generating auth cookies, includes info needed for token tracking.
