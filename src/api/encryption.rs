@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{AnyRole, Auth};
+use crate::auth::{AnyRole, Auth, ServerSettings};
 use crate::db::Database;
 use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
@@ -18,6 +18,7 @@ use crate::jwt::JwtConfig;
 pub struct EncryptionState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub settings: Arc<ServerSettings>,
 }
 
 impl_has_auth_backend!(EncryptionState);

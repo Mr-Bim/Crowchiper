@@ -6,7 +6,7 @@
     "prepare-test": "npm run build:test && cargo build --features test-mode && ./tests/plugins/build.sh",
     "lint": "tsc --noEmit && oxlint",
     "lint:fix": "tsc --noEmit && oxlint --fix",
-    "test:rust": "cargo test --features test-mode --tests -- --test-threads=1",
+    "test:rust": "cargo test --features test-mode --tests",
     "test:web": "playwright test",
     "test:all": "npm run test:rust && npm run test:web"
   },

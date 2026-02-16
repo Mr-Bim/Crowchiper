@@ -562,13 +562,20 @@ fn test_cli_abort_logs_plugin_path() {
 
 // ── Permission: filesystem ───────────────────────────────────────────
 
-fn fs_test_dir() -> PathBuf {
-    std::env::temp_dir().join("crowchiper-plugin-test")
+/// Create a unique temp directory for each test to avoid races when tests
+/// run in parallel.
+fn unique_fs_test_dir() -> PathBuf {
+    let id = format!(
+        "crowchiper-plugin-test-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    );
+    std::env::temp_dir().join(id)
 }
 
 #[tokio::test]
 async fn test_fs_success_with_write_permission() {
-    let dir = fs_test_dir();
+    let dir = unique_fs_test_dir();
     std::fs::create_dir_all(&dir).unwrap();
 
     // Use the canonicalized path for the config var so it matches the
@@ -605,7 +612,7 @@ async fn test_fs_success_without_permission_fails() {
 
 #[tokio::test]
 async fn test_fs_success_with_read_only_permission_fails() {
-    let dir = fs_test_dir();
+    let dir = unique_fs_test_dir();
     std::fs::create_dir_all(&dir).unwrap();
 
     let canonical_dir = std::fs::canonicalize(&dir).unwrap();
@@ -646,9 +653,14 @@ async fn test_fs_permission_nonexistent_dir_fails_at_load() {
 
 // ── Permission: environment ──────────────────────────────────────────
 
+/// Mutex to serialize tests that mutate process-global environment variables.
+/// `set_var`/`remove_var` are not thread-safe; concurrent access is UB.
+static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[tokio::test]
 async fn test_env_success_with_permission() {
-    // SAFETY: single-threaded test runner (--test-threads=1)
+    let _guard = ENV_MUTEX.lock().unwrap();
+    // SAFETY: serialized by ENV_MUTEX — no other test mutates env vars concurrently.
     unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
     let perms = vec![PluginPermission::Env("TEST_PLUGIN_VAR".to_string())];
     let plugin = PluginRuntime::load(&wasm_path("env-success"), &perms, &[], DEFAULT_HOOK_TIMEOUT)
@@ -664,7 +676,8 @@ async fn test_env_success_with_permission() {
 
 #[tokio::test]
 async fn test_env_with_wrong_var_name_fails() {
-    // SAFETY: single-threaded test runner (--test-threads=1)
+    let _guard = ENV_MUTEX.lock().unwrap();
+    // SAFETY: serialized by ENV_MUTEX — no other test mutates env vars concurrently.
     unsafe { std::env::set_var("TEST_PLUGIN_VAR", "hello") };
     let perms = vec![PluginPermission::Env("WRONG_VAR".to_string())];
     let result =

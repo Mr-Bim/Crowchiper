@@ -124,7 +124,7 @@ jobs:
           save-if: false
 
       - name: Run Rust tests
-        run: cargo test --features test-mode,embed-assets --tests -- --test-threads=1
+        run: cargo test --features test-mode,embed-assets --tests
 
   playwright-tests:
     name: Playwright Tests

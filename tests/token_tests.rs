@@ -15,16 +15,14 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use crowchiper::local_ip_extractor;
-use crowchiper::{
-    ServerConfig,
-    cli::{ClientIpHeader, IpExtractor},
-    create_app,
-    db::Database,
-    jwt::JwtConfig,
-};
+use crowchiper::cli::IpExtractor;
+use crowchiper::{ServerConfig, create_app, db::Database, jwt::JwtConfig};
 use tower::ServiceExt;
 use url::Url;
+
+fn x_forwarded_for_extractor() -> IpExtractor {
+    IpExtractor::from(crowchiper::cli::ClientIpHeader::XForwardFor)
+}
 
 /// Create a test app and return (app, db, jwt_config).
 async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
@@ -42,29 +40,7 @@ async fn create_test_app() -> (axum::Router, Database, JwtConfig) {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_extractor: Some(local_ip_extractor()),
-        plugin_manager: None,
-    };
-    (create_app(&config), db, jwt_config)
-}
-
-/// Create a test app with X-Forwarded-For IP extraction for IP-related tests.
-async fn create_test_app_with_ip_header() -> (axum::Router, Database, JwtConfig) {
-    let db = Database::open(":memory:")
-        .await
-        .expect("Failed to open test database");
-    let jwt_secret = b"test-jwt-secret".to_vec();
-    let jwt_config = JwtConfig::new(&jwt_secret);
-    let config = ServerConfig {
-        base: None,
-        db: db.clone(),
-        rp_id: "localhost".to_string(),
-        rp_origin: Url::parse("http://localhost").expect("Invalid URL"),
-        jwt_secret,
-        secure_cookies: false,
-        no_signup: false,
-        csp_nonce: false,
-        ip_extractor: Some(IpExtractor::from(ClientIpHeader::XForwardFor)),
+        ip_extractor: Some(x_forwarded_for_extractor()),
         plugin_manager: None,
     };
     (create_app(&config), db, jwt_config)
@@ -176,10 +152,10 @@ async fn test_valid_access_token_authenticates() {
 
 #[tokio::test]
 async fn test_access_token_ip_mismatch_triggers_refresh() {
-    let (app, db, jwt) = create_test_app_with_ip_header().await;
+    let (app, db, jwt) = create_test_app().await;
     let (_, _, access, refresh, _) = create_authenticated_user(&db, &jwt, "alice", TEST_IP).await;
 
-    // Request from different IP - access token IP won't match, should use refresh token
+    // Send request from a different IP than what's in the access token
     let response = app
         .oneshot(
             Request::builder()
@@ -322,7 +298,7 @@ async fn test_invalid_refresh_token_rejected() {
 
 #[tokio::test]
 async fn test_refresh_token_updates_ip_on_change() {
-    let (app, db, jwt) = create_test_app_with_ip_header().await;
+    let (app, db, jwt) = create_test_app().await;
     let (_, _, _access, refresh, jti) =
         create_authenticated_user(&db, &jwt, "alice", TEST_IP).await;
 
@@ -330,7 +306,7 @@ async fn test_refresh_token_updates_ip_on_change() {
     let token = db.tokens().get_by_jti(&jti).await.unwrap().unwrap();
     assert_eq!(token.last_ip, Some(TEST_IP.to_string()));
 
-    // Make request from different IP
+    // Send request from a different IP
     let response = app
         .oneshot(
             Request::builder()
@@ -346,7 +322,7 @@ async fn test_refresh_token_updates_ip_on_change() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Verify IP was updated
+    // Verify IP was updated to the new IP
     let token = db.tokens().get_by_jti(&jti).await.unwrap().unwrap();
     assert_eq!(token.last_ip, Some(ALT_IP.to_string()));
 }
@@ -445,7 +421,7 @@ async fn test_revoking_one_session_doesnt_affect_others() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_extractor: Some(local_ip_extractor()),
+        ip_extractor: Some(x_forwarded_for_extractor()),
         plugin_manager: None,
     };
     let app = create_app(&config);
@@ -602,7 +578,7 @@ async fn test_user_cannot_revoke_other_users_tokens() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_extractor: Some(local_ip_extractor()),
+        ip_extractor: Some(x_forwarded_for_extractor()),
         plugin_manager: None,
     };
     let app = create_app(&config);
@@ -651,7 +627,7 @@ async fn test_admin_can_revoke_any_users_tokens() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_extractor: Some(local_ip_extractor()),
+        ip_extractor: Some(x_forwarded_for_extractor()),
         plugin_manager: None,
     };
     let app = create_app(&config);
@@ -832,7 +808,7 @@ async fn test_list_tokens_returns_only_own_tokens() {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_extractor: Some(local_ip_extractor()),
+        ip_extractor: Some(x_forwarded_for_extractor()),
         plugin_manager: None,
     };
     let app = create_app(&config);

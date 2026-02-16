@@ -18,5 +18,5 @@ pub use extractors::{
     ProtectedAsset, RoleConstraint, add_access_token_cookie,
 };
 pub use ip::{HasHeadersAndExtensions, extract_client_ip};
-pub use state::{HasAssetAuthBackend, HasAuthBackend};
+pub use state::{HasAssetAuthBackend, HasAuthBackend, ServerSettings};
 pub use types::{ActivatedAuthenticatedUser, AuthenticatedUser, AuthenticatedUserWithSession};

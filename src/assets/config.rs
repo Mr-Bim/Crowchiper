@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rust_embed::Embed;
 use tracing::info;
 
-use crate::auth::HasAssetAuthBackend;
+use crate::auth::{HasAssetAuthBackend, ServerSettings};
 use crate::db::Database;
 use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
@@ -158,6 +158,7 @@ pub struct AssetsState {
     pub(super) login_index_html: &'static str,
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
+    pub settings: Arc<ServerSettings>,
 }
 
 impl_has_auth_backend!(AssetsState);
@@ -184,6 +185,7 @@ impl AssetsState {
         csp_nonce: bool,
         jwt: Arc<JwtConfig>,
         db: Database,
+        settings: Arc<ServerSettings>,
     ) -> Result<Self, &'static str> {
         let base: &'static str = leak_string(base_path.unwrap_or("").to_string());
         let api_path: &'static str = leak_string(format!("{}/api", base));
@@ -237,6 +239,7 @@ impl AssetsState {
             login_index_html,
             jwt,
             db,
+            settings,
         })
     }
 

@@ -15,7 +15,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{AnyRole, Auth};
+use crate::auth::{AnyRole, Auth, ServerSettings};
 use crate::db::{Database, attachments::CreateAttachmentInput};
 use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
@@ -28,6 +28,7 @@ const UNENCRYPTED_VERSION: i32 = 0;
 pub struct AttachmentsState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub settings: Arc<ServerSettings>,
 }
 
 impl_has_auth_backend!(AttachmentsState);

@@ -4,7 +4,7 @@ use axum::{Json, Router, extract::State, routing::get};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::auth::OptionalAuth;
+use crate::auth::{OptionalAuth, ServerSettings};
 use crate::db::Database;
 use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
@@ -20,6 +20,7 @@ pub struct ConfigState {
     pub no_signup: bool,
     pub jwt: Arc<JwtConfig>,
     pub db: Database,
+    pub settings: Arc<ServerSettings>,
 }
 
 impl_has_auth_backend!(ConfigState);

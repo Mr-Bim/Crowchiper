@@ -33,7 +33,6 @@ use super::state::{HasAssetAuthBackend, HasAuthBackend};
 use super::types::{ActivatedAuthenticatedUser, AuthenticatedUser, AuthenticatedUserWithSession};
 use crate::db::UserRole;
 use crate::plugin::{Hook, ServerHook};
-use crate::server_config;
 
 tokio::task_local! {
     pub static NEW_ACCESS_TOKEN_COOKIE: RefCell<Option<String>>;
@@ -91,7 +90,7 @@ async fn authenticate_request<S>(
 where
     S: HasAuthBackend + Send + Sync,
 {
-    let client_ip = extract_client_ip(parts, server_config::ip_extractor().as_ref())
+    let client_ip = extract_client_ip(parts, state.ip_extractor())
         .map_err(|_| AuthErrorKind::NotAuthenticated)?;
 
     // Fast path: valid access token with matching IP
@@ -155,7 +154,10 @@ where
 
     // Fire ip-change hook to notify plugins.
     let ip_change_hook = Hook::Server(ServerHook::IpChange);
-    if let Some(pm) = server_config::plugin_manager().filter(|pm| pm.has_hook(&ip_change_hook)) {
+    if let Some(pm) = state
+        .plugin_manager()
+        .filter(|pm| pm.has_hook(&ip_change_hook))
+    {
         let old_ip = active_token.last_ip.clone().unwrap_or_default();
         let new_ip = client_ip.clone();
         let user_uuid = refresh_claims.sub.clone();
@@ -181,7 +183,7 @@ where
             AuthErrorKind::DatabaseError
         })?;
 
-    let secure = if server_config::secure_cookies() {
+    let secure = if state.secure_cookies() {
         "; Secure"
     } else {
         ""
@@ -214,6 +216,7 @@ async fn ensure_activated<S>(
 where
     S: HasAuthBackend + Send + Sync,
 {
+    let secure = state.secure_cookies();
     let id = match user.user_id {
         Some(id) => id,
         None => {
@@ -222,11 +225,14 @@ where
                 .users()
                 .get_by_uuid(&user.claims.sub)
                 .await
-                .map_err(|_| ApiAuthError::new(AuthErrorKind::DatabaseError))?
-                .ok_or(ApiAuthError::new(AuthErrorKind::UserNotFound))?;
+                .map_err(|_| ApiAuthError::new(AuthErrorKind::DatabaseError, secure))?
+                .ok_or(ApiAuthError::new(AuthErrorKind::UserNotFound, secure))?;
 
             if !db_user.activated {
-                return Err(ApiAuthError::new(AuthErrorKind::AccountNotActivated));
+                return Err(ApiAuthError::new(
+                    AuthErrorKind::AccountNotActivated,
+                    secure,
+                ));
             }
             db_user.id
         }
@@ -261,12 +267,13 @@ where
     type Rejection = ApiAuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let secure = state.secure_cookies();
         let user = authenticate_request(parts, state)
             .await
-            .map_err(|kind| ApiAuthError::new(kind))?;
+            .map_err(|kind| ApiAuthError::new(kind, secure))?;
 
         if !R::check(user.claims.role) {
-            return Err(ApiAuthError::new(AuthErrorKind::InsufficientRole));
+            return Err(ApiAuthError::new(AuthErrorKind::InsufficientRole, secure));
         }
 
         let (activated, _) = ensure_activated(user, state).await?;
@@ -296,12 +303,13 @@ where
     type Rejection = ApiAuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let secure = state.secure_cookies();
         let user = authenticate_request(parts, state)
             .await
-            .map_err(|kind| ApiAuthError::new(kind))?;
+            .map_err(|kind| ApiAuthError::new(kind, secure))?;
 
         if !R::check(user.claims.role) {
-            return Err(ApiAuthError::new(AuthErrorKind::InsufficientRole));
+            return Err(ApiAuthError::new(AuthErrorKind::InsufficientRole, secure));
         }
 
         // If authenticate_request already went through the refresh path, we have the JTI.
@@ -310,20 +318,20 @@ where
             Some(jti) => jti,
             None => {
                 let refresh_token = get_cookie(&parts.headers, REFRESH_COOKIE_NAME)
-                    .ok_or(ApiAuthError::new(AuthErrorKind::NotAuthenticated))?;
+                    .ok_or(ApiAuthError::new(AuthErrorKind::NotAuthenticated, secure))?;
 
                 let refresh_claims = state
                     .jwt()
                     .validate_refresh_token(refresh_token)
-                    .map_err(|_| ApiAuthError::new(AuthErrorKind::InvalidToken))?;
+                    .map_err(|_| ApiAuthError::new(AuthErrorKind::InvalidToken, secure))?;
 
                 state
                     .db()
                     .tokens()
                     .get_by_jti(&refresh_claims.jti)
                     .await
-                    .map_err(|_| ApiAuthError::new(AuthErrorKind::DatabaseError))?
-                    .ok_or(ApiAuthError::new(AuthErrorKind::TokenRevoked))?;
+                    .map_err(|_| ApiAuthError::new(AuthErrorKind::DatabaseError, secure))?
+                    .ok_or(ApiAuthError::new(AuthErrorKind::TokenRevoked, secure))?;
 
                 refresh_claims.jti
             }
