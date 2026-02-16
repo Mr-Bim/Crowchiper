@@ -86,7 +86,7 @@ jobs:
         run: npm run build:test
 
       - name: Build Rust (test mode)
-        run: cargo build --features test-mode
+        run: cargo build --features test-mode,embed-assets
 
       - name: Upload binary
         uses: actions/upload-artifact@v6
@@ -124,7 +124,7 @@ jobs:
           save-if: false
 
       - name: Run Rust tests
-        run: cargo test --features test-mode --tests -- --test-threads=1
+        run: cargo test --features test-mode,embed-assets --tests -- --test-threads=1
 
   playwright-tests:
     name: Playwright Tests
@@ -150,21 +150,8 @@ jobs:
           name: crowchiper-test-binary
           path: target/debug
 
-      - name: Download frontend dist
-        uses: actions/download-artifact@v6
-        with:
-          name: frontend-dist
-          path: dist
-
       - name: Make binary executable
         run: chmod +x target/debug/crowchiper
-
-      - name: Debug dist structure
-        run: |
-          echo "PWD: $PWD"
-          echo "dist/ contents:"
-          find dist -type f | sort
-          echo "target/debug/crowchiper exists: $(test -f target/debug/crowchiper && echo yes || echo no)"
 
       - name: Run Playwright tests
         run: npm run test:web
