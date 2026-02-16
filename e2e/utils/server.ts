@@ -110,8 +110,12 @@ function waitForReady(proc: ChildProcess): Promise<number> {
     });
 
     proc.stderr?.on("data", (data: Buffer) => {
-      // Log stderr for debugging
-      console.error("[server stderr]", data.toString());
+      const text = data.toString();
+      console.error("[server stderr]", text);
+      if (text.includes("panicked at")) {
+        clearTimeout(timeout);
+        reject(new Error(`Server panicked: ${text.trim()}`));
+      }
     });
 
     proc.on("error", (err) => {

@@ -156,15 +156,15 @@ jobs:
           name: frontend-dist
           path: dist
 
-      - name: Symlink dist for rust-embed debug resolution
-        run: |
-          # rust-embed in debug mode resolves dist/ relative to CARGO_MANIFEST_DIR
-          # which was /home/runner/work/Crowchiper/Crowchiper on the build runner
-          mkdir -p /home/runner/work/Crowchiper/Crowchiper
-          ln -s $PWD/dist /home/runner/work/Crowchiper/Crowchiper/dist
-
       - name: Make binary executable
         run: chmod +x target/debug/crowchiper
+
+      - name: Debug dist structure
+        run: |
+          echo "PWD: $PWD"
+          echo "dist/ contents:"
+          find dist -type f | sort
+          echo "target/debug/crowchiper exists: $(test -f target/debug/crowchiper && echo yes || echo no)"
 
       - name: Run Playwright tests
         run: npm run test:web
