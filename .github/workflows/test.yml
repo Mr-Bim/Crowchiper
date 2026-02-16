@@ -115,6 +115,14 @@ jobs:
           name: frontend-dist
           path: dist
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-test
+          save-if: false
+
       - name: Download binary
         uses: actions/download-artifact@v6
         with:
@@ -123,14 +131,6 @@ jobs:
 
       - name: Make binary executable
         run: chmod +x target/debug/crowchiper
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: cargo-test
-          save-if: false
 
       - name: Run Rust tests
         run: cargo test --features test-mode,embed-assets --tests
