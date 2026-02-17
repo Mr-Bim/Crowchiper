@@ -48,6 +48,16 @@ wasmtime-wasi = "41"
 [dev-dependencies]
 tower = { version = "0.5.2", features = ["util"] }
 
+# Compile wasmtime with optimizations even in debug mode.
+# WASM compilation (Component::new + instantiate) is extremely slow at opt-level 0,
+# making plugin tests take ~8s per plugin. With opt-level 2 it drops to <1s.
+[profile.dev.package.wasmtime]
+opt-level = 2
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 2
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+
 [profile.release]
 strip = true
 lto = true

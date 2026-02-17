@@ -60,7 +60,7 @@ fn spawn_expect_listening(args: &[&str]) -> (String, String) {
         (false, buf)
     });
 
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         if stdout_thread.is_finished() {
             break;

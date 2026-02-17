@@ -23,10 +23,17 @@ fn cargo_bin() -> PathBuf {
     path
 }
 
+fn unique_db_path() -> PathBuf {
+    let id = std::thread::current().id();
+    std::env::temp_dir().join(format!("crowchiper-plugin-{:?}.db", id))
+}
+
 /// Build a Command with standard env vars set.
 fn cli_cmd() -> Command {
     let mut cmd = Command::new(cargo_bin());
-    cmd.env("JWT_SECRET", "test-secret-that-is-long-enough!!")
+    cmd.arg("--database")
+        .arg(unique_db_path())
+        .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .env_remove("RUST_BACKTRACE")
         .stderr(Stdio::piped())
         .stdout(Stdio::piped());
@@ -67,7 +74,9 @@ fn spawn_expect_listening(args: &[&str]) -> (String, String) {
         (false, buf)
     });
 
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Plugin compilation in debug mode takes ~8s per plugin. When many tests run
+    // concurrently, CPU contention can push this much higher.
+    let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         if stdout_thread.is_finished() {
             break;
