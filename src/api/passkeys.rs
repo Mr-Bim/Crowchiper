@@ -17,17 +17,17 @@ use tracing::{error, warn};
 use webauthn_rs::prelude::*;
 
 use super::error::{ApiError, ResultExt, validate_uuid};
-use crate::auth::{REFRESH_COOKIE_NAME, extract_client_ip, get_cookie};
+use crate::auth::{REFRESH_COOKIE_NAME, ServerSettings, extract_client_ip, get_cookie};
 use crate::db::{AuthChallenge, Database, User};
 use crate::jwt::JwtConfig;
 use crate::rate_limit::{RateLimitConfig, rate_limit_login_finish, rate_limit_login_start};
-use crate::server_config;
 
 #[derive(Clone)]
 pub struct PasskeysState {
     pub db: Database,
     pub webauthn: Arc<Webauthn>,
     pub jwt: Arc<JwtConfig>,
+    pub settings: ServerSettings,
 }
 
 /// Result of generating auth cookies, includes info needed for token tracking.
@@ -51,7 +51,7 @@ impl PasskeysState {
                 ApiError::internal("Failed to generate token")
             })?;
 
-        let secure = if server_config::secure_cookies() {
+        let secure = if self.settings.secure_cookies {
             "; Secure"
         } else {
             ""
@@ -287,7 +287,7 @@ async fn register_finish(
     let refresh_token = state.make_refresh_token(&user)?;
 
     // Store refresh token for tracking
-    let ip = extract_client_ip(&parts, server_config::ip_extractor().as_ref()).ok();
+    let ip = extract_client_ip(&parts, state.settings.ip_extractor.as_ref()).ok();
     state
         .store_refresh_token(
             &refresh_token.refresh_jti,
@@ -405,7 +405,7 @@ async fn login_finish(
     }
 
     // Only generate JWT if user is activated
-    let ip = extract_client_ip(&parts, server_config::ip_extractor().as_ref()).ok();
+    let ip = extract_client_ip(&parts, state.settings.ip_extractor.as_ref()).ok();
 
     // Revoke existing refresh token if present, then always issue a new one.
     // This invalidates any stolen copies of the old token.
@@ -526,7 +526,7 @@ async fn claim_finish(
     let refresh_token = state.make_refresh_token(&result.user)?;
 
     // Store refresh token for tracking
-    let ip = extract_client_ip(&parts, server_config::ip_extractor().as_ref()).ok();
+    let ip = extract_client_ip(&parts, state.settings.ip_extractor.as_ref()).ok();
     state
         .store_refresh_token(
             &refresh_token.refresh_jti,

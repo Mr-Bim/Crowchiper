@@ -6,7 +6,7 @@ use axum::{Json, Router, extract::State, response::IntoResponse, routing::get};
 use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
-use crate::auth::{AdminOnly, Auth};
+use crate::auth::{AdminOnly, Auth, ServerSettings};
 use crate::db::Database;
 use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
@@ -16,6 +16,7 @@ use crate::jwt::JwtConfig;
 pub struct AdminState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub settings: ServerSettings,
 }
 
 impl_has_auth_backend!(AdminState);

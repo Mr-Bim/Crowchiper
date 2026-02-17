@@ -8,6 +8,7 @@ default = []
 # Enable test mode endpoints for injecting encryption keys.
 # Disabled by default. Enable with --features test-mode for development/testing.
 test-mode = []
+embed-assets = ["rust-embed/debug-embed"]
 
 [build-dependencies]
 serde_json = "1.0"
@@ -46,6 +47,16 @@ wasmtime-wasi = "41"
 
 [dev-dependencies]
 tower = { version = "0.5.2", features = ["util"] }
+
+# Compile wasmtime with optimizations even in debug mode.
+# WASM compilation (Component::new + instantiate) is extremely slow at opt-level 0,
+# making plugin tests take ~8s per plugin. With opt-level 2 it drops to <1s.
+[profile.dev.package.wasmtime]
+opt-level = 2
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 2
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
 
 [profile.release]
 strip = true

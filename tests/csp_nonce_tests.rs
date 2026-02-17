@@ -50,7 +50,7 @@ async fn create_app_without_nonce() -> axum::Router {
         secure_cookies: false,
         no_signup: false,
         csp_nonce: false,
-        ip_extractor: None,
+        ip_extractor: Some(local_ip_extractor()),
         plugin_manager: None,
     };
     create_app(&config)

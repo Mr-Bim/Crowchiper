@@ -98,7 +98,7 @@ Set in `inline.ts`, available via `declare const`:
 
 ## Key Architecture (details in memory files)
 
-- **Auth**: Dual-token system (5min access + 2-week refresh). Auth module in `src/auth/`. Use `impl_has_db_jwt!` macro for API state structs (provides `jwt()` and `db()`).
+- **Auth**: Dual-token system (5min access + 2-week refresh). Auth module in `src/auth/`. Use `impl_has_auth_backend!` macro for API state structs — requires `jwt: Arc<JwtConfig>`, `db: Database`, and `settings: ServerSettings` fields. Provides `jwt()`, `db()`, `ip_extractor()`, `secure_cookies()`, `plugin_manager()`. `ServerSettings` is created per-app in `create_app()` (no process-global state), enabling parallel tests.
 - **Frontend**: Code-split with lazy-loaded chunks. 50KB entry chunk limit. CSP with SRI hashes. New lazy chunks need shared dependency for modulepreload (see memory).
 - **State**: Minimal reactive signals (`web/app/src/reactive.ts`). Autosave with 1.5s debounce. Eager encryption for pagehide safety.
 - **Posts**: Hierarchical tree structure with unlimited nesting. Drag-and-drop for reorder/reparent.
@@ -110,7 +110,7 @@ Set in `inline.ts`, available via `declare const`:
 - **Plugin hooks**: Plugins export `on-hook(event) -> result<_, string>` to react to server events. Hooks are WIT enums grouped by target: `variant hook { server(server-hook) }` with `server-hook { ip-change }`. Each plugin declares a `target` (server only for now) in `plugin-config` and registers specific hooks — validated at load time to match target. `PluginManager` dispatches hooks asynchronously: different plugins run concurrently via `futures::future::join_all`, same plugin serializes via `tokio::sync::Mutex` (WASM is single-threaded). Plugin runtime uses `async_support(true)` + `add_to_linker_async` so WASI I/O yields to tokio. Called via `tokio::spawn` from async code. First hook: `ip-change` fired in `src/auth/extractors.rs` when user IP changes during token refresh (values: `old_ip`, `new_ip`, `user_uuid`).
 - **Plugin module structure**: `src/plugin/` split into: `mod.rs` (WIT bindgen), `runtime.rs` (PluginRuntime load/hook), `manager.rs` (PluginManager dispatch), `state.rs` (WASI state + host log import), `helpers.rs` (permissions, sanitization, panic extraction), `permissions.rs` (CLI parsing), `error.rs` (PluginError).
 - **Plugin logging**: Plugins call the host-provided `log(level, msg)` import to write to the server log. Levels: `debug`, `info`, `warn`, `error` — mapped to `tracing` macros. Output is sanitized against log injection (ANSI escapes, control characters, newlines stripped). Messages capped at 4KB per call. Implemented via `PluginImports` trait in `src/plugin/state.rs`. WIT definition in `wit/plugin.wit`.
-- **CI/CD**: `.github/workflows/` — CI on push/PR, release on version tag. Tag must match Cargo.toml version.
+- **CI/CD**: `.github/workflows/` — CI on push/PR, release on version tag. Tag must match Cargo.toml version. Test workflow splits into 3 jobs: `build` (compiles binary in playwright container), `rust-tests` + `playwright-tests` (run in parallel after build). Uses `Swatinem/rust-cache@v2`. Changelog via `git-cliff` with `split_commits = true` for squash-merge support.
 
 ## Playwright E2E Tests
 

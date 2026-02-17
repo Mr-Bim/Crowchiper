@@ -13,12 +13,24 @@ fn cargo_bin() -> std::path::PathBuf {
     path
 }
 
+fn unique_db_path() -> std::path::PathBuf {
+    let id = std::thread::current().id();
+    std::env::temp_dir().join(format!("crowchiper-startup-{:?}.db", id))
+}
+
+fn cli_cmd() -> Command {
+    let mut cmd = Command::new(cargo_bin());
+    cmd.arg("--database")
+        .arg(unique_db_path())
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped());
+    cmd
+}
+
 #[test]
 fn test_missing_jwt_secret_exits_with_error() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env_remove("JWT_SECRET")
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -40,11 +52,9 @@ fn test_missing_jwt_secret_exits_with_error() {
 
 #[test]
 fn test_http_non_localhost_exits_with_error() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args(["--rp-origin", "http://example.com"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -67,11 +77,9 @@ fn test_http_non_localhost_exits_with_error() {
 #[test]
 fn test_http_localhost_is_allowed() {
     // Start the server and kill it quickly - we just want to verify it starts
-    let mut child = Command::new(cargo_bin())
+    let mut child = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args(["--rp-origin", "http://localhost:9999", "--port", "0"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run binary");
 
@@ -104,7 +112,7 @@ fn test_https_non_localhost_is_allowed() {
     // This will fail to bind but should pass the validation checks
     // We use a high port that's unlikely to be available to cause a quick failure
     // after validation passes
-    let mut child = Command::new(cargo_bin())
+    let mut child = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args([
             "--rp-origin",
@@ -114,8 +122,6 @@ fn test_https_non_localhost_is_allowed() {
             "--port",
             "0",
         ])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run binary");
 
@@ -150,11 +156,9 @@ fn test_https_non_localhost_is_allowed() {
 fn test_jwt_secret_env_is_cleared() {
     // This is harder to test from outside, but we can at least verify
     // the server starts and the env var handling doesn't crash
-    let mut child = Command::new(cargo_bin())
+    let mut child = cli_cmd()
         .env("JWT_SECRET", "test-secret-to-be-cleared-with-32-chars")
         .args(["--port", "0"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run binary");
 
@@ -185,7 +189,7 @@ fn test_jwt_secret_file() {
     let secret_file = temp_dir.join(format!("jwt_secret_test_{}", std::process::id()));
     fs::write(&secret_file, "this-is-a-long-secret-from-file-for-testing").unwrap();
 
-    let mut child = Command::new(cargo_bin())
+    let mut child = cli_cmd()
         .env_remove("JWT_SECRET")
         .args([
             "--jwt-secret-file",
@@ -193,8 +197,6 @@ fn test_jwt_secret_file() {
             "--port",
             "0",
         ])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run binary");
 
@@ -225,11 +227,9 @@ fn test_jwt_secret_file() {
 
 #[test]
 fn test_jwt_secret_file_not_found() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env_remove("JWT_SECRET")
         .args(["--jwt-secret-file", "/nonexistent/path/to/secret"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -256,7 +256,7 @@ fn test_jwt_secret_env_takes_precedence_over_file() {
     fs::write(&secret_file, "file-secret").unwrap();
 
     // Server should start with env var even if file is also provided
-    let mut child = Command::new(cargo_bin())
+    let mut child = cli_cmd()
         .env("JWT_SECRET", "env-secret-that-is-long-enough-32chars")
         .args([
             "--jwt-secret-file",
@@ -264,8 +264,6 @@ fn test_jwt_secret_env_takes_precedence_over_file() {
             "--port",
             "0",
         ])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run binary");
 
@@ -294,11 +292,9 @@ fn test_jwt_secret_env_takes_precedence_over_file() {
 
 #[test]
 fn test_short_jwt_secret_exits_with_error() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env("JWT_SECRET", "short") // Less than 32 chars
         .args(["--port", "0"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -319,11 +315,9 @@ fn test_short_jwt_secret_exits_with_error() {
 
 #[test]
 fn test_invalid_rp_origin_url() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args(["--rp-origin", "not-a-valid-url"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -344,11 +338,9 @@ fn test_invalid_rp_origin_url() {
 
 #[test]
 fn test_invalid_base_path_no_leading_slash() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args(["--base", "no-slash"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -367,11 +359,9 @@ fn test_invalid_base_path_no_leading_slash() {
 
 #[test]
 fn test_invalid_base_path_trailing_slash() {
-    let output = Command::new(cargo_bin())
+    let output = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args(["--base", "/app/"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .expect("Failed to run binary");
 
@@ -390,11 +380,9 @@ fn test_invalid_base_path_trailing_slash() {
 
 #[test]
 fn test_valid_base_path() {
-    let mut child = Command::new(cargo_bin())
+    let mut child = cli_cmd()
         .env("JWT_SECRET", "test-secret-that-is-long-enough!!")
         .args(["--base", "/myapp", "--port", "0"])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to run binary");
 

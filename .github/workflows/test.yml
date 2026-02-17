@@ -60,17 +60,10 @@ jobs:
             exit 1
           fi
 
-  test:
-    name: Tests
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.58.0-noble
     steps:
-      - name: Install build dependencies
-        run: |
-          apt-get update
-          apt-get install -y build-essential
-
       - uses: actions/checkout@v6
 
       - name: Setup Node.js
@@ -85,26 +78,89 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-test-
+          shared-key: cargo-test
 
       - name: Build frontend (test mode)
         run: npm run build:test
 
       - name: Build Rust (test mode)
-        run: cargo build --features test-mode
+        run: cargo build --features test-mode,embed-assets
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: crowchiper-test-binary
+          path: target/debug/crowchiper
+          retention-days: 1
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 1
+
+  rust-tests:
+    name: Rust Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v6
+        with:
+          name: frontend-dist
+          path: dist
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-test
+          save-if: false
+
+      - name: Download binary
+        uses: actions/download-artifact@v6
+        with:
+          name: crowchiper-test-binary
+          path: target/debug
+
+      - name: Make binary executable
+        run: chmod +x target/debug/crowchiper
 
       - name: Run Rust tests
-        run: cargo test --features test-mode --tests -- --test-threads=1
+        run: cargo test --features test-mode,embed-assets --tests
+
+  playwright-tests:
+    name: Playwright Tests
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.0-noble
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25"
+          cache: "npm"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Download binary
+        uses: actions/download-artifact@v6
+        with:
+          name: crowchiper-test-binary
+          path: target/debug
+
+      - name: Make binary executable
+        run: chmod +x target/debug/crowchiper
 
       - name: Run Playwright tests
         run: npm run test:web

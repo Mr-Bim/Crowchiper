@@ -18,17 +18,18 @@ use std::sync::Arc;
 
 use super::error::{ApiError, ResultExt};
 use crate::auth::{
-    ACCESS_COOKIE_NAME, AnyRole, Auth, AuthWithSession, REFRESH_COOKIE_NAME, get_cookie,
+    ACCESS_COOKIE_NAME, AnyRole, Auth, AuthWithSession, REFRESH_COOKIE_NAME, ServerSettings,
+    get_cookie,
 };
 use crate::db::{Database, UserRole};
 use crate::impl_has_auth_backend;
 use crate::jwt::JwtConfig;
-use crate::server_config;
 
 #[derive(Clone)]
 pub struct TokensState {
     pub db: Database,
     pub jwt: Arc<JwtConfig>,
+    pub settings: ServerSettings,
 }
 
 impl_has_auth_backend!(TokensState);
@@ -112,7 +113,7 @@ async fn logout(
 
     // Clear both cookies using AppendHeaders to send multiple Set-Cookie headers
     use axum::response::AppendHeaders;
-    let secure = if server_config::secure_cookies() {
+    let secure = if state.settings.secure_cookies {
         "; Secure"
     } else {
         ""
@@ -152,7 +153,7 @@ async fn revoke_all_tokens(
         .db_err("Failed to revoke tokens")?;
 
     use axum::response::AppendHeaders;
-    let secure = if server_config::secure_cookies() {
+    let secure = if state.settings.secure_cookies {
         "; Secure"
     } else {
         ""
